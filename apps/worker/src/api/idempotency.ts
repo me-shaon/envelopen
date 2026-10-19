@@ -7,9 +7,15 @@ import { errorJson } from "./errors";
 // Idempotency keys for POST requests (R58). The first response is stored per
 // workspace, principal, method, route, and key for 24 hours. A retry with the same
 // key and the same body gets the stored response, and the operation does not run again.
+//
+// A reservation without a response holds the key only for a short lease. If the Worker
+// stops before it stores the response or releases the key, the key frees itself when the
+// lease ends, so a retry is never blocked for the full 24 hours.
 
 export const IDEMPOTENCY_HEADER = "Idempotency-Key";
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+/** How long a reservation without a stored response holds the key. */
+export const IDEMPOTENCY_LEASE_MS = 5 * 60 * 1000;
 const KEY_PATTERN = /^[\x21-\x7e]{1,255}$/;
 
 async function sha256Hex(text: string): Promise<string> {
@@ -31,10 +37,14 @@ export interface IdempotencyIdentity {
 
 /** The outcome of claiming a key. */
 export type IdempotencyClaim =
-  /** First use: run the operation, then call `complete` on success or `release` on failure. */
+  /**
+   * First use: run the operation, then call `complete` on success or `release` on failure.
+   * Neither function throws. `complete` returns false when it could not store the
+   * response. It then releases the key, so a retry runs the operation again.
+   */
   | {
       kind: "new";
-      complete(status: number, body: string): Promise<void>;
+      complete(status: number, body: string): Promise<boolean>;
       release(): Promise<void>;
     }
   /** The stored response of the first successful use. */
@@ -77,7 +87,7 @@ export async function claimIdempotencyKey(
   const reserve = () =>
     db
       .insertInto("idempotency_keys")
-      .values({ ...values, request_hash: requestHash, expires_at: now + IDEMPOTENCY_TTL_MS })
+      .values({ ...values, request_hash: requestHash, expires_at: now + IDEMPOTENCY_LEASE_MS })
       .onConflict((conflict) =>
         conflict.columns(["workspace_id", "principal_id", "method", "route", "key"]).doNothing(),
       )
@@ -118,23 +128,42 @@ export async function claimIdempotencyKey(
   }
 
   const id = reserved.id;
-  return {
-    kind: "new",
-    async complete(status, body) {
-      await db
-        .updateTable("idempotency_keys")
-        .set({ response_status: status, response_body: body })
-        .where("workspace_id", "=", workspaceId)
-        .where("id", "=", id)
-        .execute();
-    },
-    async release() {
+  const release = async () => {
+    try {
       await db
         .deleteFrom("idempotency_keys")
         .where("workspace_id", "=", workspaceId)
         .where("id", "=", id)
         .execute();
+    } catch (error) {
+      // The lease frees the key soon, so a failed release only delays a retry.
+      console.error("idempotency: release failed", error);
+    }
+  };
+  return {
+    kind: "new",
+    async complete(status, body) {
+      try {
+        await db
+          .updateTable("idempotency_keys")
+          .set({
+            response_status: status,
+            response_body: body,
+            expires_at: Date.now() + IDEMPOTENCY_TTL_MS,
+          })
+          .where("workspace_id", "=", workspaceId)
+          .where("id", "=", id)
+          .execute();
+        return true;
+      } catch (error) {
+        // The operation succeeded but its response is not stored. Without a stored
+        // response there is nothing to replay, so free the key and let a retry run.
+        console.error("idempotency: storing the response failed", error);
+        await release();
+        return false;
+      }
     },
+    release,
   };
 }
 
@@ -146,6 +175,7 @@ export async function claimIdempotencyKey(
  * - The same key with a different body gets 422.
  * - The same key while the first request still runs gets 409.
  * - A response that is not 2xx is not stored, so the client can fix the problem and retry.
+ * - If the response cannot be stored, the client still gets it, and the key is released.
  */
 export function idempotency(route: string): MiddlewareHandler<ApiEnv> {
   return async (c, next) => {

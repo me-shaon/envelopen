@@ -1,4 +1,4 @@
-import type { BatchStatus, CampaignStatus, DbConnection, Row } from "@envelopen/db";
+import type { BatchStatus, Bool, CampaignStatus, DbConnection, Row } from "@envelopen/db";
 import { z } from "zod";
 import { parseJson } from "../connections/model";
 import { OperationError } from "../errors";
@@ -229,6 +229,48 @@ export async function loadCampaign(
     .executeTakeFirst();
   if (!row) throw new OperationError("not_found", "The campaign does not exist.");
   return row;
+}
+
+/** Whether open and click tracking applies to a send. */
+export interface SendTracking {
+  opens: boolean;
+  clicks: boolean;
+}
+
+type TrackingSwitches = { tracking_opens: number; tracking_clicks: number };
+
+/**
+ * The tracking of a send from the campaign and workspace switches: it applies only when
+ * both are on. Confirm stores the result on the campaign.
+ */
+export function combineTracking(
+  campaign: TrackingSwitches,
+  workspace: TrackingSwitches,
+): { send_tracking_opens: Bool; send_tracking_clicks: Bool } {
+  return {
+    send_tracking_opens: campaign.tracking_opens === 1 && workspace.tracking_opens === 1 ? 1 : 0,
+    send_tracking_clicks: campaign.tracking_clicks === 1 && workspace.tracking_clicks === 1 ? 1 : 0,
+  };
+}
+
+/**
+ * The tracking that applied to the campaign's send, as stored at confirm. Before
+ * confirm, it is the tracking that a send would get now.
+ */
+export async function sendTracking(db: DbConnection, campaign: CampaignRow): Promise<SendTracking> {
+  let stored = {
+    send_tracking_opens: campaign.send_tracking_opens,
+    send_tracking_clicks: campaign.send_tracking_clicks,
+  };
+  if (stored.send_tracking_opens === null || stored.send_tracking_clicks === null) {
+    const workspace = await db.db
+      .selectFrom("workspaces")
+      .select(["tracking_opens", "tracking_clicks"])
+      .where("id", "=", campaign.workspace_id)
+      .executeTakeFirst();
+    stored = combineTracking(campaign, workspace ?? { tracking_opens: 0, tracking_clicks: 0 });
+  }
+  return { opens: stored.send_tracking_opens === 1, clicks: stored.send_tracking_clicks === 1 };
 }
 
 /** Recipient and batch counts of a campaign, summed over its batches (not its recipients). */

@@ -25,6 +25,7 @@ import {
   CampaignSchema,
   campaignAudience,
   campaignProgress,
+  combineTracking,
   EXCLUSION_REASONS,
   loadCampaign,
   toCampaign,
@@ -611,10 +612,18 @@ export const campaignsConfirm = defineOperation({
     // The policy can change between prepare and confirm, for example a removed connection.
     const policy = await assertCampaignPolicy(db, principal.workspaceId);
     const origin = await linkOrigin(ctx, campaign);
+    // Fix the tracking of the send, so a later change of the workspace switches does
+    // not change what the stats and the follow-up report for it.
+    const workspace = await db.db
+      .selectFrom("workspaces")
+      .select(["tracking_opens", "tracking_clicks"])
+      .where("id", "=", principal.workspaceId)
+      .executeTakeFirstOrThrow();
     const sendNow = token.mode === "send_now";
     const set: RowUpdate<"campaigns"> = {
       connection_id: policy.connectionId,
       link_origin: origin,
+      ...combineTracking(campaign, workspace),
       scheduled_at: sendNow ? null : token.scheduled_at,
       ...(sendNow ? { started_at: now } : {}),
       status: sendNow ? "sending" : "scheduled",

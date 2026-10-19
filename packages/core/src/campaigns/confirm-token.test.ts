@@ -63,6 +63,23 @@ describe("confirm token", () => {
     });
   });
 
+  it("stores the tracking of the send from the campaign and workspace switches", async () => {
+    const { db, seeded, campaignId, prepare, confirm } = await setup();
+    await db.db
+      .updateTable("workspaces")
+      .set({ tracking_opens: 0, tracking_clicks: 1 })
+      .where("id", "=", seeded.workspaceId)
+      .execute();
+    await confirm((await prepare()).token as string);
+    const row = await db.db
+      .selectFrom("campaigns")
+      .select(["send_tracking_opens", "send_tracking_clicks"])
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("id", "=", campaignId)
+      .executeTakeFirstOrThrow();
+    expect(row).toEqual({ send_tracking_opens: 0, send_tracking_clicks: 1 });
+  });
+
   it("fails after the campaign is edited", async () => {
     const { prepare, confirm, run, seeded, campaignId } = await setup();
     const token = (await prepare()).token as string;

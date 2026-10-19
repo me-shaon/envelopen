@@ -2,7 +2,14 @@ import type { DbConnection } from "@envelopen/db";
 import { z } from "zod";
 import { OperationError } from "../errors";
 import { defineOperation } from "../registry/operation";
-import { type CampaignRow, CampaignSchema, loadCampaign, toCampaign } from "./model";
+import {
+  type CampaignRow,
+  CampaignSchema,
+  loadCampaign,
+  type SendTracking,
+  sendTracking,
+  toCampaign,
+} from "./model";
 
 // Follow-up to non-openers (R35). A follow-up is a child campaign: a draft that copies
 // the parent's content, audience, and tracking switches, with `parent_id` set. Its
@@ -11,8 +18,8 @@ import { type CampaignRow, CampaignSchema, loadCampaign, toCampaign } from "./mo
 // about the person (KTD29). The draft then goes through the normal prepare and confirm
 // (R68), so the owner can edit the subject first.
 //
-// A follow-up needs open tracking on the parent. Without it every recipient looks like
-// a non-opener, so the follow-up is unavailable.
+// A follow-up needs open tracking on the parent's send, as stored at confirm. Without it
+// every recipient looks like a non-opener, so the follow-up is unavailable.
 
 /** A parent can have a follow-up once its send has stopped. */
 const FINISHED: readonly CampaignRow["status"][] = ["sent", "needs_decision", "cancelled"];
@@ -23,13 +30,13 @@ export interface FollowUpAvailability {
 }
 
 /**
- * Whether the campaign can have a follow-up. `tracking` is the open tracking that
- * applied to the send, when the caller knows it (stats). Otherwise it is read here.
+ * Whether the campaign can have a follow-up. `tracking` is the tracking that applied to
+ * the send, when the caller has read it already (stats). Otherwise it is read here.
  */
 export async function followUpAvailability(
   db: DbConnection,
   campaign: CampaignRow,
-  tracking?: { opens: boolean },
+  tracking?: SendTracking,
 ): Promise<FollowUpAvailability> {
   if (campaign.started_at === null || !FINISHED.includes(campaign.status)) {
     return {
@@ -37,7 +44,7 @@ export async function followUpAvailability(
       reason: "A follow-up is possible after the campaign has finished sending.",
     };
   }
-  const opens = tracking?.opens ?? (await opensTracked(db, campaign));
+  const opens = (tracking ?? (await sendTracking(db, campaign))).opens;
   if (!opens) {
     return {
       available: false,
@@ -46,28 +53,6 @@ export async function followUpAvailability(
     };
   }
   return { available: true, reason: null };
-}
-
-/** The consumer tracks opens only when the campaign and the workspace switches are on. */
-async function opensTracked(db: DbConnection, campaign: CampaignRow): Promise<boolean> {
-  if (campaign.tracking_opens !== 1) return false;
-  const [workspace, recorded] = await Promise.all([
-    db.db
-      .selectFrom("workspaces")
-      .select("tracking_opens")
-      .where("id", "=", campaign.workspace_id)
-      .executeTakeFirst(),
-    // The workspace switch can change after the send. A recorded open proves tracking.
-    db.db
-      .selectFrom("campaign_stats_daily")
-      .select("campaign_id")
-      .where("workspace_id", "=", campaign.workspace_id)
-      .where("campaign_id", "=", campaign.id)
-      .where((eb) => eb.or([eb("opens", ">", 0), eb("machine_opens", ">", 0)]))
-      .limit(1)
-      .executeTakeFirst(),
-  ]);
-  return workspace?.tracking_opens === 1 || recorded !== undefined;
 }
 
 export const campaignsFollowUp = defineOperation({

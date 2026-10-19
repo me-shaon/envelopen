@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowUpRightIcon, CheckIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import type { Schemas } from "@/api/client";
 import { onboardingQuery } from "@/api/queries";
 import { SectionHeader } from "@/components/page-header";
@@ -11,7 +11,8 @@ import { guideUrl } from "@/lib/guides";
 import { cn } from "@/lib/utils";
 
 // The onboarding checklist (U5): connect a provider, verify a domain, import contacts,
-// and send a test. The onboarding.status operation derives each state.
+// and send a test. The onboarding.status operation derives each state. When every step
+// is done, the checklist folds into one quiet line, and the owner can open it again.
 
 type Step = Schemas["OnboardingStep"];
 type StepId = Step["id"];
@@ -177,15 +178,50 @@ export function useOnboarding() {
   return useQuery(onboardingQuery(current.id));
 }
 
+/** The folded checklist: one line once every step is done. */
+function SetupComplete({ total, onShow }: { total: number; onShow: () => void }) {
+  return (
+    <section
+      aria-label="Setup"
+      data-testid="onboarding-complete"
+      className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-muted-foreground"
+    >
+      <span
+        className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-tone-teal text-tone-teal-foreground"
+        aria-hidden="true"
+      >
+        <CheckIcon className="size-2.5" strokeWidth={3} />
+      </span>
+      <span>
+        <span className="font-medium text-foreground">Setup complete.</span>{" "}
+        <span className="figure">{total}</span> of <span className="figure">{total}</span> steps
+        done.
+      </span>
+      <button
+        type="button"
+        onClick={onShow}
+        className="inline-flex min-h-[30px] items-center text-[12.5px] font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+      >
+        Show the steps
+      </button>
+    </section>
+  );
+}
+
 export function OnboardingChecklist() {
   const onboarding = useOnboarding();
   const data = onboarding.data;
+  const [expanded, setExpanded] = useState(false);
+
+  if (data && data.completed >= data.total && !expanded) {
+    return <SetupComplete total={data.total} onShow={() => setExpanded(true)} />;
+  }
 
   return (
     <section aria-labelledby="onboarding-title" className="flex flex-col gap-4">
       <SectionHeader
         id="onboarding-title"
-        title="Finish setting up"
+        title={data && data.completed >= data.total ? "Setup steps" : "Finish setting up"}
         aside={
           data ? (
             <span data-testid="onboarding-progress">

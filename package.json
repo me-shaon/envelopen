@@ -62,7 +62,7 @@
         "description": "Durable Object per workspace that collects opens, clicks, unsubscribes, and provider events, and writes them to D1 in groups."
       },
       "SIGNING_KEYS_RETIRED": {
-        "description": "Optional. Earlier SIGNING_KEY values, comma-separated, so links in old emails keep working after a key rotation."
+        "description": "Optional. Earlier SIGNING_KEY values, comma-separated, so links in old emails keep working and suppressions keep matching after a key rotation. Do not remove a retired key."
       }
     }
   },

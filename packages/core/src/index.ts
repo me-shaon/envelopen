@@ -132,7 +132,14 @@ export {
   utcDayOf,
   utcHour,
 } from "./stats/rollups";
-export { createEmailHasher, deriveHmacKey, hmacHex } from "./suppression/hash";
+export {
+  createEmailHasher,
+  createPinnedEmailHasher,
+  deriveHmacKey,
+  hmacHex,
+  SUPPRESSION_KEY_SETTING,
+  SuppressionKeyError,
+} from "./suppression/hash";
 export {
   MAX_SOURCE_LENGTH,
   prepareContent,

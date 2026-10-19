@@ -28,6 +28,10 @@ import {
 //
 // A provider event that matches no campaign recipient (a test send or a system email)
 // is marked as applied and adds no raw event or rollup.
+//
+// The EventBuffer passes a flush id per group. The batch records it in `event_flushes`,
+// and a flush with a recorded id writes nothing. A group that the buffer replays after a
+// crash between the D1 commit and its local delete then counts once.
 
 export interface FlushResult {
   events: number;
@@ -35,6 +39,13 @@ export interface FlushResult {
   stored: number;
   /** D1 statements that the flush ran, reads included. */
   statements: number;
+  /** True when D1 had committed this flush id already, so nothing was written. */
+  replayed?: boolean;
+}
+
+export interface FlushOptions {
+  /** The id of the buffer's group. The same group keeps the same id on a replay. */
+  flushId?: string;
 }
 
 interface EventRow {
@@ -67,8 +78,18 @@ export async function flushEvents(
   workspaceId: number,
   events: readonly BufferedEvent[],
   now: number,
+  options: FlushOptions = {},
 ): Promise<FlushResult> {
   let statements = 0;
+  const { flushId } = options;
+  if (flushId !== undefined) {
+    statements++;
+    const done = await sql<{ one: number }>`SELECT 1 AS one FROM event_flushes
+WHERE workspace_id = ${workspaceId} AND flush_id = ${flushId}`.execute(db.db);
+    if (done.rows.length > 0) {
+      return { events: events.length, stored: 0, statements, replayed: true };
+    }
+  }
   const tracking = events.filter((event): event is TrackingEvent => event.source === "tracking");
   const provider = events.filter((event): event is ProviderEventRef => event.source === "provider");
 
@@ -253,6 +274,13 @@ WHERE (
     AND p.occurred_at > j.t - ${SOFT_BOUNCE_WINDOW_MS} AND p.occurred_at <= j.t
 ) >= ${SOFT_BOUNCE_LIMIT}
 ON CONFLICT (workspace_id, email_hash) DO NOTHING`.compile(db.db),
+    );
+  }
+  if (writes.length > 0 && flushId !== undefined) {
+    // A plain insert: if the id is there already, the whole batch fails and writes nothing.
+    writes.unshift(
+      sql`INSERT INTO event_flushes (workspace_id, flush_id, created_at)
+VALUES (${workspaceId}, ${flushId}, ${now})`.compile(db.db),
     );
   }
   if (writes.length > 0) {

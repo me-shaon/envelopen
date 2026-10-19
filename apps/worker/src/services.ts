@@ -3,8 +3,8 @@ import {
   type CampaignJob,
   type CredentialCipher,
   createCredentialCipher,
-  createEmailHasher,
   createFileLinkSigner,
+  createPinnedEmailHasher,
   type EmailHasher,
   type FileLinkSigner,
   type ImportJob,
@@ -21,11 +21,11 @@ import { usageReader } from "./do/usage";
 
 interface KeyedServices {
   signingKey: string;
-  hasher: Promise<EmailHasher>;
   signer: Promise<FileLinkSigner>;
 }
 
 let keyed: KeyedServices | undefined;
+let hasher: { keys: string; value: Promise<EmailHasher> } | undefined;
 let cipher: { key: string; value: Promise<CredentialCipher> } | undefined;
 let tokens: { keys: string; value: Promise<TokenSigner> } | undefined;
 
@@ -36,11 +36,34 @@ function keyedServices(signingKey: string): KeyedServices {
   if (keyed?.signingKey !== signingKey) {
     keyed = {
       signingKey,
-      hasher: createEmailHasher(signingKey),
       signer: createFileLinkSigner(signingKey),
     };
   }
   return keyed;
+}
+
+/**
+ * The suppression hasher with the pinned key (see packages/core/src/suppression/hash.ts).
+ * It looks for the pinned key in SIGNING_KEY and SIGNING_KEYS_RETIRED, so a rotation
+ * keeps every suppression. A failed setup is not cached, so the next call tries again.
+ */
+function emailHasher(
+  env: Pick<Env, "DB" | "SIGNING_KEYS_RETIRED">,
+  signingKey: string,
+): Promise<EmailHasher> {
+  const keys = `${signingKey}|${env.SIGNING_KEYS_RETIRED ?? ""}`;
+  if (hasher?.keys !== keys) {
+    const secrets = tokenKeysFromEnv(signingKey, env.SIGNING_KEYS_RETIRED).map(
+      (entry) => entry.secret,
+    );
+    const value = createPinnedEmailHasher(env.DB, secrets);
+    const entry = { keys, value };
+    hasher = entry;
+    value.catch(() => {
+      if (hasher === entry) hasher = undefined;
+    });
+  }
+  return hasher.value;
 }
 
 /** The cipher's key derivation is async, so the service awaits it on first use. */
@@ -162,7 +185,9 @@ export function createServices(
     | "CAMPAIGN_WORKFLOW"
     | "SEND_QUEUE"
     | "USAGE_METER"
+    | "DB"
     | "SIGNING_KEY"
+    | "SIGNING_KEYS_RETIRED"
     | "ENCRYPTION_KEY"
     | "OUTBOUND_MOCK_ORIGIN"
   >,
@@ -183,8 +208,9 @@ export function createServices(
   // Without SIGNING_KEY, the operations that need a hash or a link fail. The first-run
   // screen reports the missing secret. The same goes for ENCRYPTION_KEY and connections.
   if (isUsableKey(env.SIGNING_KEY)) {
-    const { hasher, signer } = keyedServices(env.SIGNING_KEY);
-    services.hashEmail = async (email) => (await hasher)(email);
+    const signingKey = env.SIGNING_KEY;
+    const { signer } = keyedServices(signingKey);
+    services.hashEmail = async (email) => (await emailHasher(env, signingKey))(email);
     services.signFileLink = async (file) => (await signer).sign(file);
   }
   if (isUsableKey(env.ENCRYPTION_KEY)) services.credentials = credentialCipher(env.ENCRYPTION_KEY);

@@ -35,7 +35,7 @@ npx wrangler secret put SIGNING_KEY
 
 Wrangler asks for the value. The Worker uses the new value at once.
 
-Keep `SIGNING_KEY` stable. A new value signs everyone out. It also changes the hash of every suppressed address, so old suppressions stop matching. If you must replace it, put the old value in `SIGNING_KEYS_RETIRED`. Unsubscribe links in emails that you already sent then keep working.
+Keep `SIGNING_KEY` stable. A new value signs everyone out. If you must replace it, put the old value in `SIGNING_KEYS_RETIRED`. Unsubscribe links in emails that you already sent then keep working. Suppressions keep matching too, because Envelopen hashes addresses with the key of the first use and finds that key in `SIGNING_KEYS_RETIRED`. Do not remove a retired key. Without it, every operation that checks suppressions fails until you add the key back.
 
 The `PBKDF2_ITERATIONS` variable in `wrangler.jsonc` sets the password hash cost (at most 100,000). Below 100,000, the owner signs in with a passkey. The [release checklist](docs/guides/release-checklist.md) shows how to measure the cost on your account.
 

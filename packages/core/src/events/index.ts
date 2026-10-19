@@ -1,4 +1,4 @@
-export { type FlushResult, flushEvents } from "./flush";
+export { type FlushOptions, type FlushResult, flushEvents } from "./flush";
 export {
   type BufferedEvent,
   bufferKey,

@@ -229,8 +229,9 @@ export const resendConformance: ConformanceFixtures = {
   connect: {
     ok: [resendFixtures.domainsOk],
     badKey: [resendFixtures.domainsInvalidKey],
-    // Resend answers a wrong key with 400 validation_error, not 401.
-    badKeyReason: "validation",
+    // Resend answers a wrong key with 400 validation_error, not 401. The adapter maps
+    // its message to auth.
+    badKeyReason: "auth",
   },
   webhook: {
     secret: resendFixtures.webhookSecret,

@@ -1,4 +1,5 @@
 import { registry } from "@envelopen/core";
+import { type CreateDbOptions, createDb } from "@envelopen/db";
 import { describe, expect, it } from "vitest";
 import committedDocument from "../../../web/src/api/openapi.json";
 import {
@@ -12,7 +13,7 @@ import {
   testDb,
   testRegistry,
 } from "../../test/helpers";
-import { purgeExpiredIdempotencyKeys } from "./idempotency";
+import { IDEMPOTENCY_LEASE_MS, purgeExpiredIdempotencyKeys } from "./idempotency";
 import { createFixedWindowLimiter } from "./rate-limit";
 import { buildOpenApiDocument, createApiRouter } from "./router";
 
@@ -217,6 +218,34 @@ describe("input validation and errors", () => {
   });
 });
 
+type KyselyPlugin = NonNullable<CreateDbOptions["plugins"]>[number];
+type QueryKind = Parameters<KyselyPlugin["transformQuery"]>[0]["node"]["kind"];
+
+/** A plugin that fails the given kinds of query on `idempotency_keys`, like a D1 outage. */
+function failIdempotencyWrites(kinds: QueryKind[]): KyselyPlugin {
+  return {
+    transformQuery({ node }) {
+      if (kinds.includes(node.kind) && JSON.stringify(node).includes('"idempotency_keys"')) {
+        throw new Error("D1 is unavailable");
+      }
+      return node;
+    },
+    async transformResult({ result }) {
+      return result;
+    },
+  };
+}
+
+function appWithFailingKeys(kinds: QueryKind[]) {
+  return createTestApp({
+    createDb: (bindings) =>
+      createDb(bindings, {
+        enforceWorkspaceScope: true,
+        plugins: [failIdempotencyWrites(kinds)],
+      }),
+  });
+}
+
 describe("idempotency keys", () => {
   it("returns the first response for a reused key and does not repeat the write", async () => {
     const workspaceId = await createWorkspace();
@@ -312,6 +341,91 @@ describe("idempotency keys", () => {
       expect(res.headers.get("idempotent-replayed")).toBeNull();
     }
     expect(await countRows("lists", workspaceId)).toBe(2);
+  });
+
+  it("returns the response and frees the key when storing the response fails", async () => {
+    const workspaceId = await createWorkspace();
+    const { key } = await createApiKey(workspaceId, ["lists:write"]);
+    const headers = { ...bearer(key), "idempotency-key": "store-fails" };
+
+    const first = await appWithFailingKeys(["UpdateQueryNode"]).request(
+      "/test/lists",
+      jsonPost({ name: "vip" }, headers),
+    );
+    expect(first.status).toBe(201);
+    expect(await countRows("idempotency_keys", workspaceId)).toBe(0);
+
+    // Nothing is stored to replay, so the retry runs instead of getting 409.
+    const retry = await createTestApp().request("/test/lists", jsonPost({ name: "vip" }, headers));
+    expect(retry.status).toBe(201);
+    expect(retry.headers.get("idempotent-replayed")).toBeNull();
+    const replay = await createTestApp().request("/test/lists", jsonPost({ name: "vip" }, headers));
+    expect(replay.headers.get("idempotent-replayed")).toBe("true");
+  });
+
+  it("holds an unfinished reservation only for the lease, not for 24 hours", async () => {
+    const workspaceId = await createWorkspace();
+    const { key } = await createApiKey(workspaceId, ["lists:write"]);
+    const headers = { ...bearer(key), "idempotency-key": "stuck" };
+    const before = Date.now();
+
+    // Neither storing the response nor releasing the key works, like a Worker that stops.
+    const first = await appWithFailingKeys(["UpdateQueryNode", "DeleteQueryNode"]).request(
+      "/test/lists",
+      jsonPost({ name: "vip" }, headers),
+    );
+    expect(first.status).toBe(201);
+    const row = await testDb()
+      .db.selectFrom("idempotency_keys")
+      .select(["expires_at", "response_status"])
+      .where("workspace_id", "=", workspaceId)
+      .executeTakeFirstOrThrow();
+    expect(row.response_status).toBeNull();
+    expect(row.expires_at).toBeLessThanOrEqual(Date.now() + IDEMPOTENCY_LEASE_MS);
+    expect(row.expires_at).toBeGreaterThanOrEqual(before + IDEMPOTENCY_LEASE_MS);
+
+    const app = createTestApp();
+    expect((await app.request("/test/lists", jsonPost({ name: "vip" }, headers))).status).toBe(409);
+    await testDb()
+      .db.updateTable("idempotency_keys")
+      .set({ expires_at: Date.now() - 1 })
+      .where("workspace_id", "=", workspaceId)
+      .execute();
+    expect((await app.request("/test/lists", jsonPost({ name: "vip" }, headers))).status).toBe(201);
+  });
+
+  it("frees the key when the operation throws and the release fails", async () => {
+    const workspaceId = await createWorkspace();
+    const { key } = await createApiKey(workspaceId, ["lists:write"]);
+    const headers = { ...bearer(key), "idempotency-key": "throws" };
+    // The audit insert fails inside the operation, so the handler throws.
+    const failing = createTestApp({
+      createDb: (bindings) =>
+        createDb(bindings, {
+          enforceWorkspaceScope: true,
+          plugins: [
+            failIdempotencyWrites(["DeleteQueryNode"]),
+            {
+              transformQuery({ node }) {
+                if (JSON.stringify(node).includes('"audit_log"')) throw new Error("boom");
+                return node;
+              },
+              async transformResult({ result }) {
+                return result;
+              },
+            },
+          ],
+        }),
+    });
+    expect((await failing.request("/test/lists", jsonPost({ name: "vip" }, headers))).status).toBe(
+      500,
+    );
+    const row = await testDb()
+      .db.selectFrom("idempotency_keys")
+      .select("expires_at")
+      .where("workspace_id", "=", workspaceId)
+      .executeTakeFirstOrThrow();
+    expect(row.expires_at).toBeLessThanOrEqual(Date.now() + IDEMPOTENCY_LEASE_MS);
   });
 
   it("rejects a malformed key", async () => {

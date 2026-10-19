@@ -294,6 +294,9 @@ export async function seedSentCampaign(
       snapshot_done_at: options.startedAt,
       tracking_opens: options.trackOpens === false ? 0 : 1,
       tracking_clicks: options.trackClicks === false ? 0 : 1,
+      // As confirm stores it: the workspace switches are on in the seeded workspace.
+      send_tracking_opens: options.trackOpens === false ? 0 : 1,
+      send_tracking_clicks: options.trackClicks === false ? 0 : 1,
       link_origin: "https://envelopen.test",
     })
     .where("workspace_id", "=", workspaceId)

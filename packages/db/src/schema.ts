@@ -438,6 +438,12 @@ export interface CampaignsTable {
   paused_at: Defaulted<number | null>;
   /** The https origin of unsubscribe and tracking links, fixed at confirm. */
   link_origin: Defaulted<string | null>;
+  /**
+   * The tracking that applies to the send, fixed at confirm: the campaign switch and the
+   * workspace switch. Null before confirm.
+   */
+  send_tracking_opens: Defaulted<Bool | null>;
+  send_tracking_clicks: Defaulted<Bool | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -541,6 +547,13 @@ interface StatCounters {
   bounces_soft: Defaulted<number>;
   complaints: Defaulted<number>;
   unsubscribes: Defaulted<number>;
+}
+
+/** An EventBuffer flush group that D1 committed, so a replay of it is skipped. */
+export interface EventFlushesTable {
+  workspace_id: Immutable<number>;
+  flush_id: string;
+  created_at: number;
 }
 
 export interface CampaignStatsHourlyTable extends StatCounters {
@@ -669,6 +682,7 @@ export interface Database {
   campaign_stats_hourly: CampaignStatsHourlyTable;
   campaign_stats_daily: CampaignStatsDailyTable;
   workspace_stats_daily: WorkspaceStatsDailyTable;
+  event_flushes: EventFlushesTable;
   auth_user: AuthUserTable;
   auth_session: AuthSessionTable;
   auth_account: AuthAccountTable;
@@ -717,6 +731,7 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   campaign_stats_hourly: "tenant",
   campaign_stats_daily: "tenant",
   workspace_stats_daily: "tenant",
+  event_flushes: "tenant",
   // Better Auth tables are global (KTD4).
   auth_user: "global",
   auth_session: "global",

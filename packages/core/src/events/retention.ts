@@ -21,9 +21,13 @@ export const MAX_RETENTION_DAYS = 730;
 /** Rows that one retention run deletes from each table at most. */
 export const RETENTION_BATCH = 2000;
 
+/** How long the ids of committed EventBuffer flushes stay. A replay comes much sooner. */
+export const FLUSH_ID_RETENTION_MS = 7 * DAY_MS;
+
 export interface RetentionResult {
   emailEvents: number;
   providerEvents: number;
+  eventFlushes: number;
 }
 
 export async function purgeExpiredEvents(
@@ -44,9 +48,13 @@ export async function purgeExpiredEvents(
   WHERE p.occurred_at < ${floor} AND p.processed_at IS NOT NULL
     AND p.occurred_at < ${now} - MAX(w.event_retention_days, ${MIN_RETENTION_DAYS}) * ${DAY_MS}
   LIMIT ${limit})`.execute(any);
+  const flushes = await sql`DELETE FROM event_flushes WHERE rowid IN (
+  SELECT rowid FROM event_flushes WHERE created_at < ${now - FLUSH_ID_RETENTION_MS}
+  LIMIT ${limit})`.execute(any);
   return {
     emailEvents: Number(events.numAffectedRows ?? 0),
     providerEvents: Number(provider.numAffectedRows ?? 0),
+    eventFlushes: Number(flushes.numAffectedRows ?? 0),
   };
 }
 

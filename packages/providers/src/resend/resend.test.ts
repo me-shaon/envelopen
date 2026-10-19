@@ -93,6 +93,31 @@ describe("Resend adapter", () => {
     expect(timeout.failure).toMatchObject({ outcome: "unknown", reason: "timeout" });
   });
 
+  it("classifies a wrong key on a batch as auth, and other validation errors as validation", async () => {
+    const run = async (message: string) =>
+      sendBatch(
+        resendAdapter,
+        campaignBatch(2),
+        f.credentials,
+        ctx([
+          {
+            label: "validation",
+            method: "POST",
+            url: "https://api.resend.com/emails/batch",
+            response: { status: 400, body: { statusCode: 400, name: "validation_error", message } },
+          },
+        ]).ctx,
+      );
+    expect((await run("API key is invalid")).failure).toMatchObject({
+      outcome: "not_sent",
+      reason: "auth",
+    });
+    expect((await run("The `to` field is missing.")).failure).toMatchObject({
+      outcome: "not_sent",
+      reason: "validation",
+    });
+  });
+
   it("connects a full access key and a sending-only key, and rejects a wrong key", async () => {
     expect(await resendAdapter.connect(f.credentials, ctx([f.domainsOk]).ctx)).toMatchObject({
       ok: true,
@@ -105,7 +130,8 @@ describe("Resend adapter", () => {
       await resendAdapter.connect(f.credentials, ctx([f.domainsInvalidKey]).ctx),
     ).toMatchObject({
       ok: false,
-      reason: "validation",
+      reason: "auth",
+      message: "Resend rejected the API key.",
     });
     expect(
       await resendAdapter.connect(

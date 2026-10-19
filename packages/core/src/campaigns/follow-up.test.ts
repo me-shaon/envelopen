@@ -158,16 +158,38 @@ describe("follow-up to non-openers", () => {
     expect(stats.rates.open).toBeNull();
   });
 
-  it("is unavailable when the workspace had open tracking off and no open was recorded", async () => {
+  it("uses the tracking stored at confirm, not the workspace switch of now", async () => {
     const { db, seeded, parent, run } = await setup();
+    // The workspace turns open tracking off after the send: the send still tracked opens.
     await db.db
       .updateTable("workspaces")
-      .set({ tracking_opens: 0 })
+      .set({ tracking_opens: 0, tracking_clicks: 0 })
       .where("id", "=", seeded.workspaceId)
+      .execute();
+    const tracked = await run<CampaignStats>(campaignsStats, { id: parent.campaignId });
+    expect(tracked.tracking).toEqual({ opens: true, clicks: true });
+    expect(tracked.followUp).toEqual({ available: true, reason: null });
+
+    // A send confirmed while the workspace switch was off did not track opens, even with
+    // the switch on again and no event recorded.
+    await db.db
+      .updateTable("workspaces")
+      .set({ tracking_opens: 1, tracking_clicks: 1 })
+      .where("id", "=", seeded.workspaceId)
+      .execute();
+    await db.db
+      .updateTable("campaigns")
+      .set({ send_tracking_opens: 0 })
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("id", "=", parent.campaignId)
       .execute();
     expect(await failure(run(campaignsFollowUp, { id: parent.campaignId }))).toMatchObject({
       code: "conflict",
+      message: expect.stringContaining("Open tracking was off"),
     });
+    const untracked = await run<CampaignStats>(campaignsStats, { id: parent.campaignId });
+    expect(untracked.tracking).toEqual({ opens: false, clicks: true });
+    expect(untracked.rates.open).toBeNull();
   });
 
   it("is available on the stats of a campaign with open tracking", async () => {

@@ -25,6 +25,11 @@ import { usageMeter, usageSink } from "./usage";
 // D1 daily-limit error, at 00:00 UTC (KTD24).
 //
 // The flush reports its D1 writes to the UsageMeter, as every other invocation does.
+//
+// Each group gets an id before the D1 write, and storage keeps the id with the last
+// sequence number of the group. If the Durable Object stops after the D1 commit but
+// before the local delete, the next flush sends the same group with the same id, and
+// the flush skips it (events/flush.ts). So no event counts twice.
 
 /** Retry delay after a flush error that is not the daily limit. */
 const RETRY_MS = 60_000;
@@ -34,6 +39,14 @@ const RETRY_MS = 60_000;
  * D1 already, and the cron hands them over again (events/retention.ts).
  */
 export const MAX_WAITING = 20_000;
+
+/** The storage key of the group that is being written: its flush id and last sequence number. */
+export const PENDING_FLUSH_KEY = "pendingFlush";
+
+export interface PendingFlush {
+  id: string;
+  last: number;
+}
 
 export interface AddResult {
   waiting: number;
@@ -117,13 +130,33 @@ export class EventBuffer extends DurableObject<Env> {
 
   private async flushGroup(now: number): Promise<FlushResult | null> {
     const workspaceId = await this.ctx.storage.get<number>("workspace");
-    const rows = this.ctx.storage.sql
-      .exec<{ seq: number; body: string }>(
-        "SELECT seq, body FROM events ORDER BY seq LIMIT ?",
-        FLUSH_SIZE,
-      )
-      .toArray();
+    const select = (pending: PendingFlush | undefined) =>
+      pending
+        ? this.ctx.storage.sql
+            .exec<{ seq: number; body: string }>(
+              "SELECT seq, body FROM events WHERE seq <= ? ORDER BY seq",
+              pending.last,
+            )
+            .toArray()
+        : this.ctx.storage.sql
+            .exec<{ seq: number; body: string }>(
+              "SELECT seq, body FROM events ORDER BY seq LIMIT ?",
+              FLUSH_SIZE,
+            )
+            .toArray();
+    // A group from an earlier flush that did not finish goes first, with the same id.
+    let pending = await this.ctx.storage.get<PendingFlush>(PENDING_FLUSH_KEY);
+    let rows = select(pending);
+    if (pending && rows.length === 0) {
+      await this.ctx.storage.delete(PENDING_FLUSH_KEY);
+      pending = undefined;
+      rows = select(undefined);
+    }
     if (rows.length === 0 || workspaceId === undefined) return null;
+    if (!pending) {
+      pending = { id: crypto.randomUUID(), last: rows.at(-1)?.seq ?? 0 };
+      await this.ctx.storage.put(PENDING_FLUSH_KEY, pending);
+    }
     const events: BufferedEvent[] = [];
     for (const row of rows) {
       try {
@@ -133,11 +166,13 @@ export class EventBuffer extends DurableObject<Env> {
         // A row that does not parse is dropped with its group.
       }
     }
-    const last = rows.at(-1)?.seq ?? 0;
+    const last = pending.last;
     const db = createDb(this.env, { usageSink: usageSink(this.env) });
     let result: FlushResult;
     try {
-      result = await flushEvents(db, workspaceId, markBursts(events), now);
+      result = await flushEvents(db, workspaceId, markBursts(events), now, {
+        flushId: pending.id,
+      });
     } catch (error) {
       if (isD1DailyLimitError(error)) {
         const until = nextUtcMidnight(now);
@@ -154,6 +189,7 @@ export class EventBuffer extends DurableObject<Env> {
       await db.meter.flush().catch((error) => console.error("Usage report failed", error));
     }
     this.ctx.storage.sql.exec("DELETE FROM events WHERE seq <= ?", last);
+    await this.ctx.storage.delete(PENDING_FLUSH_KEY);
     const left = this.waiting();
     // A full buffer drains one group per second. A partial one waits for the delay.
     if (left > 0)

@@ -10,6 +10,7 @@ import {
   jsonPost,
   testDb,
 } from "../../test/helpers";
+import { usageMeter } from "../do/usage";
 import worker from "../index";
 
 // The import Workflow end to end: REST calls with an API key start real Workflow runs
@@ -84,9 +85,13 @@ describe("import Workflow", () => {
       preview: { total: 3, new: 1, invalid: 1, duplicate: 1 },
     });
 
+    // The test app reports no usage, so every row that the meter gets is the run's.
+    const before = (await usageMeter(env).status()).rowsWritten;
     await waitForRuns(async () => {
       await json(await app().request(`/imports/${upload.id}/start`, jsonPost({}, auth)));
     });
+    // The import run reports its D1 writes: at least the contact, its tag, and the import.
+    expect((await usageMeter(env).status()).rowsWritten - before).toBeGreaterThanOrEqual(3);
     const done = await json<{ status: string; counts: Json; hasErrorFile: boolean }>(
       await app().request(`/imports/${upload.id}`, { headers: auth }),
     );

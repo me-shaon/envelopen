@@ -39,12 +39,19 @@ interface ResendError {
   message?: string;
 }
 
+/** Resend's message for a wrong API key, which comes as 400 validation_error, not 401. */
+const INVALID_KEY_MESSAGE = /\bapi key is invalid\b/i;
+
 /** Maps a Resend error to the classes of KTD12. https://resend.com/docs/api-reference/errors */
 export function classifyResendError(
   status: number,
   name: string,
+  message = "",
 ): { outcome: "not_sent" | "unknown"; reason: FailureReason } {
   if (status >= 500) return { outcome: "unknown", reason: "server_error" };
+  if (name === "validation_error" && INVALID_KEY_MESSAGE.test(message)) {
+    return { outcome: "not_sent", reason: "auth" };
+  }
   switch (name) {
     case "rate_limit_exceeded":
       return { outcome: "not_sent", reason: "rate_limited" };
@@ -104,7 +111,7 @@ async function sendBatch(
       })
     | null;
   if (!response.ok) {
-    const classified = classifyResendError(response.status, body?.name ?? "");
+    const classified = classifyResendError(response.status, body?.name ?? "", body?.message ?? "");
     const retry = retryAfterMs(response);
     return everyone(messages, {
       ...classified,
@@ -178,7 +185,7 @@ async function connect(credentials: Credentials, ctx: AdapterContext): Promise<C
       refs: { access: "sending" },
     };
   }
-  const classified = classifyResendError(response.status, body?.name ?? "");
+  const classified = classifyResendError(response.status, body?.name ?? "", body?.message ?? "");
   return {
     ok: false,
     reason: classified.reason,

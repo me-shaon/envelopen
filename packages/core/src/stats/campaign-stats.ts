@@ -4,7 +4,7 @@ import { getAdapter } from "@envelopen/providers";
 import { sql } from "kysely";
 import { z } from "zod";
 import { followUpAvailability } from "../campaigns/follow-up";
-import { type CampaignRow, loadCampaign } from "../campaigns/model";
+import { loadCampaign, sendTracking } from "../campaigns/model";
 import { personalizePreview, SAMPLE_VALUES, testLinkOrigin } from "../templates/preview";
 import { COUNTERS, type Counter, HOUR_MS, utcHour } from "./rollups";
 
@@ -114,29 +114,6 @@ function ratio(part: number, whole: number): number | null {
   return whole > 0 ? part / whole : null;
 }
 
-/** Whether open and click tracking applied to the send. */
-async function trackingOf(
-  db: DbConnection,
-  campaign: CampaignRow,
-  totals: Totals,
-): Promise<{ opens: boolean; clicks: boolean }> {
-  // The consumer tracks only when the campaign and the workspace switches are both on.
-  // The workspace switch can change after the send, so recorded events also prove it.
-  const workspace = await db.db
-    .selectFrom("workspaces")
-    .select(["tracking_opens", "tracking_clicks"])
-    .where("id", "=", campaign.workspace_id)
-    .executeTakeFirst();
-  return {
-    opens:
-      campaign.tracking_opens === 1 &&
-      (workspace?.tracking_opens === 1 || totals.opens + totals.machine_opens > 0),
-    clicks:
-      campaign.tracking_clicks === 1 &&
-      (workspace?.tracking_clicks === 1 || totals.clicks + totals.bot_clicks > 0),
-  };
-}
-
 async function totalsOf(db: DbConnection, workspaceId: number, campaignId: number) {
   const [rollup, batches] = await Promise.all([
     db.db
@@ -210,7 +187,7 @@ export async function campaignStats(
           .where("id", "=", campaign.connection_id)
           .executeTakeFirst(),
   ]);
-  const tracking = await trackingOf(db, campaign, totals);
+  const tracking = await sendTracking(db, campaign);
   const reportsDelivery =
     getAdapter(connection?.provider ?? "")?.capabilities.eventTypes.includes("delivered") ?? false;
   const start = campaign.started_at === null ? null : utcHour(campaign.started_at);
@@ -343,7 +320,7 @@ export async function campaignClickMap(
   }
   return {
     campaignId,
-    trackClicks: campaign.tracking_clicks === 1,
+    trackClicks: (await sendTracking(db, campaign)).clicks,
     totalClicks: total,
     links: rows.map((row) => ({
       index: Number(row.idx),

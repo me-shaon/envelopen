@@ -290,8 +290,15 @@ async function handlePointer(deps: ConsumerDeps, pointer: BatchPointer): Promise
     subject: campaign.subject ?? "",
     text: campaign.text,
     trackingOrigin: set.origin,
-    trackOpens: campaign.tracking_opens === 1 && campaign.ws_tracking_opens === 1,
-    trackClicks: campaign.tracking_clicks === 1 && campaign.ws_tracking_clicks === 1,
+    // The tracking fixed at confirm. Without it, the switches as they are now.
+    trackOpens:
+      campaign.send_tracking_opens !== null
+        ? campaign.send_tracking_opens === 1
+        : campaign.tracking_opens === 1 && campaign.ws_tracking_opens === 1,
+    trackClicks:
+      campaign.send_tracking_clicks !== null
+        ? campaign.send_tracking_clicks === 1
+        : campaign.tracking_clicks === 1 && campaign.ws_tracking_clicks === 1,
   });
   const from = mailbox(campaign.from_name, campaign.from_email ?? "");
   const messages: OutgoingMessage[] = [];

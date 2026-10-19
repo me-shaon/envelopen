@@ -144,8 +144,18 @@ test.describe("first campaign", () => {
     const tests = (await sentEmails(page)).filter((email) => email.subject.startsWith("[Test]"));
     expect(tests.map((email) => email.to)).toEqual([[OWNER.email]]);
 
-    // Create the campaign to the tag, confirm, and wait for sent.
+    // Every setup step is done, so the checklist folds into one line.
     await page.goto("/");
+    const complete = page.getByTestId("onboarding-complete");
+    await expect(complete).toContainText("Setup complete.");
+    await expect(page.getByTestId("onboarding-step-send_test")).toBeHidden();
+    await complete.getByRole("button", { name: "Show the steps" }).click();
+    await expect(page.getByTestId("onboarding-step-send_test")).toHaveAttribute(
+      "data-status",
+      "done",
+    );
+
+    // Create the campaign to the tag, confirm, and wait for sent.
     await page.getByRole("link", { name: "New campaign" }).first().click();
     await page.getByLabel("Campaign name").fill("Course launch");
     await page.getByLabel("Template").selectOption({ label: "Course launch" });

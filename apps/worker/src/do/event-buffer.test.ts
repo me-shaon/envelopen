@@ -1,4 +1,4 @@
-import { runDurableObjectAlarm } from "cloudflare:test";
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import {
   type BufferedEvent,
@@ -14,6 +14,7 @@ import { countingD1, dbOver, testKeys } from "../../test/campaign-helpers";
 import { call, LATER, mount, type SentCampaign, sentCampaign } from "../../test/tracking-helpers";
 import { RETENTION_MINUTE, runEventCron } from "../cron";
 import { createHookRoutes } from "../hooks";
+import { PENDING_FLUSH_KEY, type PendingFlush } from "./event-buffer";
 import { eventBuffer, eventSink } from "./events";
 
 // The EventBuffer Durable Object (KTD31), the flush, the soft-bounce rule, and the
@@ -148,6 +149,48 @@ describe("EventBuffer", () => {
     expect(await runDurableObjectAlarm(buffer)).toBe(true);
     expect(await count(sent, "email_events")).toBe(2);
     expect(await buffer.size()).toBe(0);
+  });
+
+  it("skips a flush id that D1 committed already", async () => {
+    const sent = await sentCampaign();
+    const { workspaceId } = sent.seeded;
+    const events = [open(sent, 0, LATER), open(sent, 1, LATER + 1000)];
+    const first = await flushEvents(sent.db, workspaceId, events, LATER, { flushId: "group-1" });
+    const again = await flushEvents(sent.db, workspaceId, events, LATER, { flushId: "group-1" });
+    expect(first).toMatchObject({ stored: 2 });
+    expect(again).toMatchObject({ stored: 0, replayed: true });
+    expect(await count(sent, "email_events")).toBe(2);
+    expect((await hourly(sent)).reduce((sum, row) => sum + row.opens, 0)).toBe(2);
+  });
+
+  it("counts a group once when the buffer stops between the D1 commit and the local delete", async () => {
+    const sent = await sentCampaign();
+    const { workspaceId } = sent.seeded;
+    const buffer = eventBuffer(env, workspaceId);
+    await buffer.add(workspaceId, [open(sent, 0, LATER), open(sent, 1, LATER + 1000)], LATER);
+
+    // The crash: the group has an id, and D1 committed it, but the events are still in
+    // storage. This is the state that the buffer leaves when it stops after the commit.
+    await runInDurableObject(buffer, async (_instance, state) => {
+      const rows = state.storage.sql
+        .exec<{ seq: number; body: string }>("SELECT seq, body FROM events ORDER BY seq")
+        .toArray();
+      const pending: PendingFlush = { id: crypto.randomUUID(), last: rows.at(-1)?.seq ?? 0 };
+      await state.storage.put(PENDING_FLUSH_KEY, pending);
+      const events = rows.map((row) => JSON.parse(row.body) as BufferedEvent);
+      await flushEvents(sent.db, workspaceId, events, LATER, { flushId: pending.id });
+    });
+    // A new event arrives before the replay. It is not part of the replayed group.
+    await buffer.add(workspaceId, [open(sent, 2, LATER + 2000)], LATER);
+    expect(await count(sent, "email_events")).toBe(2);
+
+    await runDurableObjectAlarm(buffer);
+    expect(await count(sent, "email_events")).toBe(2);
+    expect(await buffer.size()).toBe(1);
+    await runDurableObjectAlarm(buffer);
+    expect(await count(sent, "email_events")).toBe(3);
+    expect(await buffer.size()).toBe(0);
+    expect((await hourly(sent)).reduce((sum, row) => sum + row.opens, 0)).toBe(3);
   });
 
   it("writes a complaint's suppression before the flush, and the flush counts it", async () => {

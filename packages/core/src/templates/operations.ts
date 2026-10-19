@@ -367,6 +367,7 @@ export const templatesPreview = defineOperation({
   scope: "campaigns:read",
   risk: "read",
   mcp: { class: "now", reason: "Campaign preview is in the plan's MCP 'now' set." },
+  contactContent: true,
   input: z.object({
     id: Id,
     contactId: Id.optional().meta({ description: "Personalize for this contact." }),

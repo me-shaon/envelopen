@@ -3914,6 +3914,417 @@
           "platformLimit",
           "limits"
         ]
+      },
+      "WorkspaceContext": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "trackingOpens": {
+                "type": "boolean",
+                "description": "Default for new campaigns."
+              },
+              "trackingClicks": {
+                "type": "boolean",
+                "description": "Default for new campaigns."
+              },
+              "eventRetentionDays": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "trackingOpens",
+              "trackingClicks",
+              "eventRetentionDays"
+            ]
+          },
+          "access": {
+            "type": "object",
+            "properties": {
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "contacts:read",
+                    "contacts:write",
+                    "contacts:export",
+                    "contacts:delete",
+                    "lists:write",
+                    "templates:write",
+                    "campaigns:read",
+                    "campaigns:write",
+                    "campaigns:send",
+                    "stats:read"
+                  ]
+                },
+                "description": "The scopes of the caller. Tools outside them are hidden."
+              }
+            },
+            "required": [
+              "scopes"
+            ]
+          },
+          "provider": {
+            "type": "object",
+            "properties": {
+              "ready": {
+                "type": "boolean",
+                "description": "A connection is selected and active, so campaigns and test sends can go out."
+              },
+              "connections": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Connection"
+                }
+              }
+            },
+            "required": [
+              "ready",
+              "connections"
+            ]
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "domain": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "verified",
+                    "pending",
+                    "failed"
+                  ]
+                },
+                "spf": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "unknown",
+                        "pass",
+                        "missing",
+                        "fail",
+                        "error"
+                      ]
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "detail"
+                  ]
+                },
+                "dkim": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "unknown",
+                        "pass",
+                        "missing",
+                        "fail",
+                        "error"
+                      ]
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "detail"
+                  ]
+                },
+                "dmarc": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "unknown",
+                        "pass",
+                        "missing",
+                        "fail",
+                        "error"
+                      ]
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "detail"
+                  ]
+                },
+                "trackingDomain": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "tracking": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "unknown",
+                        "pass",
+                        "missing",
+                        "fail",
+                        "error"
+                      ]
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "detail"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "domain",
+                "status",
+                "spf",
+                "dkim",
+                "dmarc",
+                "trackingDomain",
+                "tracking"
+              ]
+            }
+          },
+          "usage": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "day": {
+                "type": "string",
+                "description": "The UTC day of the counts, YYYY-MM-DD."
+              },
+              "resetsAt": {
+                "type": "integer",
+                "description": "The next 00:00 UTC, Unix milliseconds."
+              },
+              "d1Writes": {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "integer"
+                  },
+                  "limit": {
+                    "type": "integer"
+                  },
+                  "remaining": {
+                    "type": "integer"
+                  },
+                  "ratio": {
+                    "type": "number",
+                    "description": "Share of the daily limit used, 0 to 1 or more."
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "warning",
+                      "limit"
+                    ],
+                    "description": "`warning` from 80% of the limit. `limit` when D1 rejected writes and sending is paused until the reset."
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit",
+                  "remaining",
+                  "ratio",
+                  "state"
+                ]
+              },
+              "warning": {
+                "type": "boolean",
+                "description": "True from 80% of the daily D1 writes."
+              },
+              "paidHint": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Advice to move to Workers Paid, near the limit. Null otherwise."
+              },
+              "platformLimit": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "since": {
+                    "type": "integer"
+                  },
+                  "until": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "since",
+                  "until"
+                ],
+                "description": "D1 rejected writes since `since`. Sending resumes after `until`."
+              },
+              "limits": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "free": {
+                      "type": "string"
+                    },
+                    "paid": {
+                      "type": "string"
+                    },
+                    "measured": {
+                      "type": "boolean",
+                      "description": "Envelopen counts this limit."
+                    },
+                    "used": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "free",
+                    "paid",
+                    "measured",
+                    "used"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "day",
+              "resetsAt",
+              "d1Writes",
+              "warning",
+              "paidHint",
+              "platformLimit",
+              "limits"
+            ],
+            "description": "The daily platform budget. Null when the usage counter did not answer."
+          },
+          "consent": {
+            "type": "object",
+            "properties": {
+              "bases": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "basis": {
+                      "type": "string",
+                      "enum": [
+                        "existing_customer",
+                        "explicit_opt_in",
+                        "unknown"
+                      ]
+                    },
+                    "meaning": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "basis",
+                    "meaning"
+                  ]
+                }
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "bases",
+              "rules"
+            ]
+          },
+          "sending": {
+            "type": "object",
+            "properties": {
+              "confirmTokenTtlMs": {
+                "type": "integer"
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "confirmTokenTtlMs",
+              "rules"
+            ]
+          }
+        },
+        "required": [
+          "workspace",
+          "access",
+          "provider",
+          "domains",
+          "usage",
+          "consent",
+          "sending"
+        ]
       }
     },
     "parameters": {}
@@ -15952,6 +16363,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Usage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workspace/context": {
+      "get": {
+        "operationId": "workspace_context.get",
+        "summary": "Get the workspace context for an agent",
+        "description": "Call this first. Returns the provider status, domain authentication, tracking settings, the usage budget, the consent vocabulary, and how prepare and confirm work. No secrets.",
+        "tags": [
+          "workspace_context"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "stats:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceContext"
                 }
               }
             }

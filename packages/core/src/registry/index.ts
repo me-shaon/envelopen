@@ -96,6 +96,7 @@ import { usageGet } from "../usage/operations";
 import { apiKeysCreate, apiKeysList, apiKeysPresets, apiKeysRevoke } from "./operations/api-keys";
 import { auditList } from "./operations/audit";
 import { onboardingStatus } from "./operations/onboarding";
+import { workspaceContextGet } from "./operations/workspace-context";
 import {
   workspacesArchive,
   workspacesCreate,
@@ -136,6 +137,7 @@ export {
   onboardingStatus,
   TEST_SEND_ACTION,
 } from "./operations/onboarding";
+export { WorkspaceContextSchema, workspaceContextGet } from "./operations/workspace-context";
 export {
   WorkspaceSchema,
   WorkspaceSummarySchema,
@@ -146,7 +148,13 @@ export {
   workspacesRename,
   workspacesUpdateSettings,
 } from "./operations/workspaces";
-export { createRegistry, pathParameters, type Registry, validateOperation } from "./registry";
+export {
+  createRegistry,
+  mcpToolName,
+  pathParameters,
+  type Registry,
+  validateOperation,
+} from "./registry";
 
 /**
  * Every operation in Envelopen (R66). The REST routes, the OpenAPI document, the UI
@@ -258,4 +266,6 @@ export const registry = createRegistry([
   campaignsFollowUp,
   statsLatest,
   usageGet,
+  // The agent's first call (U16): provider, domain, tracking, usage, and the sending rules.
+  workspaceContextGet,
 ]);

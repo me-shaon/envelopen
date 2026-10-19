@@ -41,6 +41,7 @@ export const contactsList = defineOperation({
   scope: "contacts:read",
   risk: "read",
   mcp: { class: "now", reason: "Contact search is in the plan's MCP 'now' set." },
+  contactContent: true,
   input: z.object({ ...contactFilterShape, ...pageInputShape }),
   output: pageOf(ContactSchema),
   async handler(input, ctx) {
@@ -127,6 +128,7 @@ export const contactsGet = defineOperation({
   scope: "contacts:read",
   risk: "read",
   mcp: { class: "now", reason: "Contact get is in the plan's MCP 'now' set." },
+  contactContent: true,
   input: z.object({ id: ContactId }),
   output: ContactSchema,
   async handler(input, ctx) {
@@ -148,6 +150,7 @@ export const contactsUpsert = defineOperation({
   scope: "contacts:write",
   risk: "write",
   mcp: { class: "now", reason: "Contact upsert is in the plan's MCP 'now' set." },
+  contactContent: true,
   input: z.object({
     email: z.string().max(320),
     firstName: Name.nullable().optional(),
@@ -194,6 +197,7 @@ export const contactsUpdate = defineOperation({
   scope: "contacts:write",
   risk: "write",
   mcp: { class: "now", reason: "Contact edits are part of contact upsert in the MCP 'now' set." },
+  contactContent: true,
   input: z.object({
     id: ContactId,
     firstName: Name.nullable().optional(),
@@ -337,6 +341,7 @@ export const contactsAddTags = defineOperation({
   scope: "contacts:write",
   risk: "write",
   mcp: { class: "now", reason: "Tags are in the plan's MCP 'now' set." },
+  contactContent: true,
   input: z.object({ id: ContactId, tags: TagNames.min(1) }),
   output: ContactSchema,
   async handler(input, ctx) {
@@ -365,6 +370,7 @@ export const contactsRemoveTag = defineOperation({
   scope: "contacts:write",
   risk: "write",
   mcp: { class: "now", reason: "Tags are in the plan's MCP 'now' set." },
+  contactContent: true,
   input: z.object({ id: ContactId, tagId: z.coerce.number().int().positive() }),
   output: ContactSchema,
   async handler(input, ctx) {

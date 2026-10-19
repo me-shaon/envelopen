@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { isScope } from "../scopes";
-import { createRegistry, defineOperation, type Operation, registry, validateOperation } from ".";
+import {
+  createRegistry,
+  defineOperation,
+  mcpToolName,
+  type Operation,
+  registry,
+  validateOperation,
+} from ".";
 
 function op(overrides: Partial<Operation> = {}): Operation {
   return defineOperation({
@@ -75,5 +82,26 @@ describe("operation registry", () => {
   it("rejects a malformed id or path", () => {
     expect(() => createRegistry([op({ id: "Things" })])).toThrow(/area.verb/);
     expect(() => createRegistry([op({ path: "things" })])).toThrow(/path is not valid/);
+  });
+
+  it("names MCP tools after the id, or after a valid override, and keeps the names unique", () => {
+    expect(mcpToolName(op())).toBe("things_get");
+    expect(mcpToolName(op({ mcp: { class: "now", reason: "r", tool: "get_thing" } }))).toBe(
+      "get_thing",
+    );
+    expect(() =>
+      createRegistry([op({ mcp: { class: "now", reason: "r", tool: "Get-Thing" } })]),
+    ).toThrow(/tool name is not valid/);
+    expect(() =>
+      createRegistry([
+        op(),
+        op({
+          id: "things.list",
+          path: "/things",
+          input: z.object({}),
+          mcp: { class: "now", reason: "r", tool: "things_get" },
+        }),
+      ]),
+    ).toThrow(/Duplicate MCP tool name/);
   });
 });

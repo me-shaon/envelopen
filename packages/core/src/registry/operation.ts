@@ -18,6 +18,11 @@ export interface McpClassification {
   class: "now" | "later" | "never";
   /** Why the operation has this class. Required, so every decision is explicit. */
   reason: string;
+  /**
+   * The MCP tool name. Defaults to the id with underscores, for example
+   * `contacts_upsert`. Lowercase letters, digits, and underscores, at most 64 characters.
+   */
+  tool?: string;
 }
 
 /**
@@ -59,6 +64,12 @@ export interface Operation<
    * store the response for Idempotency-Key replays, so the secret never rests in D1.
    */
   readonly sensitiveOutput?: boolean;
+  /**
+   * The output can hold text that contacts or imports supplied, such as names, custom
+   * fields, or addresses. The MCP server marks such a result as untrusted data, so an
+   * agent does not follow instructions in it (R67).
+   */
+  readonly contactContent?: boolean;
   /** HTTP status of a success. Defaults to 200. */
   readonly successStatus?: 200 | 201;
   // Method syntax keeps the parameters bivariant, so operations with different

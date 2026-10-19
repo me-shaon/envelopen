@@ -1460,6 +1460,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workspace/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the workspace context for an agent
+         * @description Call this first. Returns the provider status, domain authentication, tracking settings, the usage budget, the consent vocabulary, and how prepare and confirm work. No secrets.
+         */
+        get: operations["workspace_context.get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2393,6 +2413,102 @@ export interface components {
                 measured: boolean;
                 used: number | null;
             }[];
+        };
+        WorkspaceContext: {
+            workspace: {
+                id: number;
+                name: string;
+                /** @description Default for new campaigns. */
+                trackingOpens: boolean;
+                /** @description Default for new campaigns. */
+                trackingClicks: boolean;
+                eventRetentionDays: number;
+            };
+            access: {
+                /** @description The scopes of the caller. Tools outside them are hidden. */
+                scopes: ("contacts:read" | "contacts:write" | "contacts:export" | "contacts:delete" | "lists:write" | "templates:write" | "campaigns:read" | "campaigns:write" | "campaigns:send" | "stats:read")[];
+            };
+            provider: {
+                /** @description A connection is selected and active, so campaigns and test sends can go out. */
+                ready: boolean;
+                connections: components["schemas"]["Connection"][];
+            };
+            domains: {
+                id: number;
+                domain: string;
+                /** @enum {string} */
+                status: "verified" | "pending" | "failed";
+                spf: {
+                    /** @enum {string} */
+                    status: "unknown" | "pass" | "missing" | "fail" | "error";
+                    detail: string | null;
+                };
+                dkim: {
+                    /** @enum {string} */
+                    status: "unknown" | "pass" | "missing" | "fail" | "error";
+                    detail: string | null;
+                };
+                dmarc: {
+                    /** @enum {string} */
+                    status: "unknown" | "pass" | "missing" | "fail" | "error";
+                    detail: string | null;
+                };
+                trackingDomain: string | null;
+                tracking: {
+                    /** @enum {string} */
+                    status: "unknown" | "pass" | "missing" | "fail" | "error";
+                    detail: string | null;
+                };
+            }[];
+            /** @description The daily platform budget. Null when the usage counter did not answer. */
+            usage: {
+                /** @description The UTC day of the counts, YYYY-MM-DD. */
+                day: string;
+                /** @description The next 00:00 UTC, Unix milliseconds. */
+                resetsAt: number;
+                d1Writes: {
+                    used: number;
+                    limit: number;
+                    remaining: number;
+                    /** @description Share of the daily limit used, 0 to 1 or more. */
+                    ratio: number;
+                    /**
+                     * @description `warning` from 80% of the limit. `limit` when D1 rejected writes and sending is paused until the reset.
+                     * @enum {string}
+                     */
+                    state: "ok" | "warning" | "limit";
+                };
+                /** @description True from 80% of the daily D1 writes. */
+                warning: boolean;
+                /** @description Advice to move to Workers Paid, near the limit. Null otherwise. */
+                paidHint: string | null;
+                /** @description D1 rejected writes since `since`. Sending resumes after `until`. */
+                platformLimit: {
+                    since: number;
+                    until: number;
+                } | null;
+                limits: {
+                    id: string;
+                    label: string;
+                    free: string;
+                    paid: string;
+                    /** @description Envelopen counts this limit. */
+                    measured: boolean;
+                    used: number | null;
+                }[];
+            } | null;
+            consent: {
+                bases: {
+                    /** @enum {string} */
+                    basis: "existing_customer" | "explicit_opt_in" | "unknown";
+                    meaning: string;
+                }[];
+                rules: string[];
+            };
+            sending: {
+                confirmTokenTtlMs: number;
+                rules: string[];
+            };
         };
     };
     responses: never;
@@ -10773,6 +10889,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Usage"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "workspace_context.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceContext"];
                 };
             };
             /** @description The input is not valid. */

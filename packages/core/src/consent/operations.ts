@@ -32,6 +32,7 @@ export const consentList = defineOperation({
   scope: "contacts:read",
   risk: "read",
   mcp: { class: "now", reason: "A contact read. Agents need the basis to pick the campaign type." },
+  contactContent: true,
   input: z.object({ id: ContactId, ...pageInputShape }),
   output: pageOf(ConsentEventSchema),
   async handler(input, { principal, db }) {

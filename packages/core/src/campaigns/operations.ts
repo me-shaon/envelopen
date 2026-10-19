@@ -316,6 +316,7 @@ export const campaignsPreview = defineOperation({
   scope: "campaigns:read",
   risk: "read",
   mcp: { class: "now", reason: "The preview is in the plan's MCP 'now' set." },
+  contactContent: true,
   input: idInput.extend({ contactId: z.coerce.number().int().positive().optional() }),
   output: z
     .object({

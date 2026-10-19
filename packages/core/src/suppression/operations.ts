@@ -41,6 +41,7 @@ export const suppressionsList = defineOperation({
   scope: "stats:read",
   risk: "read",
   mcp: { class: "now", reason: "Read access to suppression is in the plan's MCP 'now' set." },
+  contactContent: true,
   input: z.object({
     email: z.string().max(320).optional(),
     reason: z.enum(REASONS).optional(),

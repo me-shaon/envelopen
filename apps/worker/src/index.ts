@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { createFileRoutes } from "./api/files";
+import { createFixedWindowLimiter, DEFAULT_API_KEY_RATE_LIMIT } from "./api/rate-limit";
 import { createApiRouter } from "./api/router";
 import { AUTH_BASE_PATH } from "./auth/better-auth";
 import { createAuthRoutes } from "./auth/routes";
 import { betterAuthSessionResolver } from "./auth/session";
 import { runCron } from "./cron";
 import { createHookRoutes } from "./hooks";
+import { createMcpRoutes, MCP_PATH } from "./mcp/route";
 import { handleSendBatch } from "./queue/send-consumer";
 import { createSetupRoutes } from "./setup/first-run";
 import { createTrackingRoutes, createUnsubscribeRoutes } from "./tracking";
@@ -30,9 +32,15 @@ app.route("/api/setup", createSetupRoutes());
 // Signed download links for import error files and exports. No session: the link is the credential.
 app.route("/api/files", createFileRoutes());
 
+// One API key budget for REST and MCP. Created once per isolate, so it keeps its counts.
+const rateLimiter = createFixedWindowLimiter(DEFAULT_API_KEY_RATE_LIMIT);
+
 // REST API generated from the operation registry, with the OpenAPI document at
-// /api/openapi.json. Created once per isolate, so the rate limiter keeps its counts.
-app.route("/api", createApiRouter({ resolveSession: betterAuthSessionResolver() }));
+// /api/openapi.json.
+app.route("/api", createApiRouter({ resolveSession: betterAuthSessionResolver(), rateLimiter }));
+
+// MCP tools generated from the same registry (U16). API keys only, no session.
+app.route(MCP_PATH, createMcpRoutes({ rateLimiter }));
 
 // Provider webhooks (U7). Each adapter verifies its own signature or secret.
 app.route("/hooks", createHookRoutes());

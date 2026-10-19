@@ -186,6 +186,8 @@ test.describe("password mode", () => {
     await page.getByRole("radio", { name: /Enrollment sync/ }).check();
     await page.getByRole("dialog").getByRole("button", { name: "Create key" }).click();
     await expect(page.getByTestId("new-api-key")).toHaveValue(/^evk_/);
+    // An enrollment sync key is not for agents, so the dialog shows no MCP config.
+    await expect(page.getByTestId("mcp-client-config")).toHaveCount(0);
     await screenshot(page, "api-key-created-light");
     await page.getByRole("button", { name: "Done" }).click();
     await expect(page.getByTestId("api-key-row")).toHaveCount(1);
@@ -207,6 +209,19 @@ test.describe("password mode", () => {
     await page.getByRole("button", { name: "Revoke Enrollment sync" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Revoke" }).click();
     await expect(page.getByTestId("api-key-row")).toContainText("Revoked");
+
+    // An agent key comes with the MCP endpoint and a client config that holds the key.
+    await expect(page.getByTestId("mcp-endpoint")).toHaveText(/\/mcp$/);
+    await page.getByRole("button", { name: "Create key" }).click();
+    await page.getByLabel("Name").fill("Agent");
+    await page.getByRole("radio", { name: /Agent editor/ }).check();
+    await page.getByRole("dialog").getByRole("button", { name: "Create key" }).click();
+    const newKey = await page.getByTestId("new-api-key").inputValue();
+    await expect(page.getByTestId("mcp-client-config")).toContainText(`Bearer ${newKey}`);
+    await expect(page.getByTestId("mcp-client-config")).toContainText("/mcp");
+    await expectNoSeriousViolations(page, "[role=dialog]");
+    await screenshot(page, "api-key-agent-config-light");
+    await page.getByRole("button", { name: "Done" }).click();
 
     // Archive the current workspace. The shell moves to the remaining one.
     await page.getByRole("button", { name: "Archive Second School" }).click();

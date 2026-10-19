@@ -13,10 +13,81 @@ import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useCurrentWorkspace } from "@/components/workspace-context";
+import { CopyValue } from "@/features/providers/shared";
 import { formatDate } from "@/lib/format";
 
 type ApiKey = Schemas["ApiKey"];
 type PresetId = "enrollment_sync" | "agent_read_only" | "agent_editor" | "agent_sender";
+
+/** The MCP endpoint of this deployment (U16). It accepts API keys only. */
+function mcpEndpoint(): string {
+  return `${window.location.origin}/mcp`;
+}
+
+/** A Streamable HTTP client config with the key, in the `mcpServers` shape most clients read. */
+function mcpClientConfig(key: string): string {
+  const config = {
+    mcpServers: {
+      envelopen: {
+        type: "http",
+        url: mcpEndpoint(),
+        headers: { Authorization: `Bearer ${key}` },
+      },
+    },
+  };
+  return JSON.stringify(config, null, 2);
+}
+
+/** Agent keys read campaigns. The enrollment sync key only writes contacts. */
+function isAgentKey(key: Schemas["CreatedApiKey"]): boolean {
+  return key.scopes.includes("campaigns:read");
+}
+
+function AgentConfig({ apiKey }: { apiKey: Schemas["CreatedApiKey"] }) {
+  const [copied, setCopied] = useState(false);
+  const config = mcpClientConfig(apiKey.key);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(config);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-medium">Connect an agent</span>
+        <Button type="button" variant="ghost" size="sm" onClick={() => void copy()}>
+          {copied ? (
+            <CheckIcon className="size-3.5" aria-hidden="true" />
+          ) : (
+            <CopyIcon className="size-3.5" aria-hidden="true" />
+          )}
+          {copied ? "Copied" : "Copy config"}
+        </Button>
+      </div>
+      {/* Focusable, so a keyboard user can scroll the config. */}
+      <section
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access.
+        tabIndex={0}
+        aria-label="MCP client config"
+        data-testid="mcp-client-config"
+        className="max-h-48 overflow-auto rounded-[9px] border border-input bg-card px-3 py-2"
+      >
+        <pre className="m-0 font-mono text-[11.5px] leading-relaxed">{config}</pre>
+      </section>
+      <span className="text-xs text-muted-foreground">
+        Paste it into the MCP settings of your agent. The config holds the key, so keep it private.
+      </span>
+      <span aria-live="polite" className="sr-only">
+        {copied ? "The config is copied." : ""}
+      </span>
+    </div>
+  );
+}
 
 function errorText(error: unknown): string | null {
   if (!error) return null;
@@ -155,6 +226,7 @@ function ShowKeyDialog({
             data-testid="new-api-key"
           />
         </div>
+        {created && isAgentKey(created) ? <AgentConfig apiKey={created} /> : null}
         <DialogFooter>
           <Button variant="outline" onClick={() => void copy()}>
             {copied ? (
@@ -245,6 +317,19 @@ export function ApiKeysSection() {
           <PlusIcon className="size-3.5" aria-hidden="true" />
           Create key
         </Button>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[13px] font-medium">MCP endpoint</span>
+        <CopyValue
+          label="MCP endpoint"
+          value={mcpEndpoint()}
+          testId="mcp-endpoint"
+          className="max-w-[480px]"
+        />
+        <span className="text-xs text-muted-foreground">
+          Agents connect here with an API key from an agent preset. Sign-in sessions do not work.
+        </span>
       </div>
 
       {keys.isError ? (

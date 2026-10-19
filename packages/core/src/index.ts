@@ -90,4 +90,16 @@ export {
   type Services,
 } from "./services";
 export { createEmailHasher } from "./suppression/hash";
+export {
+  MAX_SOURCE_LENGTH,
+  prepareContent,
+  TEMPLATE_FORMATS,
+  type TemplateFormat,
+} from "./templates/content";
+export {
+  SavedBlockSchema,
+  TemplateSchema,
+  TemplateSummarySchema,
+} from "./templates/operations";
+export { personalizePreview, SAMPLE_VALUES } from "./templates/preview";
 export { resolveSessionPrincipal, WORKSPACE_HEADER } from "./workspaces/membership";

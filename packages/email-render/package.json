@@ -4,9 +4,32 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./render": "./src/render.ts",
+    "./blocks": "./src/blocks/index.ts",
+    "./blocks/types": "./src/blocks/types.ts",
+    "./layout": "./src/layout.ts",
+    "./merge-tags": "./src/merge-tags.ts",
+    "./bench": "./src/bench-fixtures.ts",
+    "./personalize": "./src/personalize.ts"
   },
   "scripts": {
+    "test": "vitest run",
     "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@react-email/render": "2.1.0",
+    "marked": "18.0.14",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-email": "6.11.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.4",
+    "@cloudflare/workers-types": "5.20261012.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "vitest": "5.0.5",
+    "wrangler": "4.151.1"
   }
 }

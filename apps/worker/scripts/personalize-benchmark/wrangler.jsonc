@@ -1,0 +1,8 @@
+// A throwaway Worker for the personalization benchmark. See worker.ts for the steps.
+{
+  "$schema": "../../../../node_modules/wrangler/config-schema.json",
+  "name": "envelopen-personalize-benchmark",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true }
+}

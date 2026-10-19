@@ -381,6 +381,8 @@ export interface TemplatesTable {
   source: string;
   html: string | null;
   text: string | null;
+  /** The block schema version of the editor JSON. Null for HTML and Markdown. */
+  editor_version: number | null;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -389,7 +391,11 @@ export interface SavedBlocksTable {
   id: Generated<number>;
   workspace_id: Immutable<number>;
   name: string;
+  /** JSON list of editor block nodes. */
   content: string;
+  editor_version: Defaulted<number>;
+  /** Sanitized HTML of the blocks, for the block panel preview. */
+  html: string | null;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }

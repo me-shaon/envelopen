@@ -3,6 +3,7 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
   redirect,
 } from "@tanstack/react-router";
@@ -13,12 +14,13 @@ import { ContactDetailPage } from "./features/contacts/contact-detail";
 import { ContactsPage } from "./features/contacts/contacts-page";
 import { ListsPage, TagsPage } from "./features/contacts/lists-tags";
 import { SuppressionsPage } from "./features/contacts/suppressions-page";
+import { TemplatesPage } from "./features/editor/templates-page";
 import { ImportPage } from "./features/import/import-page";
 import { ConnectionsPage } from "./features/providers/connections-page";
 import { DomainDetailPage, DomainsPage } from "./features/providers/domains-page";
 import { LoginPage } from "./routes/login";
 import { OverviewPage } from "./routes/overview";
-import { CampaignsPage, TemplatesPage } from "./routes/placeholders";
+import { CampaignsPage } from "./routes/placeholders";
 import { RecoverPage } from "./routes/recover";
 import { SettingsPage } from "./routes/settings";
 import { SetupPage } from "./routes/setup";
@@ -155,6 +157,12 @@ const templatesRoute = createRoute({
   path: "/templates",
   component: TemplatesPage,
 });
+// The editor is a lazy chunk: Tiptap and React Email load only when it opens.
+const templateRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/templates/$templateId",
+  component: lazyRouteComponent(() => import("./features/editor/editor-page"), "EditorRoute"),
+});
 const connectionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/connections",
@@ -193,6 +201,7 @@ const routeTree = rootRoute.addChildren([
     tagsRoute,
     suppressionsRoute,
     templatesRoute,
+    templateRoute,
     connectionsRoute,
     domainsRoute,
     domainRoute,

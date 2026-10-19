@@ -1,10 +1,10 @@
-import { ArrowUpRightIcon, FileTextIcon, type LucideIcon, SendIcon } from "lucide-react";
+import { ArrowUpRightIcon, type LucideIcon, SendIcon } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { guideUrl } from "@/lib/guides";
 
-// Pages that later units fill (U8 and U9). Each shows a calm empty state with a guide.
+// Pages that later units fill (U9). Each shows a calm empty state with a guide.
 
 function Placeholder({
   title,
@@ -50,19 +50,6 @@ export function CampaignsPage() {
       icon={SendIcon}
       emptyTitle="No campaigns yet"
       emptyText="Campaigns arrive in a later release. Connect a provider and import contacts first."
-      guide="docs/guides/README.md"
-    />
-  );
-}
-
-export function TemplatesPage() {
-  return (
-    <Placeholder
-      title="Templates"
-      description="Reusable email designs for your campaigns."
-      icon={FileTextIcon}
-      emptyTitle="No templates yet"
-      emptyText="The email editor and templates arrive in a later release."
       guide="docs/guides/README.md"
     />
   );

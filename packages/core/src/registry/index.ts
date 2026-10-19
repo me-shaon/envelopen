@@ -57,6 +57,20 @@ import {
   tagsRename,
 } from "../lists/operations";
 import { suppressionsAdd, suppressionsList, suppressionsRemove } from "../suppression/operations";
+import {
+  savedBlocksCreate,
+  savedBlocksDelete,
+  savedBlocksList,
+  savedBlocksUpdate,
+  templatesCreate,
+  templatesDelete,
+  templatesDuplicate,
+  templatesGet,
+  templatesList,
+  templatesMergeFields,
+  templatesPreview,
+  templatesUpdate,
+} from "../templates/operations";
 import { apiKeysCreate, apiKeysList, apiKeysPresets, apiKeysRevoke } from "./operations/api-keys";
 import { auditList } from "./operations/audit";
 import { onboardingStatus } from "./operations/onboarding";
@@ -179,4 +193,18 @@ export const registry = createRegistry([
   testAddressesAdd,
   testAddressesRemove,
   campaignsSendTest,
+  // Templates and saved blocks (U8). `templates.merge_fields` comes before
+  // `templates.get`, so /templates/merge-fields is not an id.
+  templatesList,
+  templatesMergeFields,
+  templatesGet,
+  templatesCreate,
+  templatesUpdate,
+  templatesDuplicate,
+  templatesDelete,
+  templatesPreview,
+  savedBlocksList,
+  savedBlocksCreate,
+  savedBlocksUpdate,
+  savedBlocksDelete,
 ]);

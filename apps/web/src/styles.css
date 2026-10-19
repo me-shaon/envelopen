@@ -222,3 +222,55 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The editor canvas: email-like text styles for the Tiptap content (U8). */
+@layer components {
+  .email-canvas .ProseMirror {
+    min-height: 320px;
+    outline: none;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  .email-canvas .ProseMirror h1,
+  .email-canvas .ProseMirror h2,
+  .email-canvas .ProseMirror h3 {
+    margin: 0 0 12px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+  }
+
+  .email-canvas .ProseMirror h1 {
+    font-size: 28px;
+  }
+
+  .email-canvas .ProseMirror h2 {
+    font-size: 22px;
+  }
+
+  .email-canvas .ProseMirror h3 {
+    font-size: 18px;
+  }
+
+  .email-canvas .ProseMirror p {
+    margin: 0 0 16px;
+  }
+
+  .email-canvas .ProseMirror a {
+    color: var(--tone-lavender-foreground);
+    text-decoration: underline;
+  }
+
+  .email-canvas .ProseMirror p.is-empty::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    color: var(--muted-foreground);
+  }
+
+  .email-canvas .ProseMirror .ProseMirror-selectednode[data-merge-tag] {
+    outline: 2px solid var(--ring);
+  }
+}

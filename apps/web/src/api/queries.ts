@@ -181,3 +181,36 @@ export function testAddressesQuery(workspaceId: number) {
     queryFn: () => unwrap(api.GET("/test-addresses")),
   });
 }
+
+// Templates and saved blocks (U8) --------------------------------------------------------
+
+export function templatesQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "templates", "list"],
+    queryFn: () => unwrap(api.GET("/templates", { params: { query: { limit: 100 } } })),
+  });
+}
+
+export function templateQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "templates", "one", id],
+    queryFn: () => unwrap(api.GET("/templates/{id}", { params: { path: { id } } })),
+    // The editor owns the draft after the first load. A refetch would reset it.
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function mergeFieldsQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "templates", "merge-fields"],
+    queryFn: () => unwrap(api.GET("/templates/merge-fields")),
+  });
+}
+
+export function savedBlocksQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "saved-blocks"],
+    queryFn: () => unwrap(api.GET("/saved-blocks")),
+  });
+}

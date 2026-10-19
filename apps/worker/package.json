@@ -12,6 +12,7 @@
     "@better-auth/passkey": "1.7.11",
     "@envelopen/core": "workspace:*",
     "@envelopen/db": "workspace:*",
+    "@envelopen/email-render": "workspace:*",
     "@envelopen/providers": "workspace:*",
     "@hono/zod-openapi": "1.6.3",
     "better-auth": "1.7.11",

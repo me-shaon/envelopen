@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@envelopen/db": "workspace:*",
+    "@envelopen/email-render": "workspace:*",
     "@envelopen/providers": "workspace:*",
     "kysely": "0.29.7",
     "zod": "4.6.5"

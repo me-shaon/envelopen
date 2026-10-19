@@ -12,3 +12,6 @@ onlyBuiltDependencies:
 # tools/openapi-types, which has no TypeScript 7 dependency of its own.
 overrides:
   openapi-typescript>typescript: 5.9.3
+  # react-email asks for any render at or above 2.1.0. Pin it, so a fresh release
+  # does not enter the lockfile before it is two weeks old.
+  react-email>@react-email/render: 2.1.0

@@ -10,6 +10,8 @@ import { normalizeEmail } from "../contacts/email";
 import { OperationError } from "../errors";
 import { defineOperation } from "../registry/operation";
 import { TEST_SEND_ACTION } from "../registry/operations/onboarding";
+import { getTemplateRow } from "../templates/operations";
+import { contactValues, personalizePreview, testLinkOrigin } from "../templates/preview";
 import { requireSendingConnection, sendThroughConnection } from "./send";
 
 // Test sends (R30, R72). A test goes only to the owner's address and to the addresses
@@ -162,7 +164,8 @@ export const campaignsSendTest = defineOperation({
   description:
     "Sends a test email through the workspace's connection, with both unsubscribe " +
     "headers, to at most 5 addresses on the test list (R30, R72). The From address must " +
-    "be on a sending domain of the workspace.",
+    "be on a sending domain of the workspace. With `templateId`, it sends the saved " +
+    "template personalized with the same values as its preview.",
   method: "post",
   path: "/test-sends",
   scope: "campaigns:write",
@@ -175,9 +178,21 @@ export const campaignsSendTest = defineOperation({
     to: z.array(z.string().max(320)).min(1).max(5),
     from: z.string().max(320),
     fromName: z.string().trim().max(100).optional(),
-    subject: z.string().trim().min(1).max(200).default("Envelopen test email"),
+    subject: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .optional()
+      .meta({ description: "Defaults to the template's subject, or to a fixed test subject." }),
     html: z.string().max(500_000).optional(),
     text: z.string().max(200_000).optional(),
+    templateId: z.number().int().positive().optional().meta({
+      description: "Send this template. Its subject, HTML, and text replace the defaults.",
+    }),
+    contactId: z.number().int().positive().optional().meta({
+      description: "With templateId: personalize as this contact. Defaults to sample values.",
+    }),
   }),
   output: TestSendResultSchema,
   async handler(input, ctx) {
@@ -216,20 +231,35 @@ export const campaignsSendTest = defineOperation({
 
     const row = await requireSendingConnection(db, workspaceId);
     // The test link goes to the unsubscribe page, which shows a generic message for it.
-    const host =
-      domain.tracking_domain ??
-      (ctx.services.appOrigin ? new URL(ctx.services.appOrigin).host : domain.domain);
+    // Without a tracking domain it is on the app's host, as in the template preview.
+    const origin = testLinkOrigin(
+      ctx.services.appOrigin ?? `https://${domain.domain}`,
+      domain.tracking_domain,
+    );
     const mailbox = input.fromName ? `${input.fromName.replaceAll(/["<>]/g, "")} <${from}>` : from;
+    // A template test uses the preview's personalization, so it matches the preview.
+    let content = { subject: input.subject, html: input.html, text: input.text };
+    if (input.templateId !== undefined) {
+      const template = await getTemplateRow(db.db, workspaceId, input.templateId);
+      const values = await contactValues(db, workspaceId, input.contactId);
+      const preview = personalizePreview(template, values, origin);
+      content = {
+        subject: input.subject ?? (preview.subject || undefined),
+        html: input.html ?? preview.html,
+        text: input.text ?? (preview.text || undefined),
+      };
+    }
+    const subject = content.subject ?? "Envelopen test email";
     const messages: OutgoingMessage[] = (recipients as string[]).map((to, index) => ({
       recipientId: String(index),
       kind: "test",
       from: mailbox,
       to,
-      subject: `[Test] ${input.subject}`,
-      html: input.html ?? DEFAULT_HTML,
-      ...(input.text ? { text: input.text } : {}),
+      subject: `[Test] ${subject}`,
+      html: content.html ?? DEFAULT_HTML,
+      ...(content.text ? { text: content.text } : {}),
       headers: {
-        [LIST_UNSUBSCRIBE]: `<https://${host}/u/test>`,
+        [LIST_UNSUBSCRIBE]: `<${origin}/u/test>`,
         [LIST_UNSUBSCRIBE_POST]: ONE_CLICK_VALUE,
       },
     }));
@@ -256,6 +286,7 @@ export const campaignsSendTest = defineOperation({
     targetType: "test_send",
     metadata: {
       recipients: input.to.length,
+      ...(input.templateId === undefined ? {} : { templateId: input.templateId }),
       provider: output.provider,
       sent: output.results.filter((r) => r.outcome === "sent").length,
     },

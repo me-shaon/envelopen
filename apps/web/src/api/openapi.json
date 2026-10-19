@@ -318,6 +318,69 @@
           "metadata",
           "createdAt"
         ]
+      },
+      "OnboardingStatus": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OnboardingStep"
+            }
+          },
+          "completed": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "steps",
+          "completed",
+          "total"
+        ]
+      },
+      "OnboardingStep": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "connect_provider",
+              "verify_domain",
+              "import_contacts",
+              "send_test"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "done",
+              "todo",
+              "waiting",
+              "blocked"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "One sentence about the current state."
+          },
+          "guide": {
+            "type": "string",
+            "description": "Path of the guide, relative to the repository."
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status",
+          "detail",
+          "guide"
+        ]
       }
     },
     "parameters": {}
@@ -1432,6 +1495,86 @@
                     "items",
                     "nextCursor"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/onboarding": {
+      "get": {
+        "operationId": "onboarding.status",
+        "summary": "Get the onboarding checklist",
+        "description": "Returns the four setup steps of the workspace (connect a provider, verify a domain, import contacts, send a test) with the state of each and a guide.",
+        "tags": [
+          "onboarding"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "stats:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingStatus"
                 }
               }
             }

@@ -3,7 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>Envelopen</title>
+    <script>
+      // Applies the stored theme, or the system theme, before the first paint.
+      (() => {
+        var theme = null;
+        try {
+          theme = localStorage.getItem("envelopen.theme");
+        } catch (_error) {
+          // No storage: follow the system.
+        }
+        if (theme !== "light" && theme !== "dark") {
+          theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        if (theme === "dark") document.documentElement.classList.add("dark");
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

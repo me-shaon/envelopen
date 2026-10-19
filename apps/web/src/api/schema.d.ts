@@ -169,6 +169,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the onboarding checklist
+         * @description Returns the four setup steps of the workspace (connect a provider, verify a domain, import contacts, send a test) with the state of each and a guide.
+         */
+        get: operations["onboarding.status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -245,6 +265,22 @@ export interface components {
             } | null;
             /** @description Unix milliseconds. */
             createdAt: number;
+        };
+        OnboardingStatus: {
+            steps: components["schemas"]["OnboardingStep"][];
+            completed: number;
+            total: number;
+        };
+        OnboardingStep: {
+            /** @enum {string} */
+            id: "connect_provider" | "verify_domain" | "import_contacts" | "send_test";
+            title: string;
+            /** @enum {string} */
+            status: "done" | "todo" | "waiting" | "blocked";
+            /** @description One sentence about the current state. */
+            detail: string;
+            /** @description Path of the guide, relative to the repository. */
+            guide: string;
         };
     };
     responses: never;
@@ -971,6 +1007,71 @@ export interface operations {
                         /** @description Pass as `cursor` to get the next page. Null on the last page. */
                         nextCursor: string | null;
                     };
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "onboarding.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
                 };
             };
             /** @description The input is not valid. */

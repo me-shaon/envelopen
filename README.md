@@ -4,7 +4,7 @@ Envelopen is a self-hosted email marketing tool on Cloudflare Workers. It sends 
 
 ## Deploy
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/envelopen/envelopen)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/me-shaon/envelopen)
 
 The button creates the D1 database, the KV namespace, the R2 bucket, and the queues. The deploy script applies the D1 migrations.
 

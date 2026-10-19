@@ -1,5 +1,6 @@
 import { apiKeysCreate, apiKeysList, apiKeysPresets, apiKeysRevoke } from "./operations/api-keys";
 import { auditList } from "./operations/audit";
+import { onboardingStatus } from "./operations/onboarding";
 import {
   workspacesArchive,
   workspacesCreate,
@@ -29,6 +30,17 @@ export {
 } from "./operations/api-keys";
 export { AuditEntrySchema, auditList } from "./operations/audit";
 export {
+  ONBOARDING_GUIDES,
+  ONBOARDING_STATUSES,
+  ONBOARDING_STEP_IDS,
+  type OnboardingStatus,
+  OnboardingStatusSchema,
+  type OnboardingStepId,
+  OnboardingStepSchema,
+  onboardingStatus,
+  TEST_SEND_ACTION,
+} from "./operations/onboarding";
+export {
   WorkspaceSchema,
   WorkspaceSummarySchema,
   workspacesArchive,
@@ -54,4 +66,5 @@ export const registry = createRegistry([
   apiKeysCreate,
   apiKeysRevoke,
   auditList,
+  onboardingStatus,
 ]);

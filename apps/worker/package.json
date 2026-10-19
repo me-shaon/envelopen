@@ -5,13 +5,19 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "openapi": "tsx scripts/generate-openapi.ts && pnpm --filter @envelopen/openapi-types generate"
   },
   "dependencies": {
-    "hono": "4.13.13"
+    "@envelopen/core": "workspace:*",
+    "@envelopen/db": "workspace:*",
+    "@hono/zod-openapi": "1.6.3",
+    "hono": "4.13.13",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.4",
+    "tsx": "4.23.15",
     "vitest": "5.0.5",
     "wrangler": "4.151.1"
   }

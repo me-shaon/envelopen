@@ -3,6 +3,8 @@
   "name": "envelopen",
   "main": "apps/worker/src/index.ts",
   "compatibility_date": "2026-10-01",
+  // Zod and Kysely make up most of the bundle. Minifying halves the upload and the startup parse.
+  "minify": true,
   "observability": { "enabled": true },
   "assets": {
     "directory": "apps/web/dist",

@@ -1,7 +1,14 @@
 packages:
   - apps/*
   - packages/*
+  - tools/*
 
 onlyBuiltDependencies:
   - esbuild
   - workerd
+
+# openapi-typescript needs the TypeScript 5 compiler API. TypeScript 7 (the repo's
+# type checker) has no JS API, so the generator gets its own copy. It lives in
+# tools/openapi-types, which has no TypeScript 7 dependency of its own.
+overrides:
+  openapi-typescript>typescript: 5.9.3

@@ -1,0 +1,13 @@
+{
+  "name": "@envelopen/openapi-types",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Generates the web client types from the OpenAPI document. A separate package, so openapi-typescript gets the TypeScript 5 compiler API that it needs while the rest of the repo uses TypeScript 7.",
+  "type": "module",
+  "scripts": {
+    "generate": "openapi-typescript ../../apps/web/src/api/openapi.json -o ../../apps/web/src/api/schema.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0"
+  }
+}

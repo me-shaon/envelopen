@@ -13,7 +13,8 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "biome check .",
-    "cf-typegen": "wrangler types apps/worker/worker-configuration.d.ts"
+    "cf-typegen": "wrangler types apps/worker/worker-configuration.d.ts",
+    "openapi": "pnpm --filter @envelopen/worker openapi"
   },
   "cloudflare": {
     "bindings": {

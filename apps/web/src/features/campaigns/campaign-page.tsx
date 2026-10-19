@@ -12,6 +12,7 @@ import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, Figure } from "@/features/contacts/shared";
+import { CampaignEngagement, CampaignResults } from "@/features/stats/campaign-stats";
 import { CampaignForm } from "./campaign-form";
 import { ConfirmSendDialog } from "./confirm-dialog";
 import {
@@ -56,6 +57,18 @@ function Header({ campaign, actions }: { campaign: Detail; actions?: ReactNode }
           </div>
           <p className="m-0 text-[15px] text-muted-foreground">
             {CAMPAIGN_TYPES[campaign.type].label} campaign
+            {campaign.parentId !== null ? (
+              <>
+                {" to non-openers of "}
+                <Link
+                  to="/campaigns/$campaignId"
+                  params={{ campaignId: String(campaign.parentId) }}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  campaign #{campaign.parentId}
+                </Link>
+              </>
+            ) : null}
             {campaign.provider ? ` through ${campaign.provider.name}` : ""}
             {campaign.startedAt ? `, started ${formatWhen(campaign.startedAt)}` : ""}
             {campaign.status === "scheduled"
@@ -336,11 +349,13 @@ function CampaignView({ campaign }: { campaign: Detail }) {
         </Banner>
       ) : null}
 
+      {campaign.startedAt !== null ? <CampaignResults campaignId={campaign.id} /> : null}
       <Kpis campaign={campaign} />
       {(campaign.progress.batches.uncertain ?? 0) > 0 ? (
         <UncertainBatches campaign={campaign} />
       ) : null}
       <Exclusions campaign={campaign} />
+      {campaign.startedAt !== null ? <CampaignEngagement campaignId={campaign.id} /> : null}
 
       <ConfirmDialog
         open={cancelling}

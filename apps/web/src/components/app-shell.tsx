@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { sessionQuery, workspacesQuery } from "@/api/queries";
 import { setWorkspaceId, useWorkspaceId } from "@/api/workspace";
 import type { SessionUser } from "@/auth/auth-client";
+import { UsageCard } from "@/features/usage/usage-card";
 import { guideUrl } from "@/lib/guides";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
@@ -87,6 +88,7 @@ function SidebarContent({
         ))}
       </div>
       <div className="mt-auto flex flex-col gap-3">
+        <UsageCard onNavigate={onNavigate} />
         <div className="flex flex-col gap-px">
           <a
             href={guideUrl("docs/guides/README.md")}

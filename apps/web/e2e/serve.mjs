@@ -56,6 +56,8 @@ const dev = spawn(
     "--var",
     ...secrets,
     `PBKDF2_ITERATIONS:${iterations}`,
+    // Tracking events reach D1 a second after they arrive, not 30 seconds.
+    "EVENT_FLUSH_DELAY_MS:1000",
     ...(mockOrigin ? [`OUTBOUND_MOCK_ORIGIN:${mockOrigin}`] : []),
   ],
   { cwd: root, env, stdio: "inherit" },

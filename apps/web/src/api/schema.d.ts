@@ -1360,6 +1360,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/campaigns/{id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a campaign's stats
+         * @description Returns sent, delivered, bounces, complaints, unsubscribes, unique human opens, machine opens, unique human clicks, the open, click, and click-to-open rates, and the hourly engagement of the first 48 hours. Delivered is null when the provider sends no delivery events ("not reported"). Events reach the stats within about a minute.
+         */
+        get: operations["campaigns.stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/campaigns/{id}/click-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a campaign's click map
+         * @description Returns the human clicks of each tracked link, and the email HTML with each link's count next to it, for a sandboxed preview.
+         */
+        get: operations["campaigns.click_map"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/campaigns/{id}/follow-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a follow-up to non-openers
+         * @description Creates a draft that copies the campaign's content and audience and reaches only the recipients who did not open it as a person. Machine-only openers, for example Apple Mail Privacy Protection, are included. Send it with prepare and confirm. It fails when the campaign was sent with open tracking off.
+         */
+        post: operations["campaigns.follow_up"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the latest campaign's stats
+         * @description Returns the stats of the campaign that started last, for the overview.
+         */
+        get: operations["stats.latest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the platform usage
+         * @description Returns today's D1 rows written on the deployment, the rows left before the Workers Free limit, the reset time (00:00 UTC), and the platform_limit pause when it is in force. The D1 limit is per Cloudflare account, so every workspace sees the same numbers.
+         */
+        get: operations["usage.get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1901,6 +2001,8 @@ export interface components {
         CampaignSummary: {
             id: number;
             name: string;
+            /** @description For a follow-up: the campaign whose non-openers it targets (R35). Null otherwise. */
+            parentId: number | null;
             /**
              * @description Only a re-permission campaign includes contacts whose consent is unknown.
              * @enum {string}
@@ -1967,6 +2069,8 @@ export interface components {
         Campaign: {
             id: number;
             name: string;
+            /** @description For a follow-up: the campaign whose non-openers it targets (R35). Null otherwise. */
+            parentId: number | null;
             /**
              * @description Only a re-permission campaign includes contacts whose consent is unknown.
              * @enum {string}
@@ -2004,6 +2108,8 @@ export interface components {
         CampaignDetail: {
             id: number;
             name: string;
+            /** @description For a follow-up: the campaign whose non-openers it targets (R35). Null otherwise. */
+            parentId: number | null;
             /**
              * @description Only a re-permission campaign includes contacts whose consent is unknown.
              * @enum {string}
@@ -2145,6 +2251,148 @@ export interface components {
                 /** @enum {string} */
                 status: "pending" | "enqueued" | "claimed" | "done" | "uncertain" | "skipped";
             };
+        };
+        CampaignStats: {
+            campaignId: number;
+            status: string;
+            startedAt: number | null;
+            provider: {
+                provider: string;
+                name: string;
+                /** @description The provider sends delivery events. When false, delivered is null. */
+                reportsDelivery: boolean;
+            } | null;
+            tracking: {
+                /** @description Open tracking was on for the send. */
+                opens: boolean;
+                /** @description Click tracking was on for the send. */
+                clicks: boolean;
+            };
+            sent: number;
+            /** @description Null means "not reported": the provider sends no delivery events (R50). */
+            delivered: number | null;
+            /** @description Recipients with at least one human open. */
+            uniqueOpens: number;
+            /** @description Human opens, repeats included. */
+            opens: number;
+            /** @description Opens that a machine made, for example Apple Mail Privacy Protection. */
+            machineOpens: number;
+            /** @description Recipients with at least one human click. */
+            uniqueClicks: number;
+            /** @description Human clicks, repeats included. */
+            clicks: number;
+            /** @description Clicks that a scanner made. Not in any rate. */
+            botClicks: number;
+            unsubscribes: number;
+            /** @description Hard and soft bounces. */
+            bounces: number;
+            bouncesHard: number;
+            bouncesSoft: number;
+            complaints: number;
+            rates: {
+                /** @description A share from 0 to 1. Null when the base is 0 or not tracked. */
+                delivered: number | null;
+                /** @description Unique human opens divided by sent. */
+                open: number | null;
+                /** @description Unique human clicks divided by sent. */
+                click: number | null;
+                /** @description Unique human clicks divided by unique human opens. */
+                clickToOpen: number | null;
+                /** @description A share from 0 to 1. Null when the base is 0 or not tracked. */
+                unsubscribe: number | null;
+                /** @description A share from 0 to 1. Null when the base is 0 or not tracked. */
+                bounce: number | null;
+                /** @description A share from 0 to 1. Null when the base is 0 or not tracked. */
+                complaint: number | null;
+            };
+            window: {
+                /** @description The UTC hour the send started. */
+                start: number | null;
+                /** @description One entry per hour of the first 48 hours, up to the current hour. */
+                hours: components["schemas"]["CampaignStatsHour"][];
+            };
+            followUp: components["schemas"]["FollowUpAvailability"];
+        };
+        CampaignStatsHour: {
+            /** @description Start of the UTC hour, Unix milliseconds. */
+            hour: number;
+            sent: number;
+            /** @description Human opens in the hour. */
+            opens: number;
+            uniqueOpens: number;
+            machineOpens: number;
+            /** @description Human clicks in the hour. */
+            clicks: number;
+            uniqueClicks: number;
+        };
+        FollowUpAvailability: {
+            available: boolean;
+            /** @description Why a follow-up is not available. */
+            reason: string | null;
+        };
+        CampaignClickMap: {
+            campaignId: number;
+            trackClicks: boolean;
+            /** @description Human clicks on tracked links. */
+            totalClicks: number;
+            links: {
+                /** @description The link's place among the tracked links. */
+                index: number;
+                url: string;
+                /** @description Human clicks. Bot clicks are left out. */
+                clicks: number;
+                /** @description The link's share of all human clicks. */
+                share: number | null;
+            }[];
+            /** @description The stored email HTML with sample values and a click count on each tracked link. Render it in a sandboxed frame. */
+            html: string | null;
+        };
+        LatestCampaignStats: {
+            /** @description The campaign that started last. Null before the first send. */
+            campaign: {
+                id: number;
+                name: string;
+                status: string;
+                startedAt: number | null;
+                recipientCount: number | null;
+            } | null;
+            stats: components["schemas"]["CampaignStats"] & (Record<string, never> | null);
+        };
+        Usage: {
+            /** @description The UTC day of the counts, YYYY-MM-DD. */
+            day: string;
+            /** @description The next 00:00 UTC, Unix milliseconds. */
+            resetsAt: number;
+            d1Writes: {
+                used: number;
+                limit: number;
+                remaining: number;
+                /** @description Share of the daily limit used, 0 to 1 or more. */
+                ratio: number;
+                /**
+                 * @description `warning` from 80% of the limit. `limit` when D1 rejected writes and sending is paused until the reset.
+                 * @enum {string}
+                 */
+                state: "ok" | "warning" | "limit";
+            };
+            /** @description True from 80% of the daily D1 writes. */
+            warning: boolean;
+            /** @description Advice to move to Workers Paid, near the limit. Null otherwise. */
+            paidHint: string | null;
+            /** @description D1 rejected writes since `since`. Sending resumes after `until`. */
+            platformLimit: {
+                since: number;
+                until: number;
+            } | null;
+            limits: {
+                id: string;
+                label: string;
+                free: string;
+                paid: string;
+                /** @description Envelopen counts this limit. */
+                measured: boolean;
+                used: number | null;
+            }[];
         };
     };
     responses: never;
@@ -10155,6 +10403,407 @@ export interface operations {
             };
             /** @description The Idempotency-Key was used with a different body. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "campaigns.stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignStats"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "campaigns.click_map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignClickMap"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "campaigns.follow_up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Defaults to the parent's name with " (follow-up)". */
+                    name?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Campaign"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different body. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "stats.latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestCampaignStats"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "usage.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Usage"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -2,6 +2,7 @@ import {
   adapterContext,
   type BatchPointer,
   type BatchResults,
+  campaignAudience,
   checkBatchRecipients,
   claimBatch,
   customFieldValues,
@@ -11,7 +12,6 @@ import {
   LEASE_MS,
   loadBatchContext,
   type PlatformLimit,
-  parseAudience,
   parseFrozenSet,
   refsOf,
   type Services,
@@ -161,7 +161,7 @@ async function freeze(
     pointer.workspaceId,
     pointer.campaignId,
     pointer.batchId,
-    parseAudience(campaign.audience),
+    campaignAudience(campaign),
     campaign.type,
   );
   const sendable = checked.filter((row) => row.skipReason === null && row.email && row.contactId);

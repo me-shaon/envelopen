@@ -20,6 +20,7 @@ import { TemplatesPage } from "./features/editor/templates-page";
 import { ImportPage } from "./features/import/import-page";
 import { ConnectionsPage } from "./features/providers/connections-page";
 import { DomainDetailPage, DomainsPage } from "./features/providers/domains-page";
+import { UsagePage } from "./features/usage/usage-page";
 import { LoginPage } from "./routes/login";
 import { OverviewPage } from "./routes/overview";
 import { RecoverPage } from "./routes/recover";
@@ -195,6 +196,11 @@ const domainRoute = createRoute({
     return <DomainDetailPage key={domainId} domainId={Number(domainId)} />;
   },
 });
+const usageRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/usage",
+  component: UsagePage,
+});
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -221,6 +227,7 @@ const routeTree = rootRoute.addChildren([
     connectionsRoute,
     domainsRoute,
     domainRoute,
+    usageRoute,
     settingsRoute,
   ]),
 ]);

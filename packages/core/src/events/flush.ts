@@ -16,9 +16,10 @@ import {
 //    campaign recipients of the provider events (by provider message id), and the first
 //    human open and click of the tracked recipients.
 // 2. Writes one atomic batch: the raw events, the first open and click of each
-//    recipient, the hourly and daily rollups, `processed_at` of the provider events,
-//    and the soft-bounce rule. The batch has at most 9 statements, whatever the number
-//    of events, because the rows travel as one JSON parameter each (`json_each`).
+//    recipient, the hourly and daily rollups, the human clicks of each link (for the
+//    click map, U11), `processed_at` of the provider events, and the soft-bounce rule.
+//    The batch has at most 10 statements, whatever the number of events, because the
+//    rows travel as one JSON parameter each (`json_each`).
 //
 // Hard bounces and complaints are suppressed earlier, when the webhook stores them
 // (connections/webhooks.ts). The soft-bounce rule runs here: the third soft bounce of
@@ -127,6 +128,7 @@ WHERE workspace_id = ${workspaceId} AND id IN (SELECT value FROM json_each(${jso
   const rollup: RollupEvent[] = [];
   const firstOpens = new Map<number, number>();
   const firstClicks = new Map<number, number>();
+  const linkClicks = new Map<number, number>();
   const ordered = [...tracking].sort((a, b) => a.occurredAt - b.occurredAt);
   for (const event of ordered) {
     const first = firsts.get(event.recipientId);
@@ -140,6 +142,9 @@ WHERE workspace_id = ${workspaceId} AND id IN (SELECT value FROM json_each(${jso
     if (event.type === "click" && !event.bot && first.clicked === null) {
       unique = !firstClicks.has(event.recipientId);
       if (unique) firstClicks.set(event.recipientId, event.occurredAt);
+    }
+    if (event.type === "click" && !event.bot && event.linkId !== null) {
+      linkClicks.set(event.linkId, (linkClicks.get(event.linkId) ?? 0) + 1);
     }
     rows.push({
       c: event.campaignId,
@@ -222,6 +227,13 @@ WHERE campaign_recipients.workspace_id = ${workspaceId} AND campaign_recipients.
     );
   }
   writes.push(...rollupQueries(db.db, workspaceId, aggregateRollups(rollup)));
+  if (linkClicks.size > 0) {
+    writes.push(
+      sql`UPDATE links SET clicks = clicks + j.n
+FROM (SELECT json_extract(value, '$[0]') AS id, json_extract(value, '$[1]') AS n FROM json_each(${json([...linkClicks])})) AS j
+WHERE links.workspace_id = ${workspaceId} AND links.id = j.id`.compile(db.db),
+    );
+  }
   if (applied.length > 0) {
     writes.push(
       sql`UPDATE provider_events SET processed_at = ${now}

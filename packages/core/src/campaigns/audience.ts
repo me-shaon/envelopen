@@ -1,6 +1,12 @@
 import type { CampaignType, Database, DbConnection } from "@envelopen/db";
 import { type Kysely, type RawBuilder, sql } from "kysely";
-import { type Audience, EXCLUSION_REASONS, type ExclusionCounts, emptyExclusions } from "./model";
+import {
+  type Audience,
+  type CampaignAudience,
+  EXCLUSION_REASONS,
+  type ExclusionCounts,
+  emptyExclusions,
+} from "./model";
 
 // Who a campaign reaches (R31, KTD21, KTD22, KTD23). The estimate, the snapshot, and
 // the send-time check share these SQL pieces, so they apply the same rules:
@@ -13,6 +19,10 @@ import { type Audience, EXCLUSION_REASONS, type ExclusionCounts, emptyExclusions
 //     no targeted tag to reach the contact another way (R64).
 //   - `consent_unknown`: a regular campaign skips contacts whose consent basis is
 //     unknown. A re-permission campaign includes them (AE1).
+// - A follow-up (R35) targets only contacts that got its parent and have no human open
+//   of it. `opened_at` is the first human open, so a contact with machine opens only
+//   (for example Apple Mail Privacy Protection) stays in (KTD29). The send-time check
+//   skips a contact who opened the parent after the snapshot, with reason `opened`.
 //
 // The fragments expect the contact as `c` and a LEFT JOIN of its suppression as `s`.
 // Every subquery names its workspace, as the scope rule asks (KTD4).
@@ -33,12 +43,19 @@ function anyOf(parts: RawBuilder<boolean>[]): RawBuilder<boolean> {
   return parts.length === 0 ? sql<boolean>`0` : sql<boolean>`(${sql.join(parts, sql` OR `)})`;
 }
 
+/** The contact got the parent campaign and did not open it as a person. */
+function parentNonOpener(workspaceId: number, parentId: number) {
+  return sql<boolean>`EXISTS (SELECT 1 FROM campaign_recipients pr WHERE pr.workspace_id = ${workspaceId} AND pr.campaign_id = ${parentId} AND pr.contact_id = c.id AND pr.status = 'sent' AND pr.opened_at IS NULL)`;
+}
+
 /** The contact is in the audience before any rule. */
-export function targeted(workspaceId: number, audience: Audience): RawBuilder<boolean> {
-  return anyOf([
+export function targeted(workspaceId: number, audience: CampaignAudience): RawBuilder<boolean> {
+  const lists = anyOf([
     ...(audience.listIds.length > 0 ? [inLists(workspaceId, audience.listIds)] : []),
     ...(audience.tagIds.length > 0 ? [hasTags(workspaceId, audience.tagIds)] : []),
   ]);
+  if (!audience.followUpOf) return lists;
+  return sql<boolean>`(${lists} AND ${parentNonOpener(workspaceId, audience.followUpOf)})`;
 }
 
 /** The owner excluded the contact. */
@@ -94,7 +111,7 @@ function countsFrom(rows: { reason: string | null; n: number }[]): AudienceEstim
 export async function estimateAudience(
   db: DbConnection,
   workspaceId: number,
-  audience: Audience,
+  audience: CampaignAudience,
   type: CampaignType,
 ): Promise<AudienceEstimate> {
   if (audience.listIds.length === 0 && audience.tagIds.length === 0) {
@@ -113,7 +130,7 @@ SELECT reason, count(*) AS n FROM (
 export function pageExclusionsQuery(
   db: Kysely<Database>,
   workspaceId: number,
-  audience: Audience,
+  audience: CampaignAudience,
   type: CampaignType,
   afterId: number,
   toId: number,
@@ -139,7 +156,7 @@ export function insertPageRecipientsQuery(
   db: Kysely<Database>,
   workspaceId: number,
   campaignId: number,
-  audience: Audience,
+  audience: CampaignAudience,
   type: CampaignType,
   afterId: number,
   toId: number,
@@ -175,9 +192,12 @@ export async function checkBatchRecipients(
   workspaceId: number,
   campaignId: number,
   batchId: number,
-  audience: Audience,
+  audience: CampaignAudience,
   type: CampaignType,
 ): Promise<CheckedRecipient[]> {
+  const opened = audience.followUpOf
+    ? sql`WHEN NOT ${parentNonOpener(workspaceId, audience.followUpOf)} THEN 'opened' `
+    : sql``;
   const { rows } = await sql<{
     recipient_id: number;
     contact_id: number | null;
@@ -189,7 +209,7 @@ export async function checkBatchRecipients(
 SELECT r.id AS recipient_id, c.id AS contact_id, c.email, c.first_name, c.last_name,
   CASE WHEN c.id IS NULL THEN 'deleted'
        WHEN ${excluded(workspaceId, audience)} THEN 'excluded'
-       ELSE ${exclusionReason(workspaceId, audience, type)} END AS skip_reason
+       ${opened}ELSE ${exclusionReason(workspaceId, audience, type)} END AS skip_reason
 FROM campaign_recipients r
 LEFT JOIN contacts c ON c.workspace_id = ${workspaceId} AND c.id = r.contact_id
 ${suppressionJoin(workspaceId)}

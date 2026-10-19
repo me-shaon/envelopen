@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import {
   type BatchPointer,
   beginSnapshot,
+  campaignStats,
   emptyExclusions,
   finishSnapshot,
   snapshotPage,
@@ -174,6 +175,19 @@ describe("campaign Workflow", () => {
     expect(statuses.map((row) => ({ ...row, n: Number(row.n) }))).toEqual([
       { status: "sent", n: 5000 },
     ]);
+
+    // The campaign stats (U11) match the database: the batch counters and the `sent`
+    // rollups both count each recipient once, with the redelivered messages.
+    const stats = await campaignStats(db, seeded.workspaceId, campaignId, Date.now());
+    expect(stats.sent).toBe(5000);
+    const rollup = await db.db
+      .selectFrom("campaign_stats_daily")
+      .select((eb) => eb.fn.sum<number>("sent").as("sent"))
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("campaign_id", "=", campaignId)
+      .executeTakeFirstOrThrow();
+    expect(Number(rollup.sent)).toBe(5000);
+    expect(stats.window.hours.reduce((sum, hour) => sum + hour.sent, 0)).toBe(5000);
   }, 180_000);
 
   it("never sends to a contact imported after the snapshot's cut", async () => {

@@ -1,4 +1,5 @@
 import type { ConsentBasis, DbConnection } from "@envelopen/db";
+import { extractLinks } from "@envelopen/email-render";
 import { sql } from "kysely";
 import type { CredentialCipher } from "../src/crypto/credentials";
 import { sessionPrincipal } from "../src/principal";
@@ -260,4 +261,116 @@ SELECT ${workspaceId}, ${prefix} || i || '@example.org', 'Name' || i, 'existing_
 SELECT ${workspaceId}, ${listId}, id, 'subscribed', 'test', ${now} FROM contacts
 WHERE workspace_id = ${workspaceId} AND email LIKE ${`${prefix}%`}
 ON CONFLICT (list_id, contact_id) DO NOTHING`.execute(conn.db);
+}
+
+export interface SentCampaign {
+  campaignId: number;
+  /** In contact order. */
+  recipients: { id: number; contactId: number; messageId: string }[];
+  /** `links.id` by link index. */
+  linkIds: number[];
+}
+
+/**
+ * A campaign that sent to every contact of the list at `startedAt`: one done batch, the
+ * sent recipients with provider message ids, the stored links, and the `sent` rollups,
+ * as the consumer writes them (campaigns/batch.ts). Tests then flush events onto it.
+ */
+export async function seedSentCampaign(
+  conn: DbConnection,
+  seeded: SeededWorkspace,
+  options: { startedAt: number; trackOpens?: boolean; trackClicks?: boolean; parentId?: number },
+): Promise<SentCampaign> {
+  const { workspaceId } = seeded;
+  const campaignId = await createDraft(conn, seeded);
+  const campaign = await conn.db
+    .updateTable("campaigns")
+    .set({
+      status: "sent",
+      parent_id: options.parentId ?? null,
+      connection_id: seeded.connectionId,
+      started_at: options.startedAt,
+      completed_at: options.startedAt + 60_000,
+      snapshot_done_at: options.startedAt,
+      tracking_opens: options.trackOpens === false ? 0 : 1,
+      tracking_clicks: options.trackClicks === false ? 0 : 1,
+      link_origin: "https://envelopen.test",
+    })
+    .where("workspace_id", "=", workspaceId)
+    .where("id", "=", campaignId)
+    .returning("html")
+    .executeTakeFirstOrThrow();
+  const contacts = await conn.db
+    .selectFrom("list_members")
+    .select("contact_id")
+    .where("workspace_id", "=", workspaceId)
+    .where("list_id", "=", seeded.listId)
+    .orderBy("contact_id")
+    .execute();
+  const batch = await conn.db
+    .insertInto("campaign_batches")
+    .values({
+      workspace_id: workspaceId,
+      campaign_id: campaignId,
+      seq: 1,
+      status: "done",
+      lease_until: null,
+      recipient_set: null,
+      idempotency_key: null,
+      recipient_count: contacts.length,
+      sent_count: contacts.length,
+      first_claimed_at: options.startedAt,
+      last_error: null,
+    })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+  const recipients: SentCampaign["recipients"] = [];
+  // Seven rows of 11 columns stay under D1's 100 bound parameters.
+  for (let i = 0; i < contacts.length; i += 7) {
+    const rows = await conn.db
+      .insertInto("campaign_recipients")
+      .values(
+        contacts.slice(i, i + 7).map((contact) => ({
+          workspace_id: workspaceId,
+          campaign_id: campaignId,
+          batch_id: batch.id,
+          contact_id: contact.contact_id,
+          status: "sent" as const,
+          skip_reason: null,
+          provider_message_id: `msg-${campaignId}-${contact.contact_id}`,
+          error: null,
+          sent_at: options.startedAt,
+          opened_at: null,
+          clicked_at: null,
+        })),
+      )
+      .returning(["id", "contact_id", "provider_message_id"])
+      .execute();
+    recipients.push(
+      ...rows.map((row) => ({
+        id: row.id,
+        contactId: row.contact_id as number,
+        messageId: row.provider_message_id as string,
+      })),
+    );
+  }
+  const linkIds: number[] = [];
+  for (const [idx, url] of extractLinks(campaign.html ?? "").entries()) {
+    const link = await conn.db
+      .insertInto("links")
+      .values({ workspace_id: workspaceId, campaign_id: campaignId, idx, url })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    linkIds.push(link.id);
+  }
+  const hour = Math.floor(options.startedAt / 3_600_000) * 3_600_000;
+  const day = new Date(options.startedAt).toISOString().slice(0, 10);
+  const sent = contacts.length;
+  await sql`INSERT INTO campaign_stats_hourly (workspace_id, campaign_id, hour, sent) VALUES (${workspaceId}, ${campaignId}, ${hour}, ${sent})`.execute(
+    conn.db,
+  );
+  await sql`INSERT INTO campaign_stats_daily (workspace_id, campaign_id, day, sent) VALUES (${workspaceId}, ${campaignId}, ${day}, ${sent})`.execute(
+    conn.db,
+  );
+  return { campaignId, recipients, linkIds };
 }

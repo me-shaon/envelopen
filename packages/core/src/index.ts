@@ -103,6 +103,17 @@ export {
   type UsageStatus,
 } from "./services";
 export {
+  annotateClicks,
+  type CampaignStats,
+  CampaignStatsSchema,
+  type ClickMap,
+  ClickMapSchema,
+  campaignClickMap,
+  campaignStats,
+  STATS_WINDOW_HOURS,
+} from "./stats/campaign-stats";
+export { campaignsClickMap, campaignsStats, statsLatest } from "./stats/operations";
+export {
   aggregateRollups,
   COUNTERS,
   type Counter,
@@ -128,4 +139,5 @@ export {
   TemplateSummarySchema,
 } from "./templates/operations";
 export { personalizePreview, SAMPLE_VALUES } from "./templates/preview";
+export * from "./usage";
 export { resolveSessionPrincipal, WORKSPACE_HEADER } from "./workspaces/membership";

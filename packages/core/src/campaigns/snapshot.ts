@@ -6,10 +6,10 @@ import { exclusionCountsOf, insertPageRecipientsQuery, pageExclusionsQuery } fro
 import { dispatchAll } from "./dispatch";
 import { type FinalizeResult, tryFinalizeCampaign } from "./finalize";
 import {
+  campaignAudience,
   EXCLUSION_REASONS,
   type ExclusionCounts,
   emptyExclusions,
-  parseAudience,
   SNAPSHOT_PAGE_CONTACTS,
 } from "./model";
 import { transitionCampaign } from "./state-machine";
@@ -56,6 +56,7 @@ async function campaignState(db: DbConnection, job: CampaignJob) {
       "campaigns.status",
       "campaigns.type",
       "campaigns.audience",
+      "campaigns.parent_id",
       "campaigns.snapshot_max_contact_id",
       "campaigns.snapshot_done_at",
       "pc.provider",
@@ -124,7 +125,7 @@ export async function snapshotPage(
   const stop = snapshotStops(state?.status);
   if (stop || !state) return { kind: "stop", reason: stop ?? "Missing campaign." };
   const { workspaceId, campaignId } = job;
-  const audience = parseAudience(state.audience);
+  const audience = campaignAudience(state);
   const pageSize = page.pageSize ?? SNAPSHOT_PAGE_CONTACTS;
 
   // The upper contact id of this page, and the next batch number.

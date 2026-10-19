@@ -23,10 +23,10 @@ import {
   CampaignDetailSchema,
   type CampaignRow,
   CampaignSchema,
+  campaignAudience,
   campaignProgress,
   EXCLUSION_REASONS,
   loadCampaign,
-  parseAudience,
   toCampaign,
 } from "./model";
 import { campaignSources, transitionCampaign } from "./state-machine";
@@ -264,7 +264,7 @@ export const campaignsEstimate = defineOperation({
     const estimate = await estimateAudience(
       db,
       principal.workspaceId,
-      parseAudience(row.audience),
+      campaignAudience(row),
       row.type,
     );
     return { ...estimate, isEstimate: true as const };
@@ -294,7 +294,7 @@ export const campaignsChecklist = defineOperation({
     const estimate = await estimateAudience(
       db,
       principal.workspaceId,
-      parseAudience(campaign.audience),
+      campaignAudience(campaign),
       campaign.type,
     );
     const checklist = await runChecklist({ db, services, campaign, estimate });
@@ -520,7 +520,7 @@ export const campaignsPrepare = defineOperation({
     const estimate = await estimateAudience(
       db,
       principal.workspaceId,
-      parseAudience(campaign.audience),
+      campaignAudience(campaign),
       campaign.type,
     );
     const checklist = await runChecklist({ db, services, campaign, estimate });

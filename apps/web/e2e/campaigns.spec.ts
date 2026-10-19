@@ -27,7 +27,10 @@ async function screenshot(page: Page, name: string) {
 }
 
 async function expectNoSeriousViolations(page: Page) {
-  const results = await new AxeBuilder({ page }).analyze();
+  const results = await new AxeBuilder({ page })
+    // The click map shows the email itself, which the owner writes. Axe checks the app.
+    .exclude('iframe[title="Email with clicks per link"]')
+    .analyze();
   const serious = results.violations
     .filter((violation) => violation.impact === "serious" || violation.impact === "critical")
     .map((violation) => ({ id: violation.id, nodes: violation.nodes.map((node) => node.target) }));
@@ -261,5 +264,77 @@ test.describe("campaigns", () => {
     await page.getByRole("link", { name: /tester@example\.com/ }).click();
     await expect(page.getByText("Unsubscribed from every list")).toBeVisible();
     await expect(page.getByText(/One-click unsubscribe, campaign #\d+/)).toBeVisible();
+  });
+
+  // Stats, usage, and follow-up (plan U11), from the open, the click, and the two
+  // unsubscribes above. The Worker flushes tracking events after one second in these
+  // tests (EVENT_FLUSH_DELAY_MS in e2e/serve.mjs), so a reload shows them.
+  test("shows the open, the scanner click, and the unsubscribes in the stats, the overview, and the usage view", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.getByRole("link", { name: "Campaigns", exact: true }).first().click();
+    await page.getByRole("link", { name: "Course launch, test run" }).click();
+    await expect(page).toHaveURL(/\/campaigns\/\d+$/);
+    const campaignUrl = page.url();
+
+    await expect(async () => {
+      await page.reload();
+      await expect(page.getByTestId("stat-opened")).toContainText("1 contact", { timeout: 2000 });
+      await expect(page.getByTestId("stat-unsubscribed")).toContainText("2 contacts", {
+        timeout: 2000,
+      });
+      await expect(page.getByText("1 click by link scanners is left out.")).toBeVisible({
+        timeout: 2000,
+      });
+    }).toPass({ timeout: 30_000 });
+    await expect(page.getByTestId("stat-opened")).toContainText("50.0%");
+    // The test clicked seconds after the send, inside the bot window (KTD29), so the
+    // click counts as a scanner's and stays out of the human numbers.
+    await expect(page.getByTestId("stat-clicked")).toContainText("0 contacts");
+    await expect(page.getByTestId("stat-click-to-open")).toContainText("0.0%");
+    // Resend sends delivery events, so delivered is a number. The mock sent none.
+    await expect(page.getByTestId("stat-delivered")).toContainText("0 inboxes");
+    await expect(page.getByTestId("engagement-chart")).toContainText(
+      "1 open and 0 clicks by people in the first hour",
+    );
+    await expect(page.getByTestId("click-map-link")).toHaveCount(1);
+    await expect(page.getByTestId("click-map-link")).toContainText("https://example.com/course");
+    await expect(page.getByTitle("Email with clicks per link")).toHaveAttribute("sandbox", "");
+    const email = page.frameLocator('iframe[title="Email with clicks per link"]');
+    await expect(email.getByRole("link", { name: "See the course" })).toHaveAttribute(
+      "data-envelopen-link",
+      "0",
+    );
+    await expect(email.getByText("Hello Ada")).toBeVisible();
+    await expectNoSeriousViolations(page);
+    await screenshot(page, "campaign-stats");
+
+    // The overview shows the same numbers for the latest campaign.
+    await page.getByRole("link", { name: "Overview" }).first().click();
+    const latest = page.getByRole("region", { name: "Course launch, test run" });
+    await expect(latest.getByTestId("stat-opened")).toContainText("1 contact");
+    await expect(latest.getByRole("link", { name: "Full report" })).toBeVisible();
+    await expectNoSeriousViolations(page);
+    await screenshot(page, "overview-with-data");
+
+    // The sidebar card opens the usage view with the measured D1 writes.
+    await page.getByTestId("usage-card").first().click();
+    await expect(page.getByRole("heading", { name: "Usage", exact: true })).toBeVisible();
+    await expect(page.getByTestId("usage-used")).not.toHaveText("0");
+    await expect(page.getByRole("cell", { name: "Not measured" }).first()).toBeVisible();
+    await expect(page.getByText("00:00 UTC", { exact: true })).toBeVisible();
+    await expectNoSeriousViolations(page);
+    await screenshot(page, "usage");
+
+    // A follow-up is a draft that leaves out the person who opened. The other contact
+    // unsubscribed from everything, so nobody is left to send to.
+    await page.goto(campaignUrl);
+    await page.getByRole("button", { name: "Create follow-up draft" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Course launch, test run (follow-up)" }),
+    ).toBeVisible();
+    await expect(page.getByText(/to non-openers of campaign #\d+/)).toBeVisible();
+    await expect(page.getByTestId("draft-estimate")).toHaveText("0");
   });
 });

@@ -28,6 +28,11 @@ export {
 } from "./confirm-token";
 export { DISPATCH_LIMIT, dispatchAll, dispatchBatches } from "./dispatch";
 export { type FinalizeResult, tryFinalizeCampaign } from "./finalize";
+export {
+  campaignsFollowUp,
+  type FollowUpAvailability,
+  followUpAvailability,
+} from "./follow-up";
 export * from "./model";
 export {
   campaignsBatches,

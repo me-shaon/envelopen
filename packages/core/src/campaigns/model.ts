@@ -89,6 +89,18 @@ export function parseAudience(text: string | null): Audience {
     : { listIds: [], tagIds: [], excludeListIds: [], excludeTagIds: [] };
 }
 
+/**
+ * The audience rules of one campaign. A follow-up (R35) also keeps to the contacts that
+ * got its parent and did not open it as a person (follow-up.ts).
+ */
+export type CampaignAudience = Audience & { followUpOf?: number | null };
+
+export function campaignAudience(
+  row: Pick<CampaignRow, "audience" | "parent_id">,
+): CampaignAudience {
+  return { ...parseAudience(row.audience), followUpOf: row.parent_id };
+}
+
 export function isAudienceEmpty(audience: Audience): boolean {
   return audience.listIds.length === 0 && audience.tagIds.length === 0;
 }
@@ -122,6 +134,10 @@ export const CampaignSchema = z
   .object({
     id: z.number().int(),
     name: z.string(),
+    parentId: z.number().int().nullable().meta({
+      description:
+        "For a follow-up: the campaign whose non-openers it targets (R35). Null otherwise.",
+    }),
     type: z.enum(["regular", "re-permission"]).meta({
       description: "Only a re-permission campaign includes contacts whose consent is unknown.",
     }),
@@ -169,6 +185,7 @@ export function toCampaign(row: CampaignRow): Campaign {
   return {
     id: row.id,
     name: row.name,
+    parentId: row.parent_id,
     type: row.type,
     status: row.status,
     pauseReason: row.pause_reason,

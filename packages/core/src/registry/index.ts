@@ -1,3 +1,4 @@
+import { campaignsFollowUp } from "../campaigns/follow-up";
 import {
   campaignsBatches,
   campaignsCancel,
@@ -75,6 +76,7 @@ import {
   tagsList,
   tagsRename,
 } from "../lists/operations";
+import { campaignsClickMap, campaignsStats, statsLatest } from "../stats/operations";
 import { suppressionsAdd, suppressionsList, suppressionsRemove } from "../suppression/operations";
 import {
   savedBlocksCreate,
@@ -90,6 +92,7 @@ import {
   templatesPreview,
   templatesUpdate,
 } from "../templates/operations";
+import { usageGet } from "../usage/operations";
 import { apiKeysCreate, apiKeysList, apiKeysPresets, apiKeysRevoke } from "./operations/api-keys";
 import { auditList } from "./operations/audit";
 import { onboardingStatus } from "./operations/onboarding";
@@ -248,4 +251,11 @@ export const registry = createRegistry([
   campaignsBatches,
   campaignsRetryBatch,
   campaignsSkipBatch,
+  // Stats, usage, and follow-ups (U11). Stats and usage read rollups and the UsageMeter
+  // with `stats:read`. A follow-up is a draft, sent with prepare and confirm.
+  campaignsStats,
+  campaignsClickMap,
+  campaignsFollowUp,
+  statsLatest,
+  usageGet,
 ]);

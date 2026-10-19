@@ -507,6 +507,8 @@ export interface LinksTable {
   campaign_id: Immutable<number>;
   idx: Immutable<number>;
   url: Immutable<string>;
+  /** Human clicks on the link, from the EventBuffer flush. Bot clicks never count. */
+  clicks: Defaulted<number>;
   created_at: Generated<number>;
 }
 

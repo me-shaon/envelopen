@@ -1,3 +1,4 @@
+import { PLAN_LIMITS, type PlanLimit } from "@envelopen/core";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -182,25 +183,8 @@ export async function runSetupChecks(env: Env): Promise<SetupCheck[]> {
 
 // Plan limits (R3) ---------------------------------------------------------------------------
 
-export interface PlanLimit {
-  id: string;
-  label: string;
-  free: string;
-  paid: string;
-}
-
-/**
- * The limits that matter most to Envelopen, from the guides. The Worker cannot read the
- * account's plan, so the screen shows both columns.
- */
-export const PLAN_LIMITS: readonly PlanLimit[] = [
-  { id: "requests", label: "Worker requests", free: "100,000 per day", paid: "No daily limit" },
-  { id: "cpu", label: "CPU time per request", free: "10 ms", paid: "30 s (up to 5 min)" },
-  { id: "subrequests", label: "Subrequests per request", free: "50", paid: "10,000" },
-  { id: "d1_writes", label: "D1 rows written", free: "100,000 per day", paid: "No daily limit" },
-  { id: "d1_reads", label: "D1 rows read", free: "5 million per day", paid: "No daily limit" },
-  { id: "d1_size", label: "D1 database size", free: "500 MB", paid: "10 GB" },
-];
+// The list lives in `@envelopen/core`, so the usage view (U11) shows the same limits.
+export { PLAN_LIMITS, type PlanLimit };
 
 function limitsSummary(settings: AuthSettings) {
   return {

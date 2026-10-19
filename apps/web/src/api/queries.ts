@@ -262,3 +262,46 @@ export function campaignBatchesQuery(workspaceId: number, id: number) {
       ),
   });
 }
+
+// Stats and usage (U11) ------------------------------------------------------------------
+
+/**
+ * Stats come from rollups that the event flush updates about every 30 seconds. They
+ * poll while the first 48 hours run, so new opens and clicks appear without a reload.
+ */
+const STATS_POLL_MS = 15_000;
+const STATS_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+function statsPoll(startedAt: number | null | undefined): number | false {
+  return startedAt != null && Date.now() - startedAt < STATS_WINDOW_MS ? STATS_POLL_MS : false;
+}
+
+export function campaignStatsQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "campaigns", "stats", id],
+    queryFn: () => unwrap(api.GET("/campaigns/{id}/stats", { params: { path: { id } } })),
+    refetchInterval: (query) => statsPoll(query.state.data?.startedAt),
+  });
+}
+
+export function clickMapQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "campaigns", "click-map", id],
+    queryFn: () => unwrap(api.GET("/campaigns/{id}/click-map", { params: { path: { id } } })),
+  });
+}
+
+export function latestStatsQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "stats", "latest"],
+    queryFn: () => unwrap(api.GET("/stats/latest")),
+    refetchInterval: (query) => statsPoll(query.state.data?.campaign?.startedAt),
+  });
+}
+
+/** The D1 budget is per account. The meter changes with every write, so it polls. */
+export const usageQuery = queryOptions({
+  queryKey: ["usage"],
+  queryFn: () => unwrap(api.GET("/usage")),
+  refetchInterval: 60_000,
+});

@@ -2329,6 +2329,13 @@
           "name": {
             "type": "string"
           },
+          "parentId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For a follow-up: the campaign whose non-openers it targets (R35). Null otherwise."
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -2477,6 +2484,7 @@
         "required": [
           "id",
           "name",
+          "parentId",
           "type",
           "status",
           "pauseReason",
@@ -2580,6 +2588,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "parentId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For a follow-up: the campaign whose non-openers it targets (R35). Null otherwise."
           },
           "type": {
             "type": "string",
@@ -2725,6 +2740,7 @@
         "required": [
           "id",
           "name",
+          "parentId",
           "type",
           "status",
           "pauseReason",
@@ -2760,6 +2776,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "parentId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For a follow-up: the campaign whose non-openers it targets (R35). Null otherwise."
           },
           "type": {
             "type": "string",
@@ -2930,6 +2953,7 @@
         "required": [
           "id",
           "name",
+          "parentId",
           "type",
           "status",
           "pauseReason",
@@ -3369,6 +3393,526 @@
         "required": [
           "campaign",
           "batch"
+        ]
+      },
+      "CampaignStats": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "reportsDelivery": {
+                "type": "boolean",
+                "description": "The provider sends delivery events. When false, delivered is null."
+              }
+            },
+            "required": [
+              "provider",
+              "name",
+              "reportsDelivery"
+            ]
+          },
+          "tracking": {
+            "type": "object",
+            "properties": {
+              "opens": {
+                "type": "boolean",
+                "description": "Open tracking was on for the send."
+              },
+              "clicks": {
+                "type": "boolean",
+                "description": "Click tracking was on for the send."
+              }
+            },
+            "required": [
+              "opens",
+              "clicks"
+            ]
+          },
+          "sent": {
+            "type": "integer"
+          },
+          "delivered": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Null means \"not reported\": the provider sends no delivery events (R50)."
+          },
+          "uniqueOpens": {
+            "type": "integer",
+            "description": "Recipients with at least one human open."
+          },
+          "opens": {
+            "type": "integer",
+            "description": "Human opens, repeats included."
+          },
+          "machineOpens": {
+            "type": "integer",
+            "description": "Opens that a machine made, for example Apple Mail Privacy Protection."
+          },
+          "uniqueClicks": {
+            "type": "integer",
+            "description": "Recipients with at least one human click."
+          },
+          "clicks": {
+            "type": "integer",
+            "description": "Human clicks, repeats included."
+          },
+          "botClicks": {
+            "type": "integer",
+            "description": "Clicks that a scanner made. Not in any rate."
+          },
+          "unsubscribes": {
+            "type": "integer"
+          },
+          "bounces": {
+            "type": "integer",
+            "description": "Hard and soft bounces."
+          },
+          "bouncesHard": {
+            "type": "integer"
+          },
+          "bouncesSoft": {
+            "type": "integer"
+          },
+          "complaints": {
+            "type": "integer"
+          },
+          "rates": {
+            "type": "object",
+            "properties": {
+              "delivered": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "A share from 0 to 1. Null when the base is 0 or not tracked."
+              },
+              "open": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Unique human opens divided by sent."
+              },
+              "click": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Unique human clicks divided by sent."
+              },
+              "clickToOpen": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Unique human clicks divided by unique human opens."
+              },
+              "unsubscribe": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "A share from 0 to 1. Null when the base is 0 or not tracked."
+              },
+              "bounce": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "A share from 0 to 1. Null when the base is 0 or not tracked."
+              },
+              "complaint": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "A share from 0 to 1. Null when the base is 0 or not tracked."
+              }
+            },
+            "required": [
+              "delivered",
+              "open",
+              "click",
+              "clickToOpen",
+              "unsubscribe",
+              "bounce",
+              "complaint"
+            ]
+          },
+          "window": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "The UTC hour the send started."
+              },
+              "hours": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CampaignStatsHour"
+                },
+                "description": "One entry per hour of the first 48 hours, up to the current hour."
+              }
+            },
+            "required": [
+              "start",
+              "hours"
+            ]
+          },
+          "followUp": {
+            "$ref": "#/components/schemas/FollowUpAvailability"
+          }
+        },
+        "required": [
+          "campaignId",
+          "status",
+          "startedAt",
+          "provider",
+          "tracking",
+          "sent",
+          "delivered",
+          "uniqueOpens",
+          "opens",
+          "machineOpens",
+          "uniqueClicks",
+          "clicks",
+          "botClicks",
+          "unsubscribes",
+          "bounces",
+          "bouncesHard",
+          "bouncesSoft",
+          "complaints",
+          "rates",
+          "window",
+          "followUp"
+        ]
+      },
+      "CampaignStatsHour": {
+        "type": "object",
+        "properties": {
+          "hour": {
+            "type": "integer",
+            "description": "Start of the UTC hour, Unix milliseconds."
+          },
+          "sent": {
+            "type": "integer"
+          },
+          "opens": {
+            "type": "integer",
+            "description": "Human opens in the hour."
+          },
+          "uniqueOpens": {
+            "type": "integer"
+          },
+          "machineOpens": {
+            "type": "integer"
+          },
+          "clicks": {
+            "type": "integer",
+            "description": "Human clicks in the hour."
+          },
+          "uniqueClicks": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hour",
+          "sent",
+          "opens",
+          "uniqueOpens",
+          "machineOpens",
+          "clicks",
+          "uniqueClicks"
+        ]
+      },
+      "FollowUpAvailability": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why a follow-up is not available."
+          }
+        },
+        "required": [
+          "available",
+          "reason"
+        ]
+      },
+      "CampaignClickMap": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "integer"
+          },
+          "trackClicks": {
+            "type": "boolean"
+          },
+          "totalClicks": {
+            "type": "integer",
+            "description": "Human clicks on tracked links."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "description": "The link's place among the tracked links."
+                },
+                "url": {
+                  "type": "string"
+                },
+                "clicks": {
+                  "type": "integer",
+                  "description": "Human clicks. Bot clicks are left out."
+                },
+                "share": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "The link's share of all human clicks."
+                }
+              },
+              "required": [
+                "index",
+                "url",
+                "clicks",
+                "share"
+              ]
+            }
+          },
+          "html": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The stored email HTML with sample values and a click count on each tracked link. Render it in a sandboxed frame."
+          }
+        },
+        "required": [
+          "campaignId",
+          "trackClicks",
+          "totalClicks",
+          "links",
+          "html"
+        ]
+      },
+      "LatestCampaignStats": {
+        "type": "object",
+        "properties": {
+          "campaign": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "recipientCount": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "status",
+              "startedAt",
+              "recipientCount"
+            ],
+            "description": "The campaign that started last. Null before the first send."
+          },
+          "stats": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CampaignStats"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "campaign",
+          "stats"
+        ]
+      },
+      "Usage": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "The UTC day of the counts, YYYY-MM-DD."
+          },
+          "resetsAt": {
+            "type": "integer",
+            "description": "The next 00:00 UTC, Unix milliseconds."
+          },
+          "d1Writes": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "remaining": {
+                "type": "integer"
+              },
+              "ratio": {
+                "type": "number",
+                "description": "Share of the daily limit used, 0 to 1 or more."
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "warning",
+                  "limit"
+                ],
+                "description": "`warning` from 80% of the limit. `limit` when D1 rejected writes and sending is paused until the reset."
+              }
+            },
+            "required": [
+              "used",
+              "limit",
+              "remaining",
+              "ratio",
+              "state"
+            ]
+          },
+          "warning": {
+            "type": "boolean",
+            "description": "True from 80% of the daily D1 writes."
+          },
+          "paidHint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Advice to move to Workers Paid, near the limit. Null otherwise."
+          },
+          "platformLimit": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "since": {
+                "type": "integer"
+              },
+              "until": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "since",
+              "until"
+            ],
+            "description": "D1 rejected writes since `since`. Sending resumes after `until`."
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "free": {
+                  "type": "string"
+                },
+                "paid": {
+                  "type": "string"
+                },
+                "measured": {
+                  "type": "boolean",
+                  "description": "Envelopen counts this limit."
+                },
+                "used": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "free",
+                "paid",
+                "measured",
+                "used"
+              ]
+            }
+          }
+        },
+        "required": [
+          "day",
+          "resetsAt",
+          "d1Writes",
+          "warning",
+          "paidHint",
+          "platformLimit",
+          "limits"
         ]
       }
     },
@@ -14923,6 +15467,527 @@
           },
           "422": {
             "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/stats": {
+      "get": {
+        "operationId": "campaigns.stats",
+        "summary": "Get a campaign's stats",
+        "description": "Returns sent, delivered, bounces, complaints, unsubscribes, unique human opens, machine opens, unique human clicks, the open, click, and click-to-open rates, and the hourly engagement of the first 48 hours. Delivered is null when the provider sends no delivery events (\"not reported\"). Events reach the stats within about a minute.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "stats:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignStats"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/click-map": {
+      "get": {
+        "operationId": "campaigns.click_map",
+        "summary": "Get a campaign's click map",
+        "description": "Returns the human clicks of each tracked link, and the email HTML with each link's count next to it, for a sandboxed preview.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "stats:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignClickMap"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/follow-up": {
+      "post": {
+        "operationId": "campaigns.follow_up",
+        "summary": "Create a follow-up to non-openers",
+        "description": "Creates a draft that copies the campaign's content and audience and reaches only the recipients who did not open it as a person. Machine-only openers, for example Apple Mail Privacy Protection, are included. Send it with prepare and confirm. It fails when the campaign was sent with open tracking off.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:write",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Defaults to the parent's name with \" (follow-up)\"."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/latest": {
+      "get": {
+        "operationId": "stats.latest",
+        "summary": "Get the latest campaign's stats",
+        "description": "Returns the stats of the campaign that started last, for the overview.",
+        "tags": [
+          "stats"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "stats:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestCampaignStats"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usage": {
+      "get": {
+        "operationId": "usage.get",
+        "summary": "Get the platform usage",
+        "description": "Returns today's D1 rows written on the deployment, the rows left before the Workers Free limit, the reset time (00:00 UTC), and the platform_limit pause when it is in force. The D1 limit is per Cloudflare account, so every workspace sees the same numbers.",
+        "tags": [
+          "usage"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "stats:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Usage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {

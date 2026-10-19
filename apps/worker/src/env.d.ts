@@ -18,6 +18,11 @@ interface EnvelopenSecrets {
    * DNS request instead of the real host. Never set it on a deployed Worker.
    */
   OUTBOUND_MOCK_ORIGIN?: string;
+  /**
+   * End-to-end tests only: a shorter EventBuffer flush delay in milliseconds, so stats
+   * show tracking events without the 30-second wait. Ignored outside 100 to 30,000.
+   */
+  EVENT_FLUSH_DELAY_MS?: string;
 }
 
 declare namespace Cloudflare {

@@ -8,52 +8,13 @@ import { Button } from "@/components/ui/button";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { CampaignTable } from "@/features/campaigns/campaigns-page";
 import { OnboardingChecklist, useOnboarding } from "@/features/onboarding/onboarding-checklist";
+import { LatestCampaign } from "@/features/stats/latest-campaign";
 import { guideUrl } from "@/lib/guides";
 
 function greeting(hour: number): string {
   if (hour < 12) return "Good morning";
   if (hour < 18) return "Good afternoon";
   return "Good evening";
-}
-
-// The KPI strip and the activity feed show their empty state until the stats unit
-// (U11) adds their data.
-const KPIS = [
-  { label: "Delivered", color: "bg-chart-2" },
-  { label: "Opened by people", color: "bg-chart-1" },
-  { label: "Clicked", color: "bg-chart-3" },
-  { label: "Unsubscribed", color: "bg-chart-4" },
-];
-
-function KpiStrip() {
-  return (
-    <section aria-labelledby="results-title" className="flex flex-col gap-4">
-      <SectionHeader id="results-title" title="Latest campaign" aside="No campaign sent yet" />
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] overflow-hidden rounded-xl border border-border">
-        {KPIS.map((kpi, index) => (
-          <div
-            key={kpi.label}
-            className={
-              index > 0
-                ? "flex flex-col gap-2 border-l border-border p-[18px]"
-                : "flex flex-col gap-2 p-[18px]"
-            }
-          >
-            <span className="text-xs text-muted-foreground">{kpi.label}</span>
-            <span className="figure text-[26px] leading-[1.1] text-muted-foreground">-</span>
-            <div className="h-[3px] overflow-hidden rounded-full bg-track">
-              <div className={`h-[3px] w-0 rounded-full ${kpi.color}`} />
-            </div>
-            <span className="text-xs text-muted-foreground">No data yet</span>
-          </div>
-        ))}
-      </div>
-      <span className="text-xs text-muted-foreground">
-        Rates appear here after the first campaign is sent. Machine opens are counted apart from
-        human opens.
-      </span>
-    </section>
-  );
 }
 
 function RecentCampaigns({ workspaceId }: { workspaceId: number }) {
@@ -117,7 +78,7 @@ export function OverviewPage() {
       <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-12">
         <PageHeader title={greeting(new Date().getHours())} description={subtitle} />
         <OnboardingChecklist />
-        <KpiStrip />
+        <LatestCampaign />
         <RecentCampaigns workspaceId={current.id} />
       </div>
 

@@ -54,6 +54,14 @@ export class EventBuffer extends DurableObject<Env> {
     });
   }
 
+  /** The delay of a partial flush. End-to-end tests shorten it (EVENT_FLUSH_DELAY_MS). */
+  private flushDelay(): number {
+    const value = Number(this.env.EVENT_FLUSH_DELAY_MS);
+    return Number.isFinite(value) && value >= 100 && value <= FLUSH_DELAY_MS
+      ? value
+      : FLUSH_DELAY_MS;
+  }
+
   private waiting(): number {
     const row = this.ctx.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM events").one();
     return row.n;
@@ -81,7 +89,7 @@ export class EventBuffer extends DurableObject<Env> {
       return { waiting: this.waiting(), flushed };
     }
     if (waiting > 0 && (await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(Date.now() + FLUSH_DELAY_MS);
+      await this.ctx.storage.setAlarm(Date.now() + this.flushDelay());
     }
     return { waiting, flushed: null };
   }
@@ -149,7 +157,7 @@ export class EventBuffer extends DurableObject<Env> {
     const left = this.waiting();
     // A full buffer drains one group per second. A partial one waits for the delay.
     if (left > 0)
-      await this.ctx.storage.setAlarm(Date.now() + (left >= FLUSH_SIZE ? 1000 : FLUSH_DELAY_MS));
+      await this.ctx.storage.setAlarm(Date.now() + (left >= FLUSH_SIZE ? 1000 : this.flushDelay()));
     else await this.ctx.storage.deleteAlarm();
     return result;
   }

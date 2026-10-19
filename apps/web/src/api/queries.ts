@@ -214,3 +214,43 @@ export function savedBlocksQuery(workspaceId: number) {
     queryFn: () => unwrap(api.GET("/saved-blocks")),
   });
 }
+
+// Campaigns (U9) ------------------------------------------------------------------------
+
+export function campaignsQuery(workspaceId: number, limit = 100) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "campaigns", "list", limit],
+    queryFn: () => unwrap(api.GET("/campaigns", { params: { query: { limit } } })),
+  });
+}
+
+/** Polls while the campaign is in flight, so the counts move without a reload. */
+export function campaignQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "campaigns", "one", id],
+    queryFn: () => unwrap(api.GET("/campaigns/{id}", { params: { path: { id } } })),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "sending" || status === "scheduled" || status === "paused" ? 3000 : false;
+    },
+  });
+}
+
+export function campaignEstimateQuery(workspaceId: number, id: number, version: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "campaigns", "estimate", id, version],
+    queryFn: () => unwrap(api.GET("/campaigns/{id}/estimate", { params: { path: { id } } })),
+  });
+}
+
+export function campaignBatchesQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "campaigns", "batches", id],
+    queryFn: () =>
+      unwrap(
+        api.GET("/campaigns/{id}/batches", {
+          params: { path: { id }, query: { status: "uncertain" } },
+        }),
+      ),
+  });
+}

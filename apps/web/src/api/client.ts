@@ -36,6 +36,8 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** The `details` of the error body, for example `{ reason: "stale" }`. */
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -53,6 +55,7 @@ export async function unwrap<T>(
       response.status,
       body?.code ?? "unknown",
       body?.message ?? "The request failed. Try again.",
+      body?.details,
     );
   }
   return data;

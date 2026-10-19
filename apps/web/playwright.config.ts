@@ -2,9 +2,9 @@ import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 
 // End-to-end tests of the admin app against `wrangler dev` with a local D1.
-// Five Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
-// one for the contacts spec, one for the providers spec, and one for the editor spec,
-// so their owners and data start fresh. The providers and editor Workers send their
+// Six Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
+// and one each for the contacts, providers, editor, and campaigns specs, so their
+// owners and data start fresh. The providers, editor, and campaigns Workers send their
 // provider and DNS requests to local mock servers (e2e/provider-mock.mjs), one each,
 // so each spec sees only its own sent emails.
 // The secrets are random per run unless E2E_* variables set them. Playwright loads this
@@ -19,6 +19,8 @@ export const PASSKEY_PORT = 8791;
 export const CONTACTS_PORT = 8792;
 export const PROVIDERS_PORT = 8793;
 export const EDITOR_PORT = 8794;
+export const CAMPAIGNS_PORT = 8795;
+export const CAMPAIGNS_MOCK_PORT = 8797;
 export const PROVIDER_MOCK_PORT = 8799;
 export const EDITOR_MOCK_PORT = 8798;
 
@@ -87,6 +89,23 @@ export default defineConfig({
     {
       command: `node e2e/serve.mjs ${EDITOR_PORT} editor 100000 http://127.0.0.1:${EDITOR_MOCK_PORT}`,
       url: `http://localhost:${EDITOR_PORT}/api/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      // The campaigns mock also serves the DMARC record, so the sending domain verifies.
+      command: `node e2e/provider-mock.mjs ${CAMPAIGNS_MOCK_PORT} --dmarc`,
+      url: `http://127.0.0.1:${CAMPAIGNS_MOCK_PORT}/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      command: `node e2e/serve.mjs ${CAMPAIGNS_PORT} campaigns 100000 http://127.0.0.1:${CAMPAIGNS_MOCK_PORT}`,
+      url: `http://localhost:${CAMPAIGNS_PORT}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: "ignore",

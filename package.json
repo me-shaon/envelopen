@@ -48,6 +48,18 @@
       },
       "AUTH_RATE_LIMITER": {
         "description": "Durable Object that counts failed logins and setup attempts by IP and email."
+      },
+      "CAMPAIGN_WORKFLOW": {
+        "description": "Workflow that takes the recipient snapshot of a campaign in pages and puts its batches on the send queue."
+      },
+      "USAGE_METER": {
+        "description": "Durable Object that counts daily D1 writes and holds the flag that pauses campaigns at the Workers Free limit."
+      },
+      "RATE_LIMITER": {
+        "description": "Durable Object with a token bucket per provider connection, so sends stay within the provider rate limit."
+      },
+      "SIGNING_KEYS_RETIRED": {
+        "description": "Optional. Earlier SIGNING_KEY values, comma-separated, so links in old emails keep working after a key rotation."
       }
     }
   },

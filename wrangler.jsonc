@@ -29,11 +29,16 @@
         "queue": "send-queue",
         // One batch per invocation keeps each send inside the Free plan limits.
         "max_batch_size": 1,
+        // A message waits behind the provider rate limit with a delayed retry, so it
+        // gets more tries than the default 3 before the dead-letter queue. The sweep
+        // dispatches a dead-lettered batch again (KTD19).
+        "max_retries": 10,
         "dead_letter_queue": "send-queue-dlq"
       }
     ]
   },
-  // Per-minute recovery sweep.
+  // Per-minute cron: starts due scheduled campaigns, runs the recovery sweep, resumes
+  // campaigns after the D1 daily limit resets, and deletes expired files (U9, KTD19).
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     // PBKDF2-SHA256 iterations for password hashes (KTD7). Workers accept at most 100000.
@@ -44,14 +49,27 @@
   "durable_objects": {
     "bindings": [
       // Login, password reset, and setup attempt counters by IP and email (KTD8).
-      { "name": "AUTH_RATE_LIMITER", "class_name": "AuthRateLimiter" }
+      { "name": "AUTH_RATE_LIMITER", "class_name": "AuthRateLimiter" },
+      // Daily D1 writes and the platform_limit flag, one instance per deployment (KTD24).
+      { "name": "USAGE_METER", "class_name": "UsageMeter" },
+      // A token bucket per provider connection (KTD25).
+      { "name": "RATE_LIMITER", "class_name": "RateLimiter" }
     ]
   },
   // Free plan Durable Objects need the SQLite backend.
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AuthRateLimiter"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["AuthRateLimiter"] },
+    { "tag": "v2", "new_sqlite_classes": ["UsageMeter", "RateLimiter"] }
+  ],
   // Workflows run classes that the entry module exports.
   "workflows": [
     // CSV imports (U6): a preview run, then an import run, in chunks sized for Workers Free.
-    { "name": "envelopen-import", "binding": "IMPORT_WORKFLOW", "class_name": "ImportWorkflow" }
+    { "name": "envelopen-import", "binding": "IMPORT_WORKFLOW", "class_name": "ImportWorkflow" },
+    // Campaign snapshots (U9): the recipients in pages by contact id, then the batch pointers.
+    {
+      "name": "envelopen-campaign",
+      "binding": "CAMPAIGN_WORKFLOW",
+      "class_name": "CampaignWorkflow"
+    }
   ]
 }

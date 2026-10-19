@@ -430,6 +430,14 @@ export interface CampaignsTable {
   snapshot_max_contact_id: number | null;
   recipient_count: number | null;
   resume_at: number | null;
+  /** JSON counts of the contacts that the snapshot left out, by reason (AE1). */
+  exclusions: Defaulted<string | null>;
+  /** Set when the snapshot has created every batch. */
+  snapshot_done_at: Defaulted<number | null>;
+  pause_detail: Defaulted<string | null>;
+  paused_at: Defaulted<number | null>;
+  /** The https origin of unsubscribe and tracking links, fixed at confirm. */
+  link_origin: Defaulted<string | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -449,6 +457,14 @@ export interface CampaignBatchesTable {
   attempts: Defaulted<number>;
   first_claimed_at: number | null;
   last_error: string | null;
+  /** When the batch was last put on the queue. */
+  dispatched_at: Defaulted<number | null>;
+  /** A rate-limited batch waits in `pending` until this time. */
+  not_before: Defaulted<number | null>;
+  sent_count: Defaulted<number>;
+  failed_count: Defaulted<number>;
+  skipped_count: Defaulted<number>;
+  uncertain_at: Defaulted<number | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }

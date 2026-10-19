@@ -12,6 +12,7 @@ import { OpenAPIHono, type RouteConfig } from "@hono/zod-openapi";
 import type { Handler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { usageSink } from "../do/usage";
 import { createServices } from "../services";
 import { noSessionResolver, principalMiddleware, type SessionResolver } from "./auth";
 import type { ApiEnv } from "./context";
@@ -143,7 +144,8 @@ function handlerFor(operation: Operation): Handler<ApiEnv> {
 export function createApiRouter(options: ApiRouterOptions = {}): OpenAPIHono<ApiEnv> {
   const registry = options.registry ?? defaultRegistry;
   const rateLimiter = options.rateLimiter ?? createFixedWindowLimiter(DEFAULT_API_KEY_RATE_LIMIT);
-  const connect = options.createDb ?? ((env: Env) => createDb(env));
+  // KTD24: the default connection reports its D1 writes to the UsageMeter.
+  const connect = options.createDb ?? ((env: Env) => createDb(env, { usageSink: usageSink(env) }));
   const services = options.createServices ?? createServices;
 
   const api = new OpenAPIHono<ApiEnv>({
@@ -186,6 +188,15 @@ export function createApiRouter(options: ApiRouterOptions = {}): OpenAPIHono<Api
     c.set("db", connect(c.env));
     c.set("services", services(c.env, c.req.raw));
     await next();
+    // Report the rows this request wrote, once, after the response.
+    const flush = c.var.db.meter
+      .flush()
+      .catch((error) => console.error("Usage report failed", error));
+    try {
+      c.executionCtx.waitUntil(flush);
+    } catch {
+      // No execution context (a test calling the app directly): the flush runs on its own.
+    }
   });
   api.use("*", principalMiddleware(options.resolveSession ?? noSessionResolver));
   api.use("*", originCheck(options.appOrigin ?? requestOrigin));

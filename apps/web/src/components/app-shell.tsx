@@ -194,7 +194,7 @@ export function AppShell() {
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <Button asChild>
-                <Link to="/campaigns">
+                <Link to="/campaigns/new">
                   <PlusIcon className="size-[13px]" strokeWidth={2.4} aria-hidden="true" />
                   New campaign
                 </Link>

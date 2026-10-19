@@ -4,7 +4,7 @@ import { generateApiKey } from "../src/api-keys";
 import { createCredentialCipher } from "../src/crypto/credentials";
 import { createFileLinkSigner } from "../src/import/file-links";
 import type { ApiKeyScope } from "../src/scopes";
-import type { ImportJob, Services } from "../src/services";
+import type { BatchPointer, CampaignJob, ImportJob, Services, UsageStatus } from "../src/services";
 import { createEmailHasher } from "../src/suppression/hash";
 
 /** A connection that fails any tenant query without a workspace_id condition. */
@@ -84,13 +84,21 @@ const noNetwork: typeof fetch = async (input) => {
 export interface TestServices extends Services {
   /** Import runs that operations started, in order. */
   jobs: ImportJob[];
+  /** Campaign snapshot runs that operations started, in order. */
+  campaignJobs: CampaignJob[];
+  /** Batch pointers that operations put on the send queue, in order. */
+  queued: BatchPointer[];
+  /** What `usage.status()` returns. Tests change it. */
+  usageStatus: UsageStatus;
 }
 
 /** Services as the Worker builds them, with a job recorder in place of the Workflow. */
 export async function testServices(options: { fetch?: typeof fetch } = {}): Promise<TestServices> {
   const signer = await createFileLinkSigner(TEST_SIGNING_KEY);
   const jobs: ImportJob[] = [];
-  return {
+  const campaignJobs: CampaignJob[] = [];
+  const queued: BatchPointer[] = [];
+  const services: TestServices = {
     bucket: env.BUCKET,
     hashEmail: await createEmailHasher(TEST_SIGNING_KEY),
     signFileLink: (file) => signer.sign(file),
@@ -101,7 +109,22 @@ export async function testServices(options: { fetch?: typeof fetch } = {}): Prom
     outboundFetch: options.fetch ?? noNetwork,
     appOrigin: TEST_ORIGIN,
     jobs,
+    campaignJobs,
+    queued,
+    async startCampaignJob(job) {
+      campaignJobs.push(job);
+    },
+    sendQueue: {
+      async send(pointers) {
+        queued.push(...pointers);
+      },
+    },
+    usageStatus: { day: "2026-10-19", rowsWritten: 0, dailyLimit: 100_000, platformLimit: null },
+    usage: {
+      status: async () => services.usageStatus,
+    },
   };
+  return services;
 }
 
 export function insertContact(

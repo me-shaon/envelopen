@@ -18,6 +18,54 @@ export interface ImportJob {
   generation: number;
 }
 
+/** A campaign that the snapshot Workflow builds and dispatches (U9). */
+export interface CampaignJob {
+  workspaceId: number;
+  campaignId: number;
+  /** `campaigns.started_at`, so each start of a campaign has its own Workflow instance. */
+  startedAt: number;
+}
+
+/**
+ * A queue message: a pointer to one batch (KTD17). The database holds all recipient
+ * state. A message whose generation differs from the batch's is stale.
+ */
+export interface BatchPointer {
+  v: 1;
+  workspaceId: number;
+  campaignId: number;
+  batchId: number;
+  generation: number;
+}
+
+/** The send queue, as the engine uses it. The Worker wraps `SEND_QUEUE`. */
+export interface SendQueue {
+  /** Sends the pointers, at most 100 per call to the platform. */
+  send(pointers: readonly BatchPointer[]): Promise<void>;
+}
+
+/** The D1 daily limit stopped writes (KTD24). Kept in the UsageMeter Durable Object. */
+export interface PlatformLimit {
+  /** When the limit resets: the next 00:00 UTC. */
+  until: number;
+  since: number;
+}
+
+export interface UsageStatus {
+  /** The UTC day, `YYYY-MM-DD`. */
+  day: string;
+  /** D1 rows written today, as the metered binding measured them. */
+  rowsWritten: number;
+  /** The Workers Free daily limit of D1 rows written. */
+  dailyLimit: number;
+  platformLimit: PlatformLimit | null;
+}
+
+/** Reads the UsageMeter Durable Object. */
+export interface UsageReader {
+  status(): Promise<UsageStatus>;
+}
+
 /** A link to a file in R2 that works without a session until it expires. */
 export interface FileLinkRequest {
   key: string;
@@ -42,6 +90,12 @@ export interface Services {
   outboundFetch: typeof fetch;
   /** The public origin of this deployment, for webhook URLs. For example `https://mail.example.com`. */
   appOrigin: string;
+  /** Starts the campaign snapshot Workflow (U9). */
+  startCampaignJob(job: CampaignJob): Promise<void>;
+  /** Puts batch pointers on the send queue (U9). */
+  sendQueue: SendQueue;
+  /** The daily D1 usage and the platform_limit flag (KTD24). */
+  usage: UsageReader;
 }
 
 /** Returns the service, or throws when the surface did not provide it. */

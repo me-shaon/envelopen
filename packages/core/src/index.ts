@@ -10,9 +10,15 @@ export {
   resolveApiKey,
 } from "./api-keys";
 export { type AuditEntry, type AuditTarget, auditInsert, writeAudit } from "./audit";
+export * from "./campaigns";
 export {
+  adapterContext,
+  adapterOf,
   type Connection,
+  type ConnectionRow,
   ConnectionSchema,
+  decryptCredentials,
+  refsOf,
 } from "./connections/model";
 export { ConnectionDetailSchema, validateCredentials } from "./connections/operations";
 export {
@@ -82,12 +88,18 @@ export {
 export * from "./registry";
 export * from "./scopes";
 export {
+  type BatchPointer,
+  type CampaignJob,
   type EmailHasher,
   type FileLinkRequest,
   type ImportJob,
   type ImportJobMode,
+  type PlatformLimit,
   requireService,
+  type SendQueue,
   type Services,
+  type UsageReader,
+  type UsageStatus,
 } from "./services";
 export { createEmailHasher } from "./suppression/hash";
 export {

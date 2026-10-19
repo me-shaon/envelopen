@@ -2,15 +2,17 @@
 // providers spec. The Worker under test runs with OUTBOUND_MOCK_ORIGIN pointing here,
 // so `https://api.resend.com/domains` arrives as `/api.resend.com/domains`.
 //
-//   node e2e/provider-mock.mjs <port>
+//   node e2e/provider-mock.mjs <port> [--dmarc]
 //
+// With --dmarc, the zone also has the DMARC record, so the sending domain verifies.
 // The responses follow the shapes of the recorded fixtures in
 // packages/providers/conformance/fixtures. No request leaves this machine.
 import { createServer } from "node:http";
 
 const port = Number(process.argv[2]);
+const withDmarc = process.argv.includes("--dmarc");
 if (!port) {
-  console.error("Usage: node e2e/provider-mock.mjs <port>");
+  console.error("Usage: node e2e/provider-mock.mjs <port> [--dmarc]");
   process.exit(1);
 }
 
@@ -22,6 +24,7 @@ const DOMAIN = "mail.example.com";
 const ZONE = {
   [`TXT send.${DOMAIN}`]: ["v=spf1 include:amazonses.com ~all"],
   [`TXT resend._domainkey.${DOMAIN}`]: ["p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC"],
+  ...(withDmarc ? { [`TXT _dmarc.${DOMAIN}`]: ["v=DMARC1; p=none"] } : {}),
 };
 const TYPE_CODES = { A: 1, CNAME: 5, MX: 15, TXT: 16 };
 

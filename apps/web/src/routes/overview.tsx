@@ -1,9 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { BookOpenIcon, CodeIcon, PlugZapIcon, SendIcon } from "lucide-react";
+import { campaignsQuery } from "@/api/queries";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader, SectionHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { useCurrentWorkspace } from "@/components/workspace-context";
+import { CampaignTable } from "@/features/campaigns/campaigns-page";
 import { OnboardingChecklist, useOnboarding } from "@/features/onboarding/onboarding-checklist";
 import { guideUrl } from "@/lib/guides";
 
@@ -53,6 +56,41 @@ function KpiStrip() {
   );
 }
 
+function RecentCampaigns({ workspaceId }: { workspaceId: number }) {
+  const campaigns = useQuery(campaignsQuery(workspaceId, 5));
+  const items = campaigns.data?.items ?? [];
+  return (
+    <section aria-labelledby="campaigns-title" className="flex flex-col gap-4">
+      <SectionHeader
+        id="campaigns-title"
+        title="Recent campaigns"
+        aside={
+          items.length > 0 ? (
+            <Link to="/campaigns" className="hover:text-foreground">
+              All campaigns
+            </Link>
+          ) : null
+        }
+      />
+      {items.length > 0 ? (
+        <CampaignTable items={items} />
+      ) : (
+        <EmptyState
+          icon={SendIcon}
+          title="No campaigns yet"
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link to="/campaigns/new">Create a campaign</Link>
+            </Button>
+          }
+        >
+          Your drafts, scheduled sends, and sent campaigns will be listed here.
+        </EmptyState>
+      )}
+    </section>
+  );
+}
+
 const RESOURCES = [
   { label: "Provider guides", href: guideUrl("docs/guides/README.md"), icon: BookOpenIcon },
   { label: "API reference", href: "/api/openapi.json", icon: CodeIcon },
@@ -80,20 +118,7 @@ export function OverviewPage() {
         <PageHeader title={greeting(new Date().getHours())} description={subtitle} />
         <OnboardingChecklist />
         <KpiStrip />
-        <section aria-labelledby="campaigns-title" className="flex flex-col gap-4">
-          <SectionHeader id="campaigns-title" title="Recent campaigns" />
-          <EmptyState
-            icon={SendIcon}
-            title="No campaigns yet"
-            action={
-              <Button asChild variant="outline" size="sm">
-                <Link to="/campaigns">Go to campaigns</Link>
-              </Button>
-            }
-          >
-            Your drafts, scheduled sends, and sent campaigns will be listed here.
-          </EmptyState>
-        </section>
+        <RecentCampaigns workspaceId={current.id} />
       </div>
 
       <aside

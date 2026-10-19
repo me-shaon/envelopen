@@ -10,6 +10,8 @@ import {
 import type { ContactFilters } from "./api/queries";
 import { sessionQuery } from "./api/queries";
 import { AppShell } from "./components/app-shell";
+import { CampaignPage, NewCampaignPage } from "./features/campaigns/campaign-page";
+import { CampaignsPage } from "./features/campaigns/campaigns-page";
 import { ContactDetailPage } from "./features/contacts/contact-detail";
 import { ContactsPage } from "./features/contacts/contacts-page";
 import { ListsPage, TagsPage } from "./features/contacts/lists-tags";
@@ -20,7 +22,6 @@ import { ConnectionsPage } from "./features/providers/connections-page";
 import { DomainDetailPage, DomainsPage } from "./features/providers/domains-page";
 import { LoginPage } from "./routes/login";
 import { OverviewPage } from "./routes/overview";
-import { CampaignsPage } from "./routes/placeholders";
 import { RecoverPage } from "./routes/recover";
 import { SettingsPage } from "./routes/settings";
 import { SetupPage } from "./routes/setup";
@@ -87,6 +88,19 @@ const campaignsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/campaigns",
   component: CampaignsPage,
+});
+const newCampaignRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/campaigns/new",
+  component: NewCampaignPage,
+});
+const campaignRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/campaigns/$campaignId",
+  component: function Campaign() {
+    const { campaignId } = campaignRoute.useParams();
+    return <CampaignPage key={campaignId} campaignId={Number(campaignId)} />;
+  },
 });
 function positiveId(value: unknown): number | undefined {
   const id = Number(value);
@@ -194,6 +208,8 @@ const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     overviewRoute,
     campaignsRoute,
+    newCampaignRoute,
+    campaignRoute,
     contactsRoute,
     contactRoute,
     importRoute,

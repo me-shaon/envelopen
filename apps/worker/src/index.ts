@@ -1,17 +1,19 @@
-import { cleanupExpiredFiles } from "@envelopen/core";
-import { createDb } from "@envelopen/db";
 import { Hono } from "hono";
 import { createFileRoutes } from "./api/files";
-import { purgeExpiredIdempotencyKeys } from "./api/idempotency";
 import { createApiRouter } from "./api/router";
 import { AUTH_BASE_PATH } from "./auth/better-auth";
 import { createAuthRoutes } from "./auth/routes";
 import { betterAuthSessionResolver } from "./auth/session";
+import { runCron } from "./cron";
 import { createHookRoutes } from "./hooks";
+import { handleSendBatch } from "./queue/send-consumer";
 import { createSetupRoutes } from "./setup/first-run";
 
 // Durable Object and Workflow classes must be exported from the entry module.
 export { AuthRateLimiter } from "./auth/rate-limit-do";
+export { RateLimiter } from "./do/rate-limiter";
+export { UsageMeter } from "./do/usage-meter";
+export { CampaignWorkflow } from "./workflows/campaign-workflow";
 export { ImportWorkflow } from "./workflows/import-workflow";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -39,16 +41,13 @@ app.get("/u/:token", (c) => c.text("Envelopen subscription page"));
 export default {
   fetch: app.fetch,
 
-  async queue(batch, _env, _ctx) {
-    // The send consumer (U9) replaces this stub.
-    batch.ackAll();
+  // The send consumer (U9): one batch pointer per invocation.
+  async queue(batch, env) {
+    await handleSendBatch(batch, env);
   },
 
-  async scheduled(_controller, env, _ctx) {
-    // The recovery sweep (U9) joins this handler.
-    const db = createDb(env);
-    await purgeExpiredIdempotencyKeys(db);
-    // Uploads, error files, and exports that hold contact data expire after 24 hours.
-    await cleanupExpiredFiles(db, env.BUCKET);
+  // Due campaigns, the recovery sweep, the resume after the D1 limit, and cleanup.
+  async scheduled(controller, env, ctx) {
+    await runCron(env, ctx, controller.scheduledTime);
   },
 } satisfies ExportedHandler<Env>;

@@ -13,3 +13,7 @@ ENCRYPTION_KEY=replace-with-base64-32-byte-key
 # The login session secret is derived from it, so a new value signs everyone out.
 # Generate with: openssl rand -base64 32
 SIGNING_KEY=replace-with-base64-32-byte-key
+
+# Optional. After you replace SIGNING_KEY, put the old value here (comma-separated for
+# several), so unsubscribe links in emails that were already sent keep working.
+# SIGNING_KEYS_RETIRED=

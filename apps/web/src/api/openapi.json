@@ -2297,6 +2297,1079 @@
           "createdAt",
           "updatedAt"
         ]
+      },
+      "CampaignPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CampaignSummary"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` to get the next page. Null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "CampaignSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "regular",
+              "re-permission"
+            ],
+            "description": "Only a re-permission campaign includes contacts whose consent is unknown."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "scheduled",
+              "sending",
+              "paused",
+              "needs_decision",
+              "sent",
+              "cancelled"
+            ]
+          },
+          "pauseReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "manual",
+              "platform_limit",
+              "provider_quota",
+              "provider_credits",
+              null
+            ]
+          },
+          "pauseDetail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pausedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "resumeAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For a platform_limit pause: when sending resumes (after 00:00 UTC)."
+          },
+          "version": {
+            "type": "integer",
+            "description": "Each edit increments it."
+          },
+          "templateId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preheader": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fromName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fromEmail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replyTo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hasContent": {
+            "type": "boolean"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/CampaignAudience"
+          },
+          "trackOpens": {
+            "type": "boolean"
+          },
+          "trackClicks": {
+            "type": "boolean"
+          },
+          "scheduledAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "completedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "recipientCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "exclusions": {
+            "$ref": "#/components/schemas/CampaignExclusions"
+          },
+          "snapshotDone": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "sent": {
+            "type": "integer",
+            "description": "Recipients sent so far."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "status",
+          "pauseReason",
+          "pauseDetail",
+          "pausedAt",
+          "resumeAt",
+          "version",
+          "templateId",
+          "subject",
+          "preheader",
+          "fromName",
+          "fromEmail",
+          "replyTo",
+          "hasContent",
+          "audience",
+          "trackOpens",
+          "trackClicks",
+          "scheduledAt",
+          "startedAt",
+          "completedAt",
+          "recipientCount",
+          "exclusions",
+          "snapshotDone",
+          "createdAt",
+          "updatedAt",
+          "sent"
+        ]
+      },
+      "CampaignAudience": {
+        "type": "object",
+        "properties": {
+          "listIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "maxItems": 10,
+            "default": [],
+            "description": "Subscribed members of these lists."
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "maxItems": 10,
+            "default": [],
+            "description": "Contacts with any of these tags."
+          },
+          "excludeListIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "maxItems": 10,
+            "default": [],
+            "description": "Leave out members of these lists, subscribed or not."
+          },
+          "excludeTagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "maxItems": 10,
+            "default": [],
+            "description": "Leave out contacts with these tags."
+          }
+        }
+      },
+      "CampaignExclusions": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "consent_unknown": {
+            "type": "integer"
+          },
+          "suppressed": {
+            "type": "integer"
+          },
+          "unsubscribed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "consent_unknown",
+          "suppressed",
+          "unsubscribed"
+        ]
+      },
+      "Campaign": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "regular",
+              "re-permission"
+            ],
+            "description": "Only a re-permission campaign includes contacts whose consent is unknown."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "scheduled",
+              "sending",
+              "paused",
+              "needs_decision",
+              "sent",
+              "cancelled"
+            ]
+          },
+          "pauseReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "manual",
+              "platform_limit",
+              "provider_quota",
+              "provider_credits",
+              null
+            ]
+          },
+          "pauseDetail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pausedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "resumeAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For a platform_limit pause: when sending resumes (after 00:00 UTC)."
+          },
+          "version": {
+            "type": "integer",
+            "description": "Each edit increments it."
+          },
+          "templateId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preheader": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fromName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fromEmail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replyTo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hasContent": {
+            "type": "boolean"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/CampaignAudience"
+          },
+          "trackOpens": {
+            "type": "boolean"
+          },
+          "trackClicks": {
+            "type": "boolean"
+          },
+          "scheduledAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "completedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "recipientCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "exclusions": {
+            "$ref": "#/components/schemas/CampaignExclusions"
+          },
+          "snapshotDone": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "status",
+          "pauseReason",
+          "pauseDetail",
+          "pausedAt",
+          "resumeAt",
+          "version",
+          "templateId",
+          "subject",
+          "preheader",
+          "fromName",
+          "fromEmail",
+          "replyTo",
+          "hasContent",
+          "audience",
+          "trackOpens",
+          "trackClicks",
+          "scheduledAt",
+          "startedAt",
+          "completedAt",
+          "recipientCount",
+          "exclusions",
+          "snapshotDone",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CampaignDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "regular",
+              "re-permission"
+            ],
+            "description": "Only a re-permission campaign includes contacts whose consent is unknown."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "scheduled",
+              "sending",
+              "paused",
+              "needs_decision",
+              "sent",
+              "cancelled"
+            ]
+          },
+          "pauseReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "manual",
+              "platform_limit",
+              "provider_quota",
+              "provider_credits",
+              null
+            ]
+          },
+          "pauseDetail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pausedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "resumeAt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For a platform_limit pause: when sending resumes (after 00:00 UTC)."
+          },
+          "version": {
+            "type": "integer",
+            "description": "Each edit increments it."
+          },
+          "templateId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preheader": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fromName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fromEmail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replyTo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hasContent": {
+            "type": "boolean"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/CampaignAudience"
+          },
+          "trackOpens": {
+            "type": "boolean"
+          },
+          "trackClicks": {
+            "type": "boolean"
+          },
+          "scheduledAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "completedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "recipientCount": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "exclusions": {
+            "$ref": "#/components/schemas/CampaignExclusions"
+          },
+          "snapshotDone": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/CampaignProgress"
+          },
+          "provider": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "connectionId": {
+                "type": "integer"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "connectionId",
+              "provider",
+              "name"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "status",
+          "pauseReason",
+          "pauseDetail",
+          "pausedAt",
+          "resumeAt",
+          "version",
+          "templateId",
+          "subject",
+          "preheader",
+          "fromName",
+          "fromEmail",
+          "replyTo",
+          "hasContent",
+          "audience",
+          "trackOpens",
+          "trackClicks",
+          "scheduledAt",
+          "startedAt",
+          "completedAt",
+          "recipientCount",
+          "exclusions",
+          "snapshotDone",
+          "createdAt",
+          "updatedAt",
+          "progress",
+          "provider"
+        ]
+      },
+      "CampaignProgress": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "sent": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer",
+            "description": "Not sent yet, and not uncertain."
+          },
+          "uncertain": {
+            "type": "integer",
+            "description": "In uncertain batches: they may or may not have been sent."
+          },
+          "batches": {
+            "type": "object",
+            "properties": {
+              "pending": {
+                "type": "integer"
+              },
+              "enqueued": {
+                "type": "integer"
+              },
+              "claimed": {
+                "type": "integer"
+              },
+              "done": {
+                "type": "integer"
+              },
+              "uncertain": {
+                "type": "integer"
+              },
+              "skipped": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "required": [
+          "total",
+          "sent",
+          "failed",
+          "skipped",
+          "pending",
+          "uncertain",
+          "batches"
+        ]
+      },
+      "CampaignEstimate": {
+        "type": "object",
+        "properties": {
+          "recipients": {
+            "type": "integer"
+          },
+          "excluded": {
+            "type": "object",
+            "properties": {
+              "consent_unknown": {
+                "type": "integer"
+              },
+              "suppressed": {
+                "type": "integer"
+              },
+              "unsubscribed": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "consent_unknown",
+              "suppressed",
+              "unsubscribed"
+            ]
+          },
+          "isEstimate": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Contacts can change before the snapshot, so the count is an estimate."
+          }
+        },
+        "required": [
+          "recipients",
+          "excluded",
+          "isEstimate"
+        ]
+      },
+      "CampaignChecklist": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            }
+          },
+          "blocked": {
+            "type": "boolean",
+            "description": "A failed item blocks the send."
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/CampaignEstimate"
+          }
+        },
+        "required": [
+          "items",
+          "blocked",
+          "estimate"
+        ]
+      },
+      "ChecklistItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "subject",
+              "preheader",
+              "content",
+              "unsubscribe_link",
+              "links",
+              "from_address",
+              "domain_auth",
+              "audience",
+              "connection",
+              "policy",
+              "free_budget"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "fix": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string",
+                "description": "A path in the admin app."
+              }
+            },
+            "required": [
+              "label",
+              "path"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "status",
+          "message",
+          "fix"
+        ]
+      },
+      "CampaignPreview": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "preheader": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "subject",
+          "preheader",
+          "html",
+          "text",
+          "missing"
+        ]
+      },
+      "CampaignPrepare": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "integer"
+          },
+          "campaignVersion": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "send_now",
+              "schedule"
+            ]
+          },
+          "scheduledAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "blocked": {
+            "type": "boolean"
+          },
+          "checklist": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            }
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/CampaignEstimate"
+          },
+          "provider": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "connectionId": {
+                "type": "integer"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "providerName": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "connectionId",
+              "provider",
+              "providerName",
+              "name"
+            ]
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass it to confirm. Null when a check failed."
+          },
+          "expiresAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "campaignId",
+          "campaignVersion",
+          "mode",
+          "scheduledAt",
+          "blocked",
+          "checklist",
+          "estimate",
+          "provider",
+          "token",
+          "expiresAt"
+        ]
+      },
+      "CampaignBatchList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CampaignBatch"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "CampaignBatch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "enqueued",
+              "claimed",
+              "done",
+              "uncertain",
+              "skipped"
+            ]
+          },
+          "recipientCount": {
+            "type": "integer"
+          },
+          "sent": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "open": {
+            "type": "integer",
+            "description": "Recipients without a known result. For an uncertain batch: they may have received it."
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "uncertainAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "status",
+          "recipientCount",
+          "sent",
+          "failed",
+          "skipped",
+          "open",
+          "attempts",
+          "uncertainAt",
+          "lastError"
+        ]
+      },
+      "CampaignBatchDecision": {
+        "type": "object",
+        "properties": {
+          "campaign": {
+            "$ref": "#/components/schemas/Campaign"
+          },
+          "batch": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "enqueued",
+                  "claimed",
+                  "done",
+                  "uncertain",
+                  "skipped"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "campaign",
+          "batch"
+        ]
       }
     },
     "parameters": {}
@@ -11553,6 +12626,2192 @@
           },
           "404": {
             "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns": {
+      "get": {
+        "operationId": "campaigns.list",
+        "summary": "List campaigns",
+        "description": "Returns the campaigns of the workspace, newest first.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "The `nextCursor` value from the previous page."
+            },
+            "required": false,
+            "description": "The `nextCursor` value from the previous page.",
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "description": "Items per page, at most 100."
+            },
+            "required": false,
+            "description": "Items per page, at most 100.",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "scheduled",
+                "sending",
+                "paused",
+                "needs_decision",
+                "sent",
+                "cancelled"
+              ]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "campaigns.create",
+        "summary": "Create a campaign draft",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:write",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "now",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "regular",
+                      "re-permission"
+                    ],
+                    "default": "regular"
+                  },
+                  "templateId": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "exclusiveMinimum": 0,
+                    "description": "Copies the template's content into the campaign. Later template edits do not change it."
+                  },
+                  "subject": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "preheader": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  },
+                  "fromName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "fromEmail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 320
+                  },
+                  "replyTo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 320
+                  },
+                  "audience": {
+                    "$ref": "#/components/schemas/CampaignAudience"
+                  },
+                  "trackOpens": {
+                    "type": "boolean"
+                  },
+                  "trackClicks": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}": {
+      "get": {
+        "operationId": "campaigns.get",
+        "summary": "Get a campaign",
+        "description": "Returns the campaign with its progress: sent, pending, and uncertain recipients. While the D1 daily limit stops writes, a sending campaign shows as paused with the reason platform_limit and the resume time (KTD24).",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "campaigns.update",
+        "summary": "Edit a campaign draft",
+        "description": "Changes a draft. Each edit increments the version, so a confirm token from an earlier prepare goes stale (R68). Sending the template id again copies its current content.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:write",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "regular",
+                      "re-permission"
+                    ]
+                  },
+                  "templateId": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "exclusiveMinimum": 0,
+                    "description": "Copies the template's content into the campaign. Later template edits do not change it."
+                  },
+                  "subject": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "preheader": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 300
+                  },
+                  "fromName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "fromEmail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 320
+                  },
+                  "replyTo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 320
+                  },
+                  "audience": {
+                    "$ref": "#/components/schemas/CampaignAudience"
+                  },
+                  "trackOpens": {
+                    "type": "boolean"
+                  },
+                  "trackClicks": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "campaigns.delete",
+        "summary": "Delete a campaign draft",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:write",
+        "x-envelopen-risk": "destructive",
+        "x-envelopen-mcp": "later",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/estimate": {
+      "get": {
+        "operationId": "campaigns.estimate",
+        "summary": "Estimate the audience",
+        "description": "Counts the contacts that the campaign would reach now, and the contacts it leaves out by reason (AE1). It is an estimate: the snapshot happens at send time.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignEstimate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/checklist": {
+      "get": {
+        "operationId": "campaigns.checklist",
+        "summary": "Run the pre-send checklist",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignChecklist"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/preview": {
+      "get": {
+        "operationId": "campaigns.preview",
+        "summary": "Preview a campaign",
+        "description": "Personalizes the campaign's content with a contact's values, or with sample values.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": false,
+            "name": "contactId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/prepare": {
+      "post": {
+        "operationId": "campaigns.prepare",
+        "summary": "Prepare a send or a schedule",
+        "description": "Runs the pre-send checklist and estimates the audience. When no check fails, it returns a short-lived confirm token, bound to the caller, the campaign version, and the mode. Nothing is sent until confirm.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:send",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "send_now",
+                      "schedule"
+                    ]
+                  },
+                  "scheduledAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "For mode schedule: Unix milliseconds, at least one minute ahead."
+                  }
+                },
+                "required": [
+                  "mode"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignPrepare"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/confirm": {
+      "post": {
+        "operationId": "campaigns.confirm",
+        "summary": "Confirm a send or a schedule",
+        "description": "Spends the token from prepare. Send now starts the snapshot and the send at once. Schedule sets the time, and the cron starts the send then. The token fails after an edit (stale), after its time (expired), on a second use, and for another caller.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:send",
+        "x-envelopen-risk": "external_send",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "token"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/unschedule": {
+      "post": {
+        "operationId": "campaigns.unschedule",
+        "summary": "Unschedule a campaign",
+        "description": "Moves a scheduled campaign back to draft. A new send needs a new prepare and confirm.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:send",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/pause": {
+      "post": {
+        "operationId": "campaigns.pause",
+        "summary": "Pause a campaign",
+        "description": "Stops sending. Batches in flight finish. Queued batches wait until resume (R34).",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:send",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/resume": {
+      "post": {
+        "operationId": "campaigns.resume",
+        "summary": "Resume a campaign",
+        "description": "Sends the rest of a paused campaign. A platform_limit pause resumes on its own after 00:00 UTC, and cannot resume before.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:send",
+        "x-envelopen-risk": "external_send",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/cancel": {
+      "post": {
+        "operationId": "campaigns.cancel",
+        "summary": "Cancel a campaign",
+        "description": "Stops the campaign for good. Recipients who got it keep it.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:send",
+        "x-envelopen-risk": "destructive",
+        "x-envelopen-mcp": "later",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/batches": {
+      "get": {
+        "operationId": "campaigns.batches",
+        "summary": "List a campaign's batches",
+        "description": "Lists batches, for example the uncertain ones that wait for a decision.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "enqueued",
+                "claimed",
+                "done",
+                "uncertain",
+                "skipped"
+              ]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignBatchList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/batches/{batchId}/retry": {
+      "post": {
+        "operationId": "campaigns.retry_batch",
+        "summary": "Retry an uncertain batch",
+        "description": "Sends the batch's open recipients again. The provider may have sent them already, so they can get the email twice. The input must accept that risk.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:send",
+        "x-envelopen-risk": "external_send",
+        "x-envelopen-mcp": "later",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "batchId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "acceptDuplicateRisk": {
+                    "type": "boolean",
+                    "enum": [
+                      true
+                    ],
+                    "description": "Confirms that recipients may get the email twice."
+                  }
+                },
+                "required": [
+                  "acceptDuplicateRisk"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignBatchDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/batches/{batchId}/skip": {
+      "post": {
+        "operationId": "campaigns.skip_batch",
+        "summary": "Skip an uncertain batch",
+        "description": "Gives up on the batch's open recipients. Nothing is sent to them again.",
+        "tags": [
+          "campaigns"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:send",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "later",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "batchId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignBatchDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
             "content": {
               "application/json": {
                 "schema": {

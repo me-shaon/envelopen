@@ -1,0 +1,217 @@
+import type { DbConnection } from "@envelopen/db";
+import { getAdapter } from "@envelopen/providers";
+import { sql } from "kysely";
+import type { CampaignJob, SendQueue } from "../services";
+import { exclusionCountsOf, insertPageRecipientsQuery, pageExclusionsQuery } from "./audience";
+import { dispatchAll } from "./dispatch";
+import { type FinalizeResult, tryFinalizeCampaign } from "./finalize";
+import {
+  EXCLUSION_REASONS,
+  type ExclusionCounts,
+  emptyExclusions,
+  parseAudience,
+  SNAPSHOT_PAGE_CONTACTS,
+} from "./model";
+import { transitionCampaign } from "./state-machine";
+
+// The recipient snapshot (R36, KTD22). The campaign Workflow
+// (apps/worker/src/workflows/campaign-workflow.ts) runs it as steps:
+//
+// 1. `beginSnapshot` fixes the stable cut: the highest contact id of the workspace at
+//    the start. A contact imported later has a higher id and never joins (KTD22).
+// 2. `snapshotPage` takes the next SNAPSHOT_PAGE_CONTACTS contacts by id. One D1 batch
+//    inserts the recipients with INSERT ... SELECT, groups the new recipients into
+//    batches of the adapter's size, and records each recipient's batch. Then it
+//    dispatches the new batches, so sending starts while the snapshot goes on.
+// 3. `finishSnapshot` stores the totals and lets the campaign finish.
+//
+// The work is set-based, so the Worker spends almost no CPU per page, and every page is
+// safe to repeat: the unique (campaign, contact) key skips recipients that exist, and
+// only recipients without a batch get one.
+
+export type SnapshotStart =
+  | { state: "run"; cut: number; batchSize: number }
+  | { state: "stop"; reason: string };
+
+export type PageOutcome =
+  | {
+      kind: "page";
+      nextAfterId: number;
+      done: boolean;
+      recipients: number;
+      excluded: ExclusionCounts;
+      dispatched: number;
+    }
+  | { kind: "stop"; reason: string };
+
+async function campaignState(db: DbConnection, job: CampaignJob) {
+  return db.db
+    .selectFrom("campaigns")
+    .leftJoin("provider_connections as pc", (join) =>
+      join
+        .onRef("pc.id", "=", "campaigns.connection_id")
+        .on("pc.workspace_id", "=", job.workspaceId),
+    )
+    .select([
+      "campaigns.status",
+      "campaigns.type",
+      "campaigns.audience",
+      "campaigns.snapshot_max_contact_id",
+      "campaigns.snapshot_done_at",
+      "pc.provider",
+    ])
+    .where("campaigns.workspace_id", "=", job.workspaceId)
+    .where("campaigns.id", "=", job.campaignId)
+    .executeTakeFirst();
+}
+
+/** A snapshot runs while the campaign sends or is paused. A cancel stops it. */
+function snapshotStops(status: string | undefined): string | null {
+  if (status === undefined) return "The campaign no longer exists.";
+  if (status !== "sending" && status !== "paused") return `The campaign is ${status}.`;
+  return null;
+}
+
+export async function beginSnapshot(db: DbConnection, job: CampaignJob): Promise<SnapshotStart> {
+  const state = await campaignState(db, job);
+  const stop = snapshotStops(state?.status);
+  if (stop || !state) return { state: "stop", reason: stop ?? "Missing campaign." };
+  if (state.snapshot_done_at !== null) return { state: "stop", reason: "The snapshot is done." };
+  const adapter = state.provider ? getAdapter(state.provider) : undefined;
+  if (!adapter) {
+    // The connection was removed after confirm. The owner fixes it and resumes.
+    await transitionCampaign(
+      db,
+      job.workspaceId,
+      job.campaignId,
+      ["sending"],
+      "paused",
+      Date.now(),
+      {
+        pause_reason: "manual",
+        pause_detail:
+          "The provider connection of this campaign is gone. Select a connection, then resume.",
+        paused_at: Date.now(),
+      },
+    );
+    return { state: "stop", reason: "The campaign has no usable connection." };
+  }
+
+  // The first run fixes the cut. A repeated run keeps it.
+  await sql`
+UPDATE campaigns SET snapshot_max_contact_id = (
+  SELECT COALESCE(MAX(id), 0) FROM contacts WHERE workspace_id = ${job.workspaceId}
+)
+WHERE workspace_id = ${job.workspaceId} AND id = ${job.campaignId} AND snapshot_max_contact_id IS NULL`.execute(
+    db.db,
+  );
+  const fixed = await campaignState(db, job);
+  return {
+    state: "run",
+    cut: fixed?.snapshot_max_contact_id ?? 0,
+    batchSize: adapter.capabilities.batchSize,
+  };
+}
+
+export async function snapshotPage(
+  db: DbConnection,
+  queue: SendQueue,
+  job: CampaignJob,
+  page: { afterId: number; cut: number; batchSize: number; pageSize?: number },
+  now: number,
+): Promise<PageOutcome> {
+  const state = await campaignState(db, job);
+  const stop = snapshotStops(state?.status);
+  if (stop || !state) return { kind: "stop", reason: stop ?? "Missing campaign." };
+  const { workspaceId, campaignId } = job;
+  const audience = parseAudience(state.audience);
+  const pageSize = page.pageSize ?? SNAPSHOT_PAGE_CONTACTS;
+
+  // The upper contact id of this page, and the next batch number.
+  const [last, seq] = await Promise.all([
+    db.db
+      .selectFrom("contacts")
+      .select("id")
+      .where("workspace_id", "=", workspaceId)
+      .where("id", ">", page.afterId)
+      .where("id", "<=", page.cut)
+      .orderBy("id", "asc")
+      .limit(1)
+      .offset(pageSize - 1)
+      .executeTakeFirst(),
+    db.db
+      .selectFrom("campaign_batches")
+      .select((eb) => eb.fn.max<number | null>("seq").as("max"))
+      .where("workspace_id", "=", workspaceId)
+      .where("campaign_id", "=", campaignId)
+      .executeTakeFirst(),
+  ]);
+  const toId = last?.id ?? page.cut;
+  const done = last === undefined || toId >= page.cut;
+  // Inlined as integer literals: D1 binds JavaScript numbers as REAL, and the batch
+  // number must come from integer division.
+  const base = Math.trunc(Number(seq?.max ?? 0)) + 1;
+  const size = Math.max(1, Math.trunc(page.batchSize));
+
+  const results = await db.atomic<{ reason: string | null; n: number }>([
+    pageExclusionsQuery(db.db, workspaceId, audience, state.type, page.afterId, toId),
+    insertPageRecipientsQuery(
+      db.db,
+      workspaceId,
+      campaignId,
+      audience,
+      state.type,
+      page.afterId,
+      toId,
+    ),
+    sql`
+INSERT INTO campaign_batches (workspace_id, campaign_id, seq, recipient_count, updated_at)
+SELECT ${workspaceId}, ${campaignId}, ${sql.lit(base)} + grp, count(*), ${now} FROM (
+  SELECT (row_number() OVER (ORDER BY id) - 1) / ${sql.lit(size)} AS grp
+  FROM campaign_recipients
+  WHERE workspace_id = ${workspaceId} AND campaign_id = ${campaignId} AND batch_id IS NULL
+) GROUP BY grp`.compile(db.db),
+    sql`
+UPDATE campaign_recipients SET batch_id = v.bid FROM (
+  SELECT r.rid, b.id AS bid FROM (
+    SELECT id AS rid, (row_number() OVER (ORDER BY id) - 1) / ${sql.lit(size)} AS grp
+    FROM campaign_recipients
+    WHERE workspace_id = ${workspaceId} AND campaign_id = ${campaignId} AND batch_id IS NULL
+  ) r
+  JOIN campaign_batches b ON b.workspace_id = ${workspaceId} AND b.campaign_id = ${campaignId} AND b.seq = ${sql.lit(base)} + r.grp
+) v
+WHERE campaign_recipients.workspace_id = ${workspaceId} AND campaign_recipients.id = v.rid`.compile(
+      db.db,
+    ),
+  ]);
+  const excluded = exclusionCountsOf(results[0]?.results ?? []);
+  const recipients = results[1]?.meta.changes ?? 0;
+
+  // Sending starts while the snapshot goes on. A paused campaign dispatches at resume.
+  const dispatched = await dispatchAll(db, queue, workspaceId, campaignId, now);
+  return { kind: "page", nextAfterId: toId, done, recipients, excluded, dispatched };
+}
+
+export function addExclusions(a: ExclusionCounts, b: ExclusionCounts): ExclusionCounts {
+  const sum = emptyExclusions();
+  for (const reason of EXCLUSION_REASONS) sum[reason] = a[reason] + b[reason];
+  return sum;
+}
+
+/** Stores the totals and marks the snapshot done. The campaign can then finish. */
+export async function finishSnapshot(
+  db: DbConnection,
+  job: CampaignJob,
+  excluded: ExclusionCounts,
+  now: number,
+): Promise<FinalizeResult> {
+  const { workspaceId, campaignId } = job;
+  await sql`
+UPDATE campaigns SET
+  snapshot_done_at = COALESCE(snapshot_done_at, ${now}),
+  recipient_count = (SELECT count(*) FROM campaign_recipients WHERE workspace_id = ${workspaceId} AND campaign_id = ${campaignId}),
+  exclusions = ${JSON.stringify(excluded)},
+  updated_at = ${now}
+WHERE workspace_id = ${workspaceId} AND id = ${campaignId}`.execute(db.db);
+  return tryFinalizeCampaign(db, workspaceId, campaignId, now);
+}

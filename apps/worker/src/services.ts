@@ -1,4 +1,6 @@
 import {
+  type BatchPointer,
+  type CampaignJob,
   type CredentialCipher,
   createCredentialCipher,
   createEmailHasher,
@@ -6,9 +8,12 @@ import {
   type EmailHasher,
   type FileLinkSigner,
   type ImportJob,
+  type SendQueue,
   type Services,
 } from "@envelopen/core";
+import { createTokenSigner, type TokenSigner, tokenKeysFromEnv } from "@envelopen/email-render";
 import { isUsableKey } from "./auth/better-auth";
+import { usageReader } from "./do/usage";
 
 // Builds the platform services that operations need from the Worker's bindings (see
 // packages/core/src/services.ts). The keyed hasher, the link signer, and the
@@ -22,6 +27,7 @@ interface KeyedServices {
 
 let keyed: KeyedServices | undefined;
 let cipher: { key: string; value: Promise<CredentialCipher> } | undefined;
+let tokens: { keys: string; value: Promise<TokenSigner> } | undefined;
 
 /** ENCRYPTION_KEY is key version 1. A rotation adds version 2 next to it. */
 const ENCRYPTION_KEY_VERSION = 1;
@@ -80,6 +86,69 @@ export function fileLinkSigner(env: Pick<Env, "SIGNING_KEY">): Promise<FileLinkS
   return isUsableKey(env.SIGNING_KEY) ? keyedServices(env.SIGNING_KEY).signer : null;
 }
 
+/**
+ * The signer of unsubscribe and tracking tokens (KTD28): SIGNING_KEY signs, and the
+ * retired keys still verify. The key derivation runs once per isolate.
+ */
+export function tokenSigner(
+  env: Pick<Env, "SIGNING_KEY" | "SIGNING_KEYS_RETIRED">,
+): Promise<TokenSigner> {
+  const current = env.SIGNING_KEY;
+  if (!isUsableKey(current)) return Promise.reject(new Error("SIGNING_KEY is missing."));
+  const keys = `${current}|${env.SIGNING_KEYS_RETIRED ?? ""}`;
+  if (tokens?.keys !== keys) {
+    tokens = {
+      keys,
+      value: createTokenSigner(tokenKeysFromEnv(current, env.SIGNING_KEYS_RETIRED)),
+    };
+  }
+  return tokens.value;
+}
+
+/** The send queue as the engine uses it: pointers in calls of at most 100 messages. */
+export function sendQueue(env: Pick<Env, "SEND_QUEUE">): SendQueue {
+  return {
+    async send(pointers: readonly BatchPointer[]) {
+      for (let start = 0; start < pointers.length; start += 100) {
+        await env.SEND_QUEUE.sendBatch(
+          pointers
+            .slice(start, start + 100)
+            .map((body) => ({ body, contentType: "json" as const })),
+        );
+      }
+    },
+  };
+}
+
+/** The Workflow instance id of a campaign start. */
+export function campaignInstanceId(job: CampaignJob): string {
+  return `campaign-${job.workspaceId}-${job.campaignId}-${job.startedAt}`;
+}
+
+/**
+ * Starts the snapshot Workflow of a campaign. The sweep calls it again for a snapshot
+ * that did not finish: a running instance keeps running, and an instance that failed
+ * gets a successor, because the snapshot is safe to repeat.
+ */
+export function campaignStarter(env: Pick<Env, "CAMPAIGN_WORKFLOW">) {
+  return async (job: CampaignJob): Promise<void> => {
+    const id = campaignInstanceId(job);
+    try {
+      await env.CAMPAIGN_WORKFLOW.create({ id, params: job });
+      return;
+    } catch (error) {
+      let status: string;
+      try {
+        status = (await (await env.CAMPAIGN_WORKFLOW.get(id)).status()).status;
+      } catch {
+        throw error;
+      }
+      if (status !== "errored" && status !== "terminated") return;
+      await env.CAMPAIGN_WORKFLOW.create({ id: `${id}-r${Date.now()}`, params: job });
+    }
+  };
+}
+
 /** The Workflow instance id of an import run. Each run has its own. */
 export function importInstanceId(job: ImportJob): string {
   return `import-${job.workspaceId}-${job.importId}-${job.mode}-${job.generation}`;
@@ -88,7 +157,14 @@ export function importInstanceId(job: ImportJob): string {
 export function createServices(
   env: Pick<
     Env,
-    "BUCKET" | "IMPORT_WORKFLOW" | "SIGNING_KEY" | "ENCRYPTION_KEY" | "OUTBOUND_MOCK_ORIGIN"
+    | "BUCKET"
+    | "IMPORT_WORKFLOW"
+    | "CAMPAIGN_WORKFLOW"
+    | "SEND_QUEUE"
+    | "USAGE_METER"
+    | "SIGNING_KEY"
+    | "ENCRYPTION_KEY"
+    | "OUTBOUND_MOCK_ORIGIN"
   >,
   request?: Request,
 ): Partial<Services> {
@@ -98,6 +174,9 @@ export function createServices(
       await env.IMPORT_WORKFLOW.create({ id: importInstanceId(job), params: job });
     },
     outboundFetch: outboundFetch(env),
+    startCampaignJob: campaignStarter(env),
+    sendQueue: sendQueue(env),
+    usage: usageReader(env),
   };
   // Webhook URLs point at the origin that the owner uses for the admin app.
   if (request) services.appOrigin = new URL(request.url).origin;

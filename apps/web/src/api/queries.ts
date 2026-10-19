@@ -50,6 +50,41 @@ export const apiKeyPresetsQuery = queryOptions({
   staleTime: Number.POSITIVE_INFINITY,
 });
 
+// Audit log (U17) ------------------------------------------------------------------------
+
+export interface AuditFilters {
+  surface?: "ui" | "rest" | "mcp" | "system" | undefined;
+  action?: string | undefined;
+}
+
+export function auditLogQuery(workspaceId: number, filters: AuditFilters) {
+  return infiniteQueryOptions({
+    queryKey: ["ws", workspaceId, "audit-log", filters],
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.GET("/audit-log", {
+          params: {
+            query: {
+              limit: 50,
+              ...(filters.surface ? { surface: filters.surface } : {}),
+              ...(filters.action ? { action: filters.action } : {}),
+              ...(pageParam ? { cursor: pageParam } : {}),
+            },
+          },
+        }),
+      ),
+    initialPageParam: "",
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+
+export function auditActionsQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "audit-log", "actions"],
+    queryFn: () => unwrap(api.GET("/audit-log/actions")),
+  });
+}
+
 // Contacts (U6) ------------------------------------------------------------------------
 
 export interface ContactFilters {

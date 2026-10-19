@@ -50,6 +50,12 @@ export { SendingDomainSchema } from "./domains/operations";
 export { isOperationError, OperationError, type OperationErrorCode } from "./errors";
 export * from "./events";
 export { type OperationDeps, runOperation } from "./executor";
+export {
+  type ContactExport,
+  ContactExportSchema,
+  MAX_EXPORT_ROWS,
+} from "./gdpr/export";
+export { contactsErase, contactsExport } from "./gdpr/operations";
 export { cleanupExpiredFiles } from "./import/cleanup";
 export { csvCell, csvLine, parseCsv } from "./import/csv";
 export { buildContactsCsv } from "./import/export";

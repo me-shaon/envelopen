@@ -55,6 +55,7 @@ import {
   domainsList,
   domainsUpdate,
 } from "../domains/operations";
+import { contactsErase, contactsExport } from "../gdpr/operations";
 import { exportsCreate, exportsList } from "../import/export";
 import {
   importsCreate,
@@ -94,7 +95,7 @@ import {
 } from "../templates/operations";
 import { usageGet } from "../usage/operations";
 import { apiKeysCreate, apiKeysList, apiKeysPresets, apiKeysRevoke } from "./operations/api-keys";
-import { auditList } from "./operations/audit";
+import { auditActions, auditList } from "./operations/audit";
 import { onboardingStatus } from "./operations/onboarding";
 import { workspaceContextGet } from "./operations/workspace-context";
 import {
@@ -125,7 +126,7 @@ export {
   CreatedApiKeySchema,
   resolveKeyScopes,
 } from "./operations/api-keys";
-export { AuditEntrySchema, auditList } from "./operations/audit";
+export { AuditEntrySchema, auditActions, auditList } from "./operations/audit";
 export {
   ONBOARDING_GUIDES,
   ONBOARDING_STATUSES,
@@ -172,6 +173,7 @@ export const registry = createRegistry([
   apiKeysCreate,
   apiKeysRevoke,
   auditList,
+  auditActions,
   onboardingStatus,
   // Contacts. `contacts.count` comes before `contacts.get`, so /contacts/count is not an id.
   contactsList,
@@ -180,6 +182,9 @@ export const registry = createRegistry([
   contactsUpsert,
   contactsUpdate,
   contactsDelete,
+  // Data rights (U17): the JSON export and the erase of one contact (R21).
+  contactsExport,
+  contactsErase,
   contactsAddTags,
   contactsRemoveTag,
   consentList,

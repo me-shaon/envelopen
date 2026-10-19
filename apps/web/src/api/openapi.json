@@ -279,6 +279,13 @@
               "null"
             ]
           },
+          "apiKeyName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The name of the API key that acted, when it still exists."
+          },
           "action": {
             "type": "string"
           },
@@ -312,11 +319,26 @@
           "actorId",
           "surface",
           "apiKeyId",
+          "apiKeyName",
           "action",
           "targetType",
           "targetId",
           "metadata",
           "createdAt"
+        ]
+      },
+      "AuditActions": {
+        "type": "object",
+        "properties": {
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "actions"
         ]
       },
       "OnboardingStatus": {
@@ -619,6 +641,325 @@
           "warnings"
         ]
       },
+      "ContactExport": {
+        "type": "object",
+        "properties": {
+          "exportedAt": {
+            "type": "integer",
+            "description": "Unix milliseconds."
+          },
+          "contact": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "email": {
+                "type": "string"
+              },
+              "firstName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lastName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "subscribed",
+                  "unsubscribed",
+                  "suppressed"
+                ]
+              },
+              "consentBasis": {
+                "$ref": "#/components/schemas/ConsentBasis"
+              },
+              "consentSource": {
+                "type": "string"
+              },
+              "consentAt": {
+                "type": "integer",
+                "description": "Unix milliseconds."
+              },
+              "source": {
+                "type": "string",
+                "description": "For example `ui`, `import:12`, or `api_key:3`."
+              },
+              "unsubscribedAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "unsubscribeSource": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "unsubscribeCampaignId": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "suppressionReason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "suppressedAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TagRef"
+                }
+              },
+              "lists": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ListMembership"
+                }
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": "Custom field values by field key."
+              },
+              "createdAt": {
+                "type": "integer"
+              },
+              "updatedAt": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "email",
+              "firstName",
+              "lastName",
+              "status",
+              "consentBasis",
+              "consentSource",
+              "consentAt",
+              "source",
+              "unsubscribedAt",
+              "unsubscribeSource",
+              "unsubscribeCampaignId",
+              "suppressionReason",
+              "suppressedAt",
+              "tags",
+              "lists",
+              "fields",
+              "createdAt",
+              "updatedAt"
+            ],
+            "description": "The contact with tags, list memberships, custom fields, and status."
+          },
+          "suppression": {
+            "type": "object",
+            "properties": {
+              "suppressed": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "since": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "suppressed",
+              "reason",
+              "since"
+            ],
+            "description": "Whether Envelopen blocks all email to the address."
+          },
+          "consentEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentEvent"
+            },
+            "description": "Oldest first."
+          },
+          "campaigns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "campaignId": {
+                  "type": "integer"
+                },
+                "campaignName": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "sent",
+                    "failed",
+                    "skipped"
+                  ]
+                },
+                "skipReason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sentAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "openedAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "clickedAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "campaignId",
+                "campaignName",
+                "subject",
+                "status",
+                "skipReason",
+                "sentAt",
+                "openedAt",
+                "clickedAt"
+              ]
+            },
+            "description": "Campaigns that included the contact, oldest first."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "campaignId": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The link of a click."
+                },
+                "machine": {
+                  "type": "boolean",
+                  "description": "An open that a mail privacy proxy made."
+                },
+                "bot": {
+                  "type": "boolean",
+                  "description": "A click that a link scanner made."
+                },
+                "occurredAt": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "type",
+                "campaignId",
+                "url",
+                "machine",
+                "bot",
+                "occurredAt"
+              ]
+            },
+            "description": "Opens, clicks, bounces, and other email events, oldest first."
+          },
+          "providerEvents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "occurredAt": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "provider",
+                "type",
+                "detail",
+                "occurredAt"
+              ]
+            },
+            "description": "Raw delivery events from the email provider, oldest first."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when a list reached 5000 rows and older rows are left out."
+          }
+        },
+        "required": [
+          "exportedAt",
+          "contact",
+          "suppression",
+          "consentEvents",
+          "campaigns",
+          "events",
+          "providerEvents",
+          "truncated"
+        ]
+      },
       "ConsentEvent": {
         "type": "object",
         "properties": {
@@ -661,6 +1002,45 @@
           "actorId",
           "note",
           "createdAt"
+        ]
+      },
+      "ContactEraseResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "erasedAt": {
+            "type": "integer"
+          },
+          "removed": {
+            "type": "object",
+            "properties": {
+              "events": {
+                "type": "integer"
+              },
+              "providerEvents": {
+                "type": "integer"
+              },
+              "recipients": {
+                "type": "integer"
+              },
+              "auditEntries": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "events",
+              "providerEvents",
+              "recipients",
+              "auditEntries"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "erasedAt",
+          "removed"
         ]
       },
       "List": {
@@ -5575,7 +5955,7 @@
       "get": {
         "operationId": "audit.list",
         "summary": "List audit log entries",
-        "description": "Returns the workspace's audit log, newest first, with cursor pagination.",
+        "description": "Returns the workspace's audit log, newest first, with cursor pagination. Filter by surface (`ui`, `rest`, `mcp`, or `system`) or by action (an operation id).",
         "tags": [
           "audit"
         ],
@@ -5588,6 +5968,30 @@
         "x-envelopen-risk": "read",
         "x-envelopen-mcp": "never",
         "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ui",
+                "rest",
+                "mcp",
+                "system"
+              ]
+            },
+            "required": false,
+            "name": "surface",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": false,
+            "name": "action",
+            "in": "query"
+          },
           {
             "schema": {
               "type": "string",
@@ -5640,6 +6044,96 @@
                     "items",
                     "nextCursor"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit-log/actions": {
+      "get": {
+        "operationId": "audit.actions",
+        "summary": "List the actions in the audit log",
+        "description": "Returns the distinct actions (operation ids) in the workspace's audit log.",
+        "tags": [
+          "audit"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "never",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditActions"
                 }
               }
             }
@@ -6613,6 +7107,268 @@
           },
           "404": {
             "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contacts/{id}/export": {
+      "post": {
+        "operationId": "contacts.export",
+        "summary": "Export one contact's data",
+        "description": "Returns everything Envelopen holds about one contact as JSON: the contact with tags, list memberships, and custom fields, the suppression status, the consent history, the campaigns that included the contact, and the email and provider events. Use it to answer a data access request. The audit log records the export.",
+        "tags": [
+          "contacts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "contacts:export",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "later",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactExport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contacts/{id}/erase": {
+      "post": {
+        "operationId": "contacts.erase",
+        "summary": "Erase one contact's data",
+        "description": "Removes the contact's personal data: the contact, tags, list memberships, custom fields, consent history, raw email and provider events, the contact link on campaign recipients, and audit metadata about the contact. Campaign counts stay. A suppression keyed on a hash of the address stays, so an import or an upsert of the address stays suppressed. `confirm` must repeat the contact's email address. This cannot be undone.",
+        "tags": [
+          "contacts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "contacts:delete",
+        "x-envelopen-risk": "destructive",
+        "x-envelopen-mcp": "later",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirm": {
+                    "type": "string",
+                    "maxLength": 320,
+                    "description": "The contact's email address, typed again to confirm."
+                  }
+                },
+                "required": [
+                  "confirm"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactEraseResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different body.",
             "content": {
               "application/json": {
                 "schema": {

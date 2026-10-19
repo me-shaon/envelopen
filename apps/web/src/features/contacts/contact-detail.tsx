@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeftIcon, PlusIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, DownloadIcon, PlusIcon, XIcon } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { api, type Schemas, unwrap } from "@/api/client";
 import { consentQuery, contactQuery } from "@/api/queries";
@@ -269,12 +269,112 @@ function ConsentHistory({ contact }: { contact: Contact }) {
   );
 }
 
+/** Saves the export as a JSON file in the browser. */
+function downloadJson(filename: string, data: unknown) {
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  // Revoke later: the browser reads the blob after the click returns.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** The erase confirmation (R21). The owner types the address, because erase is final. */
+function EraseDialog({
+  contact,
+  open,
+  onOpenChange,
+  onErased,
+}: {
+  contact: Contact;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onErased: () => Promise<void>;
+}) {
+  const [typed, setTyped] = useState("");
+  const erase = useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.POST("/contacts/{id}/erase", {
+          params: { path: { id: contact.id } },
+          body: { confirm: typed },
+        }),
+      ),
+    onSuccess: onErased,
+  });
+  const matches = typed.trim().toLowerCase() === contact.email;
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (matches) erase.mutate();
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          setTyped("");
+          erase.reset();
+        }
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="max-w-[480px]">
+        <DialogHeader
+          title="Erase this contact?"
+          description="Use this for a deletion request under GDPR. You cannot undo it."
+        />
+        <form className="flex flex-col gap-5" onSubmit={onSubmit}>
+          <FormError message={errorText(erase.error)} />
+          <ul className="m-0 flex list-disc flex-col gap-1.5 pl-5 text-[13px] text-muted-foreground">
+            <li>
+              Envelopen removes the contact, its tags, lists, custom fields, consent history, opens,
+              clicks, and provider events.
+            </li>
+            <li>Campaign totals stay, without the person.</li>
+            <li>
+              A hash of the address stays on the suppression list, so an import cannot add the
+              address back.
+            </li>
+          </ul>
+          <Field
+            id="erase-confirm"
+            label={`Type ${contact.email} to confirm`}
+            hint="Export the data first if the person asked for a copy."
+          >
+            <Input
+              id="erase-confirm"
+              autoComplete="off"
+              spellCheck={false}
+              value={typed}
+              onChange={(event) => setTyped(event.target.value)}
+              aria-describedby="erase-confirm-hint"
+            />
+          </Field>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="destructive" disabled={!matches || erase.isPending}>
+              Erase contact
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ContactDetailPage({ contactId }: { contactId: number }) {
   const { current } = useCurrentWorkspace();
   const navigate = useNavigate();
   const invalidate = useInvalidateContacts();
   const contact = useQuery(contactQuery(current.id, contactId));
-  const [confirm, setConfirm] = useState<"unsubscribe" | "delete" | null>(null);
+  const [confirm, setConfirm] = useState<"unsubscribe" | "erase" | null>(null);
 
   const unsubscribe = useMutation({
     mutationFn: () =>
@@ -289,13 +389,10 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
       await invalidate();
     },
   });
-  const remove = useMutation({
-    mutationFn: () => unwrap(api.DELETE("/contacts/{id}", { params: { path: { id: contactId } } })),
-    onSuccess: async () => {
-      setConfirm(null);
-      await invalidate();
-      await navigate({ to: "/contacts" });
-    },
+  const exportData = useMutation({
+    mutationFn: () =>
+      unwrap(api.POST("/contacts/{id}/export", { params: { path: { id: contactId } } })),
+    onSuccess: (data) => downloadJson(`contact-${contactId}.json`, data),
   });
 
   const back = (
@@ -351,11 +448,20 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
                 Unsubscribe from all
               </Button>
             ) : null}
-            <Button variant="ghost" onClick={() => setConfirm("delete")}>
-              Delete
+            <Button
+              variant="outline"
+              onClick={() => exportData.mutate()}
+              disabled={exportData.isPending}
+            >
+              <DownloadIcon className="size-3.5" aria-hidden="true" />
+              Export data
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirm("erase")}>
+              Erase
             </Button>
           </div>
         </div>
+        <FormError message={errorText(exportData.error)} />
         <StateBanner contact={data} />
       </div>
 
@@ -441,17 +547,15 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
         pending={unsubscribe.isPending}
         onConfirm={() => unsubscribe.mutate()}
       />
-      <ConfirmDialog
-        open={confirm === "delete"}
-        onOpenChange={(open) => !open && setConfirm(null)}
-        title={`Delete ${data.email}?`}
-        description={
-          errorText(remove.error) ??
-          "This removes the contact, its tags, lists, and consent history. An address that unsubscribed stays suppressed, so an import cannot add it back. To stop email only, unsubscribe instead."
-        }
-        confirmLabel="Delete"
-        pending={remove.isPending}
-        onConfirm={() => remove.mutate()}
+      <EraseDialog
+        contact={data}
+        open={confirm === "erase"}
+        onOpenChange={(open) => setConfirm(open ? "erase" : null)}
+        onErased={async () => {
+          setConfirm(null);
+          await navigate({ to: "/contacts" });
+          await invalidate();
+        }}
       />
     </div>
   );

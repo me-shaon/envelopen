@@ -162,9 +162,29 @@ export interface paths {
         };
         /**
          * List audit log entries
-         * @description Returns the workspace's audit log, newest first, with cursor pagination.
+         * @description Returns the workspace's audit log, newest first, with cursor pagination. Filter by surface (`ui`, `rest`, `mcp`, or `system`) or by action (an operation id).
          */
         get: operations["audit.list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit-log/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the actions in the audit log
+         * @description Returns the distinct actions (operation ids) in the workspace's audit log.
+         */
+        get: operations["audit.actions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -263,6 +283,46 @@ export interface paths {
          * @description Changes names and custom fields. `unsubscribe: true` unsubscribes the contact from every list and keeps it visible with the source and time. No call reverses an unsubscribe. The contact resubscribes on the preference page.
          */
         patch: operations["contacts.update"];
+        trace?: never;
+    };
+    "/contacts/{id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export one contact's data
+         * @description Returns everything Envelopen holds about one contact as JSON: the contact with tags, list memberships, and custom fields, the suppression status, the consent history, the campaigns that included the contact, and the email and provider events. Use it to answer a data access request. The audit log records the export.
+         */
+        post: operations["contacts.export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contacts/{id}/erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Erase one contact's data
+         * @description Removes the contact's personal data: the contact, tags, list memberships, custom fields, consent history, raw email and provider events, the contact link on campaign recipients, and audit metadata about the contact. Campaign counts stay. A suppression keyed on a hash of the address stays, so an import or an upsert of the address stays suppressed. `confirm` must repeat the contact's email address. This cannot be undone.
+         */
+        post: operations["contacts.erase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/contacts/{id}/tags": {
@@ -1548,6 +1608,8 @@ export interface components {
             /** @enum {string} */
             surface: "ui" | "rest" | "mcp" | "system";
             apiKeyId: number | null;
+            /** @description The name of the API key that acted, when it still exists. */
+            apiKeyName: string | null;
             action: string;
             targetType: string | null;
             targetId: string | null;
@@ -1556,6 +1618,9 @@ export interface components {
             } | null;
             /** @description Unix milliseconds. */
             createdAt: number;
+        };
+        AuditActions: {
+            actions: string[];
         };
         OnboardingStatus: {
             steps: components["schemas"]["OnboardingStep"][];
@@ -1632,6 +1697,79 @@ export interface components {
             created: boolean;
             warnings: string[];
         };
+        ContactExport: {
+            /** @description Unix milliseconds. */
+            exportedAt: number;
+            /** @description The contact with tags, list memberships, custom fields, and status. */
+            contact: {
+                id: number;
+                email: string;
+                firstName: string | null;
+                lastName: string | null;
+                /** @enum {string} */
+                status: "subscribed" | "unsubscribed" | "suppressed";
+                consentBasis: components["schemas"]["ConsentBasis"];
+                consentSource: string;
+                /** @description Unix milliseconds. */
+                consentAt: number;
+                /** @description For example `ui`, `import:12`, or `api_key:3`. */
+                source: string;
+                unsubscribedAt: number | null;
+                unsubscribeSource: string | null;
+                unsubscribeCampaignId: number | null;
+                suppressionReason: string | null;
+                suppressedAt: number | null;
+                tags: components["schemas"]["TagRef"][];
+                lists: components["schemas"]["ListMembership"][];
+                /** @description Custom field values by field key. */
+                fields: {
+                    [key: string]: string | null;
+                };
+                createdAt: number;
+                updatedAt: number;
+            };
+            /** @description Whether Envelopen blocks all email to the address. */
+            suppression: {
+                suppressed: boolean;
+                reason: string | null;
+                since: number | null;
+            };
+            /** @description Oldest first. */
+            consentEvents: components["schemas"]["ConsentEvent"][];
+            /** @description Campaigns that included the contact, oldest first. */
+            campaigns: {
+                campaignId: number;
+                campaignName: string;
+                subject: string | null;
+                /** @enum {string} */
+                status: "pending" | "sent" | "failed" | "skipped";
+                skipReason: string | null;
+                sentAt: number | null;
+                openedAt: number | null;
+                clickedAt: number | null;
+            }[];
+            /** @description Opens, clicks, bounces, and other email events, oldest first. */
+            events: {
+                type: string;
+                campaignId: number | null;
+                /** @description The link of a click. */
+                url: string | null;
+                /** @description An open that a mail privacy proxy made. */
+                machine: boolean;
+                /** @description A click that a link scanner made. */
+                bot: boolean;
+                occurredAt: number;
+            }[];
+            /** @description Raw delivery events from the email provider, oldest first. */
+            providerEvents: {
+                provider: string;
+                type: string;
+                detail: string | null;
+                occurredAt: number;
+            }[];
+            /** @description True when a list reached 5000 rows and older rows are left out. */
+            truncated: boolean;
+        };
         ConsentEvent: {
             id: number;
             basis: components["schemas"]["ConsentBasis"];
@@ -1640,6 +1778,16 @@ export interface components {
             actorId: string | null;
             note: string | null;
             createdAt: number;
+        };
+        ContactEraseResult: {
+            id: number;
+            erasedAt: number;
+            removed: {
+                events: number;
+                providerEvents: number;
+                recipients: number;
+                auditEntries: number;
+            };
         };
         List: {
             id: number;
@@ -3376,6 +3524,8 @@ export interface operations {
     "audit.list": {
         parameters: {
             query?: {
+                surface?: "ui" | "rest" | "mcp" | "system";
+                action?: string;
                 /** @description The `nextCursor` value from the previous page. */
                 cursor?: string;
                 /** @description Items per page, at most 100. */
@@ -3398,6 +3548,80 @@ export interface operations {
                         /** @description Pass as `cursor` to get the next page. Null on the last page. */
                         nextCursor: string | null;
                     };
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "audit.actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditActions"];
                 };
             };
             /** @description The input is not valid. */
@@ -4028,6 +4252,201 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "contacts.export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactExport"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different body. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "contacts.erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The contact's email address, typed again to confirm. */
+                    confirm: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactEraseResult"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different body. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

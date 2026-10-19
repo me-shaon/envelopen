@@ -10,6 +10,7 @@ import {
 import type { ContactFilters } from "./api/queries";
 import { sessionQuery } from "./api/queries";
 import { AppShell } from "./components/app-shell";
+import { AuditLogPage } from "./features/audit/audit-log-page";
 import { CampaignPage, NewCampaignPage } from "./features/campaigns/campaign-page";
 import { CampaignsPage } from "./features/campaigns/campaigns-page";
 import { ContactDetailPage } from "./features/contacts/contact-detail";
@@ -207,6 +208,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const auditLogRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/settings/audit-log",
+  component: AuditLogPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   setupRoute,
@@ -229,6 +236,7 @@ const routeTree = rootRoute.addChildren([
     domainRoute,
     usageRoute,
     settingsRoute,
+    auditLogRoute,
   ]),
 ]);
 

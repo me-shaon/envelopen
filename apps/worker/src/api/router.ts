@@ -26,7 +26,7 @@ import {
 export interface ApiRouterOptions {
   /** Defaults to the full registry from `@envelopen/core`. Tests pass their own. */
   registry?: Registry;
-  /** Defaults to "no session" until U4 adds Better Auth. */
+  /** Defaults to "no session". The Worker entry passes the Better Auth resolver. */
   resolveSession?: SessionResolver;
   rateLimiter?: RateLimiter;
   appOrigin?: AppOriginResolver;
@@ -42,7 +42,8 @@ export const OPENAPI_CONFIG = {
     version: "1.0.0",
     description:
       "Every operation of the Envelopen admin app. Send an API key as `Authorization: Bearer evk_...`. " +
-      "Lists use cursor pagination. POST requests accept an `Idempotency-Key` header.",
+      "Lists use cursor pagination. POST requests accept an `Idempotency-Key` header. " +
+      "A browser session picks its workspace with the `X-Envelopen-Workspace` header.",
   },
   servers: [{ url: "/api" }],
 };
@@ -74,6 +75,8 @@ export function routeFor(operation: Operation): RouteConfig {
   }
 
   const successStatus = operation.successStatus ?? 200;
+  // A response with a secret is never stored for replay, so its route ignores the key.
+  const idempotent = operation.method === "post" && !operation.sensitiveOutput;
   return {
     method: operation.method,
     path: operation.path,
@@ -86,7 +89,7 @@ export function routeFor(operation: Operation): RouteConfig {
     "x-envelopen-risk": operation.risk,
     "x-envelopen-mcp": operation.mcp.class,
     request,
-    ...(operation.method === "post" ? { middleware: [idempotency(operation.path)] } : {}),
+    ...(idempotent ? { middleware: [idempotency(operation.path)] } : {}),
     responses: {
       [successStatus]: {
         description: "Success",
@@ -96,7 +99,7 @@ export function routeFor(operation: Operation): RouteConfig {
       401: errorResponse("No valid session or API key."),
       403: errorResponse("The principal lacks the scope, or a session request is cross-origin."),
       404: errorResponse("Not found."),
-      ...(operation.method === "post"
+      ...(idempotent
         ? {
             409: errorResponse("A request with the same Idempotency-Key is still running."),
             422: errorResponse("The Idempotency-Key was used with a different body."),

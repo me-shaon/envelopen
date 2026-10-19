@@ -41,3 +41,26 @@ export async function createApiKey(
     .executeTakeFirstOrThrow();
   return { key: generated.key, id: row.id };
 }
+
+/** An app user, as first-run setup creates it. Returns the id. */
+export async function createUser(conn: DbConnection, id = crypto.randomUUID()): Promise<string> {
+  await conn.db
+    .insertInto("users")
+    .values({ id, email: `${id}@example.com`, name: null })
+    .execute();
+  return id;
+}
+
+/** A workspace with the user as its owner member. */
+export async function createOwnedWorkspace(
+  conn: DbConnection,
+  userId: string,
+  name = "Test",
+): Promise<number> {
+  const workspaceId = await createWorkspace(conn, name);
+  await conn.db
+    .insertInto("workspace_members")
+    .values({ workspace_id: workspaceId, user_id: userId, role: "owner" })
+    .execute();
+  return workspaceId;
+}

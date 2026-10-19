@@ -51,6 +51,11 @@ export interface Operation<
   readonly mcp: McpClassification;
   readonly input: I;
   readonly output: O;
+  /**
+   * The output holds a secret, for example a new API key. The REST router then does not
+   * store the response for Idempotency-Key replays, so the secret never rests in D1.
+   */
+  readonly sensitiveOutput?: boolean;
   /** HTTP status of a success. Defaults to 200. */
   readonly successStatus?: 200 | 201;
   // Method syntax keeps the parameters bivariant, so operations with different

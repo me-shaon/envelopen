@@ -70,7 +70,7 @@ export const DEFAULT_API_KEY_RATE_LIMIT: FixedWindowOptions = { limit: 120, wind
 
 /**
  * Applies the limiter to API-key principals. Sessions are not limited here: login and
- * setup get their own limiter in U4 (KTD8). Run it after the principal middleware.
+ * setup have their own limiter (src/auth/rate-limit-do.ts, KTD8). Run it after the principal middleware.
  */
 export function apiKeyRateLimit(limiter: RateLimiter): MiddlewareHandler<ApiEnv> {
   return async (c, next) => {

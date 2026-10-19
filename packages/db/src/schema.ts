@@ -428,6 +428,72 @@ export interface WorkspaceStatsDailyTable extends StatCounters {
   contacts_added: Defaulted<number>;
 }
 
+// Better Auth tables -----------------------------------------------------------------------
+//
+// Migration 0002 creates them from the Better Auth CLI. Better Auth reads and writes
+// them through its own adapter. App code reads them at most (for example the
+// first-run checks). Columns keep Better Auth's camelCase names. Dates are ISO text.
+
+export interface AuthUserTable {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: Bool;
+  image: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthSessionTable {
+  id: string;
+  expiresAt: string;
+  token: string;
+  createdAt: string;
+  updatedAt: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  userId: string;
+}
+
+export interface AuthAccountTable {
+  id: string;
+  accountId: string;
+  providerId: string;
+  userId: string;
+  accessToken: string | null;
+  refreshToken: string | null;
+  idToken: string | null;
+  accessTokenExpiresAt: string | null;
+  refreshTokenExpiresAt: string | null;
+  scope: string | null;
+  password: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthVerificationTable {
+  id: string;
+  identifier: string;
+  value: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthPasskeyTable {
+  id: string;
+  name: string | null;
+  publicKey: string;
+  userId: string;
+  credentialID: string;
+  counter: number;
+  deviceType: string;
+  backedUp: Bool;
+  transports: string | null;
+  createdAt: string | null;
+  aaguid: string | null;
+}
+
 // Database -------------------------------------------------------------------------------
 
 export interface Database {
@@ -460,6 +526,11 @@ export interface Database {
   campaign_stats_hourly: CampaignStatsHourlyTable;
   campaign_stats_daily: CampaignStatsDailyTable;
   workspace_stats_daily: WorkspaceStatsDailyTable;
+  auth_user: AuthUserTable;
+  auth_session: AuthSessionTable;
+  auth_account: AuthAccountTable;
+  auth_verification: AuthVerificationTable;
+  auth_passkey: AuthPasskeyTable;
 }
 
 export type TableName = keyof Database;
@@ -499,6 +570,12 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   campaign_stats_hourly: "tenant",
   campaign_stats_daily: "tenant",
   workspace_stats_daily: "tenant",
+  // Better Auth tables are global (KTD4).
+  auth_user: "global",
+  auth_session: "global",
+  auth_account: "global",
+  auth_verification: "global",
+  auth_passkey: "global",
 };
 
 export const TENANT_TABLES: ReadonlySet<string> = new Set(

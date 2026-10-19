@@ -34,8 +34,21 @@
     ]
   },
   // Per-minute recovery sweep.
-  "triggers": { "crons": ["* * * * *"] }
-  // Workflows and Durable Objects need an exported class, so later units declare them:
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    // PBKDF2-SHA256 iterations for password hashes (KTD7). Workers accept at most 100000.
+    // Below 100000, passkeys become the login method. Set it from the deployed benchmark
+    // in apps/worker/scripts/pbkdf2-benchmark/.
+    "PBKDF2_ITERATIONS": "100000"
+  },
+  "durable_objects": {
+    "bindings": [
+      // Login, password reset, and setup attempt counters by IP and email (KTD8).
+      { "name": "AUTH_RATE_LIMITER", "class_name": "AuthRateLimiter" }
+    ]
+  },
+  // Free plan Durable Objects need the SQLite backend.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AuthRateLimiter"] }]
+  // Workflows need an exported class, so later units declare them:
   // "workflows": [{ "name": "...", "binding": "...", "class_name": "..." }],
-  // "durable_objects": { "bindings": [...] }, "migrations": [{ "tag": "v1", "new_sqlite_classes": [...] }]
 }

@@ -10,5 +10,6 @@ SETUP_TOKEN=replace-with-at-least-32-random-characters
 ENCRYPTION_KEY=replace-with-base64-32-byte-key
 
 # Signs tracking and unsubscribe tokens (HMAC). 32 bytes, base64.
+# The login session secret is derived from it, so a new value signs everyone out.
 # Generate with: openssl rand -base64 32
 SIGNING_KEY=replace-with-base64-32-byte-key

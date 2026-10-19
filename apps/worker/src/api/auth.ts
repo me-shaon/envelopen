@@ -5,12 +5,12 @@ import { errorJson } from "./errors";
 
 /**
  * Resolves a browser session to a Principal, or returns null when there is no valid
- * session. U4 provides the Better Auth implementation. A session principal must have
+ * session. `src/auth/session.ts` is the Better Auth implementation. A session principal must have
  * `actorType: "user"` and `surface: "ui"`.
  */
 export type SessionResolver = (c: Context<ApiEnv>) => Promise<Principal | null>;
 
-/** The resolver until U4 adds sessions: no request has a session. */
+/** A resolver for tests and tools: no request has a session. */
 export const noSessionResolver: SessionResolver = async () => null;
 
 const BEARER = /^Bearer\s+(\S+)\s*$/i;

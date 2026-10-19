@@ -34,3 +34,4 @@ export {
 } from "./principal";
 export * from "./registry";
 export * from "./scopes";
+export { resolveSessionPrincipal, WORKSPACE_HEADER } from "./workspaces/membership";

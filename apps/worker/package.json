@@ -9,9 +9,11 @@
     "openapi": "tsx scripts/generate-openapi.ts && pnpm --filter @envelopen/openapi-types generate"
   },
   "dependencies": {
+    "@better-auth/passkey": "1.7.11",
     "@envelopen/core": "workspace:*",
     "@envelopen/db": "workspace:*",
     "@hono/zod-openapi": "1.6.3",
+    "better-auth": "1.7.11",
     "hono": "4.13.13",
     "zod": "4.6.5"
   },

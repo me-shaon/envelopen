@@ -37,7 +37,13 @@
         "description": "Base64 key (32 bytes) that encrypts provider credentials. Generate it with `openssl rand -base64 32`."
       },
       "SIGNING_KEY": {
-        "description": "Base64 key (32 bytes) that signs tracking and unsubscribe tokens. Generate it with `openssl rand -base64 32`."
+        "description": "Base64 key (32 bytes) that signs tracking and unsubscribe tokens. The login session key is derived from it. Generate it with `openssl rand -base64 32`."
+      },
+      "PBKDF2_ITERATIONS": {
+        "description": "PBKDF2 iterations for password hashes, at most 100000. Below 100000, the owner signs in with a passkey instead of a password."
+      },
+      "AUTH_RATE_LIMITER": {
+        "description": "Durable Object that counts failed logins and setup attempts by IP and email."
       }
     }
   },

@@ -16,7 +16,13 @@ The Deploy button asks for these values. `.dev.vars.example` explains each one.
 |---|---|---|
 | `SETUP_TOKEN` | Opens the first-run setup screen. Use at least 32 characters. | `openssl rand -hex 32` |
 | `ENCRYPTION_KEY` | Encrypts provider credentials. | `openssl rand -base64 32` |
-| `SIGNING_KEY` | Signs tracking and unsubscribe tokens. | `openssl rand -base64 32` |
+| `SIGNING_KEY` | Signs tracking and unsubscribe tokens. The login session secret is derived from it. | `openssl rand -base64 32` |
+
+The `PBKDF2_ITERATIONS` variable in `wrangler.jsonc` sets the password hash cost (at most 100000). Below 100000, the owner signs in with a passkey. `apps/worker/scripts/pbkdf2-benchmark/worker.ts` explains how to measure the cost on your account.
+
+## First run
+
+Open the app after the deploy. The first-run screen asks for `SETUP_TOKEN`, checks the bindings and the migrations, shows the plan limits, and creates the owner and the first workspace. If the owner loses the password or the passkey, the same token resets it. The screen stays closed when `SETUP_TOKEN` is missing or shorter than 32 characters.
 
 ## Local development
 

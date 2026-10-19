@@ -1,3 +1,6 @@
+import { toSendSignature } from "../../src/tosend";
+import type { ConformanceFixtures } from "./types";
+
 // toSend exchanges, in the shapes of https://tosend.com/docs (checked 2026-10-19).
 // Ids are made up.
 
@@ -94,5 +97,131 @@ export const toSendFixtures = {
         message_id: "0100019a-tosend-1",
       },
     }),
+  },
+};
+
+const SECRET = "tosend-secret-1";
+
+/** A toSend webhook request with the `X-ToSend-Signature` header. */
+async function signedHook(body: string) {
+  return {
+    url: "https://envelopen.test/hooks/tosend/1/2",
+    method: "POST",
+    headers: new Headers({ "x-tosend-signature": await toSendSignature(SECRET, body) }),
+    body,
+  };
+}
+
+const BATCH = `${API}/v2/emails/batch`;
+
+/** The conformance fixtures of the toSend adapter (U18). */
+export const toSendConformance: ConformanceFixtures = {
+  credentials: toSendFixtures.credentials,
+  emailHeaders: (request) =>
+    (JSON.parse(request.body) as { emails: { headers: Record<string, string> }[] }).emails.map(
+      (email) => email.headers,
+    ),
+  send: {
+    allSent: {
+      exchanges: [
+        {
+          label: "200 batch, both accepted",
+          method: "POST",
+          url: BATCH,
+          response: {
+            status: 200,
+            body: {
+              results: [
+                { status: "success", message_id: "0100019a-tosend-1" },
+                { status: "success", message_id: "0100019a-tosend-2" },
+              ],
+            },
+          },
+        },
+      ],
+    },
+    partial: {
+      size: 3,
+      exchanges: [toSendFixtures.batchPartial],
+      expected: [
+        { outcome: "sent" },
+        { outcome: "not_sent", reason: "validation" },
+        { outcome: "not_sent", reason: "rejected" },
+      ],
+    },
+    retryable: {
+      exchanges: [
+        {
+          label: "429 throttled",
+          method: "POST",
+          url: BATCH,
+          response: {
+            status: 429,
+            headers: { "retry-after": "1" },
+            body: { status_code: 429, message: "Too many requests" },
+          },
+        },
+      ],
+      reason: "rate_limited",
+      retryAfterMs: 1000,
+    },
+    permanent: { exchanges: [toSendFixtures.batchNoCredits], reason: "credits" },
+    uncertain: {
+      exchanges: [
+        {
+          label: "502 bad gateway",
+          method: "POST",
+          url: BATCH,
+          response: { status: 502, body: "Bad Gateway" },
+        },
+      ],
+    },
+  },
+  connect: { ok: [toSendFixtures.info], badKey: [toSendFixtures.infoUnauthorized] },
+  webhook: {
+    secret: SECRET,
+    valid: () => signedHook(toSendFixtures.events.bounced),
+  },
+  events: [
+    {
+      label: "hard bounce",
+      request: () => signedHook(toSendFixtures.events.bounced),
+      expected: [
+        {
+          type: "bounce_hard",
+          providerMessageId: "0100019a-tosend-1",
+          email: "student1@example.org",
+          detail: "General",
+        },
+      ],
+    },
+    {
+      label: "soft bounce",
+      request: () =>
+        signedHook(
+          JSON.stringify({
+            type: "bounced",
+            created_at: "2026-10-19T12:00:00Z",
+            data: {
+              email: "student2@example.org",
+              bounce_type: "Transient",
+              bounce_sub_type: "MailboxFull",
+              is_hard_bounce: false,
+              timestamp: "2026-10-19T12:00:00Z",
+              message_id: "0100019a-tosend-2",
+            },
+          }),
+        ),
+      expected: [{ type: "bounce_soft", email: "student2@example.org", detail: "MailboxFull" }],
+    },
+    {
+      label: "complaint",
+      request: () => signedHook(toSendFixtures.events.complaint),
+      expected: [{ type: "complaint", email: "student1@example.org", detail: "abuse" }],
+    },
+  ],
+  skip: {
+    "webhook.stale":
+      "toSend signs only the body, with no timestamp. Envelopen stores each event once by its id.",
   },
 };

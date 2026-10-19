@@ -5,7 +5,6 @@ import type {
   OutgoingMessage,
   RecipientResult,
   SendBatchResult,
-  SendOutcome,
 } from "../types";
 
 // HTTP helpers that every adapter shares: a fetch with a timeout, and the failure
@@ -61,7 +60,10 @@ export function retryAfterMs(response: Response, now = Date.now()): number | und
 }
 
 /** The default class of an HTTP status. Adapters refine it with the provider's error code. */
-export function classifyStatus(status: number): { outcome: SendOutcome; reason: FailureReason } {
+export function classifyStatus(status: number): {
+  outcome: BatchFailure["outcome"];
+  reason: FailureReason;
+} {
   if (status === 429) return { outcome: "not_sent", reason: "rate_limited" };
   if (status === 401 || status === 403) return { outcome: "not_sent", reason: "auth" };
   if (status === 402) return { outcome: "not_sent", reason: "credits" };

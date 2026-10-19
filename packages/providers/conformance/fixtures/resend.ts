@@ -1,3 +1,6 @@
+import { svixSign } from "../../src/resend/svix-verify";
+import type { ConformanceFixtures } from "./types";
+
 // Resend exchanges, in the shapes of https://resend.com/docs/api-reference (checked
 // 2026-10-19). Ids are made up.
 
@@ -162,4 +165,122 @@ export const resendFixtures = {
       data: { email_id: "56761188-7520-42d8-8898-ff6fc54ce618", to: ["student1@example.org"] },
     }),
   },
+};
+
+const NOW = Date.parse("2026-10-19T12:00:30.000Z");
+
+/** A Resend webhook request, signed the way Svix signs it. */
+async function signedHook(body: string, atMs = NOW, id = "msg_2Lh9KRb0pzN4LePd3XiAG0ZzWdv") {
+  const timestamp = Math.floor(atMs / 1000);
+  const signature = await svixSign(resendFixtures.webhookSecret, id, timestamp, body);
+  return {
+    url: "https://envelopen.test/hooks/resend/1/2",
+    method: "POST",
+    headers: new Headers({
+      "svix-id": id,
+      "svix-timestamp": String(timestamp),
+      "svix-signature": `v1,${signature}`,
+    }),
+    body,
+  };
+}
+
+function event(type: string, data: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    type,
+    created_at: "2026-10-19T12:00:00.000Z",
+    data: {
+      email_id: "56761188-7520-42d8-8898-ff6fc54ce618",
+      to: ["student1@example.org"],
+      ...data,
+    },
+  });
+}
+
+const EMAIL_ID = "56761188-7520-42d8-8898-ff6fc54ce618";
+
+/** The conformance fixtures of the Resend adapter (U18). */
+export const resendConformance: ConformanceFixtures = {
+  credentials: resendFixtures.credentials,
+  now: NOW,
+  emailHeaders: (request) =>
+    (JSON.parse(request.body) as { headers: Record<string, string> }[]).map(
+      (email) => email.headers,
+    ),
+  send: {
+    allSent: { size: 2, exchanges: [resendFixtures.batchAllSent] },
+    partial: {
+      size: 3,
+      exchanges: [resendFixtures.batchPartial],
+      expected: [
+        { outcome: "sent" },
+        { outcome: "not_sent", reason: "validation" },
+        { outcome: "sent" },
+      ],
+    },
+    retryable: {
+      exchanges: [resendFixtures.batchRateLimited],
+      reason: "rate_limited",
+      retryAfterMs: 2000,
+    },
+    permanent: { exchanges: [resendFixtures.batchDailyQuota], reason: "quota" },
+    uncertain: { exchanges: [resendFixtures.batchServerError] },
+  },
+  connect: {
+    ok: [resendFixtures.domainsOk],
+    badKey: [resendFixtures.domainsInvalidKey],
+    // Resend answers a wrong key with 400 validation_error, not 401.
+    badKeyReason: "validation",
+  },
+  webhook: {
+    secret: resendFixtures.webhookSecret,
+    valid: () => signedHook(resendFixtures.events.bounced),
+    // Ten minutes old: outside the 5 minute Svix window.
+    stale: () => signedHook(resendFixtures.events.bounced, NOW - 10 * 60 * 1000),
+  },
+  events: [
+    {
+      label: "hard bounce",
+      request: () => signedHook(resendFixtures.events.bounced),
+      expected: [
+        {
+          type: "bounce_hard",
+          providerMessageId: EMAIL_ID,
+          email: "student1@example.org",
+          detail: "General",
+        },
+      ],
+    },
+    {
+      label: "soft bounce",
+      request: () =>
+        signedHook(
+          event("email.bounced", {
+            bounce: { message: "Mailbox full", subType: "MailboxFull", type: "Transient" },
+          }),
+        ),
+      expected: [{ type: "bounce_soft", email: "student1@example.org" }],
+    },
+    {
+      label: "delivered",
+      request: () => signedHook(resendFixtures.events.delivered),
+      expected: [{ type: "delivered", providerMessageId: EMAIL_ID }],
+    },
+    {
+      label: "complaint",
+      request: () => signedHook(resendFixtures.events.complained),
+      expected: [{ type: "complaint", email: "student1@example.org" }],
+    },
+    {
+      label: "failed",
+      request: () =>
+        signedHook(event("email.failed", { failed: { reason: "reached_daily_quota" } })),
+      expected: [{ type: "failed", detail: "reached_daily_quota" }],
+    },
+    {
+      label: "open, which comes from Envelopen tracking",
+      request: () => signedHook(resendFixtures.events.opened),
+      expected: [],
+    },
+  ],
 };

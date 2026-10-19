@@ -1,0 +1,14 @@
+# Copy this file to .dev.vars for local development.
+# For production, the Deploy button asks for each value and stores it as a Worker secret.
+
+# Opens the first-run setup screen. Use at least 32 random characters.
+# Generate with: openssl rand -hex 32
+SETUP_TOKEN=replace-with-at-least-32-random-characters
+
+# Encrypts provider credentials (AES-GCM). 32 bytes, base64.
+# Generate with: openssl rand -base64 32
+ENCRYPTION_KEY=replace-with-base64-32-byte-key
+
+# Signs tracking and unsubscribe tokens (HMAC). 32 bytes, base64.
+# Generate with: openssl rand -base64 32
+SIGNING_KEY=replace-with-base64-32-byte-key

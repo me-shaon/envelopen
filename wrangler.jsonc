@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "envelopen",
+  "main": "apps/worker/src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "apps/web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/mcp*", "/t/*", "/u/*", "/hooks/*"]
+  },
+  // Resource IDs are omitted. Wrangler and the Deploy button provision them on the first deploy.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "envelopen",
+      "migrations_dir": "packages/db/migrations"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "KV" }],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "envelopen-files" }],
+  "queues": {
+    "producers": [{ "binding": "SEND_QUEUE", "queue": "send-queue" }],
+    "consumers": [
+      {
+        "queue": "send-queue",
+        // One batch per invocation keeps each send inside the Free plan limits.
+        "max_batch_size": 1,
+        "dead_letter_queue": "send-queue-dlq"
+      }
+    ]
+  },
+  // Per-minute recovery sweep.
+  "triggers": { "crons": ["* * * * *"] }
+  // Workflows and Durable Objects need an exported class, so later units declare them:
+  // "workflows": [{ "name": "...", "binding": "...", "class_name": "..." }],
+  // "durable_objects": { "bindings": [...] }, "migrations": [{ "tag": "v1", "new_sqlite_classes": [...] }]
+}

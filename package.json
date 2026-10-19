@@ -1,0 +1,50 @@
+{
+  "name": "envelopen",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "turbo run build && wrangler deploy --dry-run --outdir dist",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "dev": "turbo run build --filter=@envelopen/web && wrangler dev",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "biome check .",
+    "cf-typegen": "wrangler types apps/worker/worker-configuration.d.ts"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "D1 database for all Envelopen data. The deploy script applies the migrations."
+      },
+      "KV": {
+        "description": "KV namespace for read-mostly cache data, such as workspace settings."
+      },
+      "BUCKET": {
+        "description": "R2 bucket for uploaded images and CSV import files."
+      },
+      "SEND_QUEUE": {
+        "description": "Queue that carries campaign batch pointers to the send consumer."
+      },
+      "SETUP_TOKEN": {
+        "description": "One-time token for the first-run setup screen. Use at least 32 random characters, for example from `openssl rand -hex 32`."
+      },
+      "ENCRYPTION_KEY": {
+        "description": "Base64 key (32 bytes) that encrypts provider credentials. Generate it with `openssl rand -base64 32`."
+      },
+      "SIGNING_KEY": {
+        "description": "Base64 key (32 bytes) that signs tracking and unsubscribe tokens. Generate it with `openssl rand -base64 32`."
+      }
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "pnpm": "10.34.7",
+    "turbo": "2.11.9",
+    "typescript": "7.0.2",
+    "wrangler": "4.151.1"
+  }
+}

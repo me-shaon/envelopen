@@ -7,6 +7,7 @@ import { createApiRouter } from "./api/router";
 import { AUTH_BASE_PATH } from "./auth/better-auth";
 import { createAuthRoutes } from "./auth/routes";
 import { betterAuthSessionResolver } from "./auth/session";
+import { createHookRoutes } from "./hooks";
 import { createSetupRoutes } from "./setup/first-run";
 
 // Durable Object and Workflow classes must be exported from the entry module.
@@ -28,6 +29,9 @@ app.route("/api/files", createFileRoutes());
 // REST API generated from the operation registry, with the OpenAPI document at
 // /api/openapi.json. Created once per isolate, so the rate limiter keeps its counts.
 app.route("/api", createApiRouter({ resolveSession: betterAuthSessionResolver() }));
+
+// Provider webhooks (U7). Each adapter verifies its own signature or secret.
+app.route("/hooks", createHookRoutes());
 
 // Placeholder for the unsubscribe and preference pages (U10).
 app.get("/u/:token", (c) => c.text("Envelopen subscription page"));

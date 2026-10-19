@@ -35,7 +35,7 @@ export interface ApiRouterOptions {
   /** Defaults to `createDb(env)`. Tests turn on the workspace-scope check here. */
   createDb?: (env: Env) => DbConnection;
   /** Defaults to the Worker's bindings: R2, the import Workflow, and SIGNING_KEY. */
-  createServices?: (env: Env) => Partial<Services>;
+  createServices?: (env: Env, request: Request) => Partial<Services>;
 }
 
 /** The fixed part of the OpenAPI document. The paths come from the registry. */
@@ -110,6 +110,7 @@ export function routeFor(operation: Operation): RouteConfig {
           }
         : {}),
       429: errorResponse("Rate limit reached."),
+      502: errorResponse("An email provider or a DNS resolver failed."),
     },
   } as RouteConfig;
 }
@@ -183,7 +184,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): OpenAPIHono<Api
 
   api.use("*", async (c, next) => {
     c.set("db", connect(c.env));
-    c.set("services", services(c.env));
+    c.set("services", services(c.env, c.req.raw));
     await next();
   });
   api.use("*", principalMiddleware(options.resolveSession ?? noSessionResolver));

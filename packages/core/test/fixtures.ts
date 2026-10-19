@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { generateApiKey } from "../src/api-keys";
+import { createCredentialCipher } from "../src/crypto/credentials";
 import { createFileLinkSigner } from "../src/import/file-links";
 import type { ApiKeyScope } from "../src/scopes";
 import type { ImportJob, Services } from "../src/services";
@@ -70,6 +71,15 @@ export async function createOwnedWorkspace(
 
 /** A fixed test key, so hashes match across the tests of one run. */
 export const TEST_SIGNING_KEY = btoa(String.fromCharCode(...new Uint8Array(32).fill(7)));
+export const TEST_ENCRYPTION_KEY = btoa(String.fromCharCode(...new Uint8Array(32).fill(5)));
+export const TEST_ORIGIN = "https://envelopen.test";
+
+/** Outbound HTTP for tests that do not expect any. A call fails the test. */
+const noNetwork: typeof fetch = async (input) => {
+  throw new Error(
+    `Unexpected outbound request in a test: ${String(input instanceof Request ? input.url : input)}`,
+  );
+};
 
 export interface TestServices extends Services {
   /** Import runs that operations started, in order. */
@@ -77,7 +87,7 @@ export interface TestServices extends Services {
 }
 
 /** Services as the Worker builds them, with a job recorder in place of the Workflow. */
-export async function testServices(): Promise<TestServices> {
+export async function testServices(options: { fetch?: typeof fetch } = {}): Promise<TestServices> {
   const signer = await createFileLinkSigner(TEST_SIGNING_KEY);
   const jobs: ImportJob[] = [];
   return {
@@ -87,6 +97,9 @@ export async function testServices(): Promise<TestServices> {
     async startImportJob(job) {
       jobs.push(job);
     },
+    credentials: await createCredentialCipher([{ version: 1, secret: TEST_ENCRYPTION_KEY }]),
+    outboundFetch: options.fetch ?? noNetwork,
+    appOrigin: TEST_ORIGIN,
     jobs,
   };
 }

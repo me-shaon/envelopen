@@ -8,7 +8,9 @@ export type OperationErrorCode =
   | "not_found"
   | "invalid_input"
   | "conflict"
-  | "rate_limited";
+  | "rate_limited"
+  /** An email provider or a DNS resolver failed or did not answer. */
+  | "provider_error";
 
 export class OperationError extends Error {
   readonly code: OperationErrorCode;

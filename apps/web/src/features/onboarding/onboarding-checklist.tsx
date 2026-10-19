@@ -24,13 +24,15 @@ const STATUS: Record<Status, { label: string; tone: Tone }> = {
   blocked: { label: "Blocked", tone: "salmon" },
 };
 
-const ACTIONS: Record<StepId, { label: string; to: "/connections" | "/contacts" | "/campaigns" }> =
-  {
-    connect_provider: { label: "Connect a provider", to: "/connections" },
-    verify_domain: { label: "Add a domain", to: "/connections" },
-    import_contacts: { label: "Import CSV", to: "/contacts" },
-    send_test: { label: "Send a test", to: "/campaigns" },
-  };
+const ACTIONS: Record<
+  StepId,
+  { label: string; to: "/connections" | "/connections/domains" | "/contacts"; hash?: string }
+> = {
+  connect_provider: { label: "Connect a provider", to: "/connections" },
+  verify_domain: { label: "Add a domain", to: "/connections/domains" },
+  import_contacts: { label: "Import CSV", to: "/contacts" },
+  send_test: { label: "Send a test", to: "/connections", hash: "test-send" },
+};
 
 const chip =
   "rounded-[7px] bg-card px-2.5 py-1 text-[11px] font-medium shadow-raised text-foreground";
@@ -94,10 +96,27 @@ function Thumb({ id }: { id: StepId }) {
   );
 }
 
+/** The button text of a step, or null when the owner cannot act on it now. */
+function actionLabel(step: Step, label: string): string | null {
+  if (step.status === "todo") return label;
+  if (step.status === "waiting") return step.id === "verify_domain" ? "Check the records" : label;
+  // A failing connection or a wrong DNS record: the fix is on the same page.
+  if (step.status === "blocked" && step.id === "connect_provider") return "Check the connection";
+  if (
+    step.status === "blocked" &&
+    step.id === "verify_domain" &&
+    !step.detail.startsWith("Connect")
+  ) {
+    return "Fix the records";
+  }
+  return null;
+}
+
 function StepCard({ step, index }: { step: Step; index: number }) {
   const status = STATUS[step.status];
   const done = step.status === "done";
   const action = ACTIONS[step.id];
+  const label = actionLabel(step, action.label);
   return (
     <li
       className="flex flex-col overflow-hidden rounded-xl border border-border bg-card"
@@ -128,12 +147,13 @@ function StepCard({ step, index }: { step: Step; index: number }) {
         </div>
         <p className="m-0 text-[13px] leading-normal text-muted-foreground">{step.detail}</p>
         <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-2">
-          {step.status === "todo" || step.status === "waiting" ? (
+          {label ? (
             <Link
               to={action.to}
+              hash={action.hash}
               className="inline-flex min-h-[30px] items-center rounded-lg border border-input px-2.5 text-[12.5px] font-medium hover:bg-accent"
             >
-              {action.label}
+              {label}
             </Link>
           ) : null}
           <a

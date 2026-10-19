@@ -30,6 +30,7 @@ export const SERVICE_ERROR_STATUS: Readonly<Record<OperationErrorCode, Contentfu
   invalid_input: 400,
   conflict: 409,
   rate_limited: 429,
+  provider_error: 502,
 };
 
 export function errorJson(

@@ -60,6 +60,8 @@ export interface WorkspacesTable {
   tracking_clicks: Defaulted<Bool>;
   event_retention_days: Defaulted<number>;
   archived_at: number | null;
+  /** The connection that sends all email of the workspace (R63). */
+  sending_connection_id: Defaulted<number | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -142,6 +144,11 @@ export interface ProviderConnectionsTable {
   status_detail: string | null;
   policy_warning_accepted_at: number | null;
   policy_warning_accepted_by: string | null;
+  /** A short description of the provider account from the last check. */
+  account_label: Defaulted<string | null>;
+  /** JSON array of warnings from the last check. */
+  warnings: Defaulted<string | null>;
+  last_checked_at: Defaulted<number | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -158,8 +165,46 @@ export interface SendingDomainsTable {
   tracking_status: Defaulted<string>;
   last_checked_at: number | null;
   verified_at: number | null;
+  /** JSON array of DKIM selectors. */
+  dkim_selectors: Defaulted<string | null>;
+  /** JSON array of the DNS records to add. */
+  records: Defaulted<string | null>;
+  /** JSON with the findings of the last check. */
+  check_detail: Defaulted<string | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
+}
+
+export type DomainCheckStatus = "unknown" | "pass" | "missing" | "fail" | "error";
+
+export interface TestAddressesTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  email: string;
+  created_at: Generated<number>;
+}
+
+export type ProviderEventType =
+  | "delivered"
+  | "bounce_hard"
+  | "bounce_soft"
+  | "complaint"
+  | "failed";
+
+export interface ProviderEventsTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  connection_id: number | null;
+  provider: string;
+  event_id: string;
+  type: ProviderEventType;
+  provider_message_id: string | null;
+  /** Keyed hash of the normalized address, as in `contacts.email_hash`. */
+  email_hash: string | null;
+  detail: string | null;
+  occurred_at: number;
+  received_at: Generated<number>;
+  processed_at: Defaulted<number | null>;
 }
 
 // Audience ---------------------------------------------------------------------------
@@ -576,6 +621,8 @@ export interface Database {
   idempotency_keys: IdempotencyKeysTable;
   provider_connections: ProviderConnectionsTable;
   sending_domains: SendingDomainsTable;
+  test_addresses: TestAddressesTable;
+  provider_events: ProviderEventsTable;
   contacts: ContactsTable;
   contact_fields: ContactFieldsTable;
   contact_field_values: ContactFieldValuesTable;
@@ -622,6 +669,8 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   idempotency_keys: "tenant",
   provider_connections: "tenant",
   sending_domains: "tenant",
+  test_addresses: "tenant",
+  provider_events: "tenant",
   contacts: "tenant",
   contact_fields: "tenant",
   contact_field_values: "tenant",

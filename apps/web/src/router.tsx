@@ -14,9 +14,11 @@ import { ContactsPage } from "./features/contacts/contacts-page";
 import { ListsPage, TagsPage } from "./features/contacts/lists-tags";
 import { SuppressionsPage } from "./features/contacts/suppressions-page";
 import { ImportPage } from "./features/import/import-page";
+import { ConnectionsPage } from "./features/providers/connections-page";
+import { DomainDetailPage, DomainsPage } from "./features/providers/domains-page";
 import { LoginPage } from "./routes/login";
 import { OverviewPage } from "./routes/overview";
-import { CampaignsPage, ConnectionsPage, TemplatesPage } from "./routes/placeholders";
+import { CampaignsPage, TemplatesPage } from "./routes/placeholders";
 import { RecoverPage } from "./routes/recover";
 import { SettingsPage } from "./routes/settings";
 import { SetupPage } from "./routes/setup";
@@ -158,6 +160,19 @@ const connectionsRoute = createRoute({
   path: "/connections",
   component: ConnectionsPage,
 });
+const domainsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/connections/domains",
+  component: DomainsPage,
+});
+const domainRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/connections/domains/$domainId",
+  component: function Domain() {
+    const { domainId } = domainRoute.useParams();
+    return <DomainDetailPage key={domainId} domainId={Number(domainId)} />;
+  },
+});
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -179,6 +194,8 @@ const routeTree = rootRoute.addChildren([
     suppressionsRoute,
     templatesRoute,
     connectionsRoute,
+    domainsRoute,
+    domainRoute,
     settingsRoute,
   ]),
 ]);

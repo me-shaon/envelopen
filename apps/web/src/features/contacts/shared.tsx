@@ -96,11 +96,14 @@ export function ContactsNav() {
           key={tab.to}
           to={tab.to}
           activeOptions={{ exact: true, includeSearch: false }}
-          className="-mb-px border-b-2 border-transparent px-2.5 pt-1 pb-2.5 text-[13px] text-muted-foreground hover:text-foreground"
+          className="-mb-px border-b-2 px-2.5 pt-1 pb-2.5 text-[13px] hover:text-foreground"
+          // The colors go in the state props: in one class list, the later utility in the
+          // stylesheet wins, so an active tab would keep the transparent border.
           activeProps={{
             className: "border-foreground font-medium text-foreground",
             "aria-current": "page",
           }}
+          inactiveProps={{ className: "border-transparent text-muted-foreground" }}
         >
           {tab.label}
         </Link>

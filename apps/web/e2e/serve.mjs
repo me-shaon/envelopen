@@ -1,15 +1,17 @@
 // Starts a fresh local Worker for the end-to-end tests: a new D1 state directory, the
 // migrations, and `wrangler dev` with the test secrets from the environment.
 //
-//   node e2e/serve.mjs <port> <state-name> <pbkdf2-iterations>
+//   node e2e/serve.mjs <port> <state-name> <pbkdf2-iterations> [outbound-mock-origin]
 //
+// With an outbound mock origin, the Worker sends provider and DNS requests to that
+// local server (OUTBOUND_MOCK_ORIGIN), so no test reaches a real provider.
 // Playwright runs it (playwright.config.ts). The web app must be built first, because
 // the Worker serves apps/web/dist.
 import { spawn, spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const [port, stateName, iterations] = process.argv.slice(2);
+const [port, stateName, iterations, mockOrigin] = process.argv.slice(2);
 if (!port || !stateName || !iterations) {
   console.error("Usage: node e2e/serve.mjs <port> <state-name> <pbkdf2-iterations>");
   process.exit(1);
@@ -54,6 +56,7 @@ const dev = spawn(
     "--var",
     ...secrets,
     `PBKDF2_ITERATIONS:${iterations}`,
+    ...(mockOrigin ? [`OUTBOUND_MOCK_ORIGIN:${mockOrigin}`] : []),
   ],
   { cwd: root, env, stdio: "inherit" },
 );

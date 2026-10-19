@@ -138,3 +138,46 @@ export function importQuery(workspaceId: number, id: number) {
     queryFn: () => unwrap(api.GET("/imports/{id}", { params: { path: { id } } })),
   });
 }
+
+// Providers, connections, and sending domains (U7) -----------------------------------------
+
+export const providersQuery = queryOptions({
+  queryKey: ["providers"],
+  queryFn: () => unwrap(api.GET("/providers")),
+  staleTime: Number.POSITIVE_INFINITY,
+});
+
+export function connectionsQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "connections"],
+    queryFn: () => unwrap(api.GET("/connections")),
+  });
+}
+
+export function connectionQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "connections", id],
+    queryFn: () => unwrap(api.GET("/connections/{id}", { params: { path: { id } } })),
+  });
+}
+
+export function domainsQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "domains"],
+    queryFn: () => unwrap(api.GET("/domains")),
+  });
+}
+
+export function domainQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "domains", id],
+    queryFn: () => unwrap(api.GET("/domains/{id}", { params: { path: { id } } })),
+  });
+}
+
+export function testAddressesQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "test-addresses"],
+    queryFn: () => unwrap(api.GET("/test-addresses")),
+  });
+}

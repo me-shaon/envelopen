@@ -1,0 +1,299 @@
+// The provider adapter contract (KTD12). An adapter is a plain object: data that
+// describes the provider, and a few functions that talk to its API. Everything outside
+// this package works through this contract, so a new provider changes nothing else
+// (origin R65). The conformance kit (U18) runs the same checks on every adapter.
+
+/** `campaign` adapters send campaigns. `transactional-only` ones need the accepted warning (R62). */
+export type ProviderPolicy = "campaign" | "transactional-only";
+
+/**
+ * The provider events that Envelopen stores. They are a subset of `email_events.type`:
+ * opens, clicks, and unsubscribes come from Envelopen tracking, not from providers.
+ */
+export type ProviderEventType =
+  | "delivered"
+  | "bounce_hard"
+  | "bounce_soft"
+  | "complaint"
+  | "failed";
+
+export const PROVIDER_EVENT_TYPES: readonly ProviderEventType[] = [
+  "delivered",
+  "bounce_hard",
+  "bounce_soft",
+  "complaint",
+  "failed",
+];
+
+/** Credentials as the owner entered them, keyed by `CredentialField.name`. */
+export type Credentials = Readonly<Record<string, string>>;
+
+/** Provider-side ids that Envelopen keeps, for example a webhook id or an SNS topic ARN. */
+export type ProviderRefs = Readonly<Record<string, string>>;
+
+/** One input of the connect form. Most providers need one field (KTD13). */
+export interface CredentialField {
+  name: string;
+  label: string;
+  /** The UI hides the value, and the API never returns it. */
+  secret: boolean;
+  required: boolean;
+  hint?: string;
+  placeholder?: string;
+  /** The value of an optional field that the owner leaves empty. */
+  defaultValue?: string;
+  /** A regular expression (source) that a value must match. */
+  pattern?: string;
+}
+
+export interface ProviderCapabilities {
+  /** Recipients per `sendBatch` call. It must fit 10 ms CPU and 50 subrequests on Free (KTD20). */
+  batchSize: number;
+  /** The provider accepts an idempotency key, so an uncertain batch can retry (R70). */
+  idempotency: boolean;
+  /** How long the provider remembers an idempotency key, in milliseconds. */
+  idempotencyWindowMs: number | null;
+  /** What the rate bucket counts (KTD25). */
+  rateUnit: "recipient" | "request";
+  /** The event types that the provider reports through its webhook. */
+  eventTypes: readonly ProviderEventType[];
+  /** The provider passes custom headers, such as List-Unsubscribe, through unchanged. */
+  customHeaders: boolean;
+  /** `setupEvents` can create the webhook through the provider API (KTD13). */
+  autoWebhook: boolean;
+}
+
+/** Facts the UI shows and the rate limiter starts from (KTD16). */
+export interface ProviderFacts {
+  /** Steady rate in `rateUnit` per second. */
+  ratePerSecond: number;
+  /** The provider works only on the Workers Paid plan. */
+  requiresWorkersPaid: boolean;
+  /** Short facts about limits and costs, one sentence each. */
+  notes: readonly string[];
+  /** The provider's own documentation. */
+  docsUrl: string;
+}
+
+/** DNS hints for the sending domain checks (R12). */
+export interface ProviderDns {
+  /** The SPF include of the provider, for example `amazonses.com`. Null when not needed. */
+  spfInclude: string | null;
+  /** The host that carries the SPF record, when it is not the domain itself (a return path). */
+  spfHost?(domain: string): string;
+  /** DKIM selectors to check when the provider API does not list the records. */
+  dkimSelectors: readonly string[];
+}
+
+/** A DNS record that the owner adds at their DNS host. */
+export interface DnsRecordHint {
+  purpose: "spf" | "dkim" | "dmarc" | "return_path" | "tracking";
+  type: "TXT" | "CNAME" | "MX";
+  /** The full host name, for example `resend._domainkey.example.com`. */
+  host: string;
+  value: string;
+}
+
+export type MessageKind = "campaign" | "test" | "system";
+
+/** One email to one recipient. The caller personalizes it before the call (KTD26). */
+export interface OutgoingMessage {
+  /** The caller's id for the recipient. The result for this message carries it back. */
+  recipientId: string;
+  /** Campaign and test messages must carry both unsubscribe headers (`assertMessages`). */
+  kind: MessageKind;
+  /** A mailbox, for example `Ana from Course Academy <ana@mail.example.com>`. */
+  from: string;
+  to: string;
+  replyTo?: string;
+  subject: string;
+  html: string;
+  text?: string;
+  /** Extra headers, sent unchanged. */
+  headers: Readonly<Record<string, string>>;
+}
+
+/**
+ * The result of one recipient (KTD12).
+ * - `sent`: the provider accepted the message.
+ * - `not_sent`: the provider refused it, so a retry cannot send a duplicate.
+ * - `unknown`: a timeout, a network error, or a 5xx. The message may have gone out.
+ */
+export type SendOutcome = "sent" | "not_sent" | "unknown";
+
+export type FailureReason =
+  | "rate_limited"
+  | "quota"
+  | "credits"
+  | "auth"
+  | "validation"
+  | "rejected"
+  | "server_error"
+  | "timeout"
+  | "network";
+
+export interface RecipientResult {
+  recipientId: string;
+  outcome: SendOutcome;
+  providerMessageId?: string;
+  reason?: FailureReason;
+  message?: string;
+}
+
+/** A failure of the whole request. U9 pauses on `quota` and `credits`, and backs off on `rate_limited`. */
+export interface BatchFailure {
+  outcome: "not_sent" | "unknown";
+  reason: FailureReason;
+  message: string;
+  /** From `Retry-After`, when the provider sends it. */
+  retryAfterMs?: number;
+  status?: number;
+}
+
+export interface SendBatchResult {
+  /** One result per message, in the order of the messages. */
+  results: RecipientResult[];
+  /** Set when the whole request failed. Every result then has the failure's outcome. */
+  failure?: BatchFailure;
+}
+
+/** What every adapter call gets besides the credentials. */
+export interface AdapterContext {
+  /** Outbound HTTP. Tests pass a mock that replays recorded fixtures. */
+  fetch: typeof fetch;
+  /** The refs that `connect` and `setupEvents` returned for this connection. */
+  refs: ProviderRefs;
+  /** Per request. Defaults to 15 seconds. */
+  timeoutMs?: number;
+  /** Clock for tests. Defaults to `Date.now`. */
+  now?: () => number;
+}
+
+export interface SendContext extends AdapterContext {
+  /**
+   * The key that the batch stored at its first claim (KTD18). Only adapters with
+   * `capabilities.idempotency` use it. A retry sends the same key and the same payload.
+   */
+  idempotencyKey?: string;
+}
+
+/** A webhook request, with the body read once as text so verification and parsing share it. */
+export interface WebhookRequest {
+  url: string;
+  method: string;
+  headers: Headers;
+  body: string;
+}
+
+export type WebhookVerification = { ok: true } | { ok: false; reason: string };
+
+/** A provider event in Envelopen's terms. */
+export interface NormalizedEvent {
+  type: ProviderEventType;
+  /** A stable id of the event, so a replayed delivery is stored once. */
+  eventId: string;
+  providerMessageId: string | null;
+  /** The recipient address as the provider reports it. */
+  email: string | null;
+  /** Unix milliseconds. */
+  occurredAt: number;
+  /** A short provider detail, for example the bounce subtype. */
+  detail?: string;
+}
+
+export interface ParsedWebhook {
+  events: NormalizedEvent[];
+  /** SNS: confirm the subscription with a GET of this URL, after verification. */
+  confirmSubscriptionUrl?: string;
+}
+
+export type ConnectionCheck =
+  | {
+      ok: true;
+      /** A short description of the account, for example "us-east-1, production access". */
+      account: string | null;
+      /** Problems that do not stop the connection, for example the SES sandbox. */
+      warnings: string[];
+      /** Facts to keep with the connection, for example the SES region. */
+      refs?: ProviderRefs;
+    }
+  | { ok: false; reason: FailureReason; message: string };
+
+export type EventsSetup =
+  | {
+      mode: "auto";
+      /** The secret that verifies webhooks. Some providers create their own. */
+      secret: string;
+      /** Provider ids to keep, so delete can remove the webhook. */
+      refs: ProviderRefs;
+    }
+  | { mode: "manual"; reason: string };
+
+export interface WebhookTarget {
+  /** The URL that the provider must call, from `webhookUrl()`. */
+  url: string;
+  /** A random secret that Envelopen generated. Adapters that create their own ignore it. */
+  secret: string;
+}
+
+export interface ProviderAdapter {
+  /** Stable id, used in URLs and stored in `provider_connections.provider`. */
+  readonly id: string;
+  readonly name: string;
+  readonly policy: ProviderPolicy;
+  /** For `transactional-only` adapters: the warning that the owner must accept (R62). */
+  readonly policyWarning?: string;
+  readonly credentialFields: readonly CredentialField[];
+  readonly capabilities: ProviderCapabilities;
+  readonly facts: ProviderFacts;
+  readonly dns: ProviderDns;
+  /**
+   * Who makes the webhook secret in manual setup. `envelopen`: the owner copies
+   * Envelopen's secret into the provider. `provider`: the owner pastes the provider's
+   * secret into Envelopen. `none`: the provider has no webhook.
+   */
+  readonly manualSecret: "envelopen" | "provider" | "none";
+
+  /** Checks the credentials with a cheap API call that sends nothing. */
+  connect(credentials: Credentials, ctx: AdapterContext): Promise<ConnectionCheck>;
+
+  /** Sends one batch. It never throws for provider errors: it returns them as results. */
+  sendBatch(
+    messages: readonly OutgoingMessage[],
+    credentials: Credentials,
+    ctx: SendContext,
+  ): Promise<SendBatchResult>;
+
+  /** The URL to give the provider. Defaults to `baseUrl`. SES and Postmark add the secret. */
+  webhookUrl?(baseUrl: string, secret: string): string;
+
+  /** True only for a request that the provider sent and that nobody changed. */
+  verifyWebhook(
+    request: WebhookRequest,
+    secret: string,
+    ctx: AdapterContext,
+  ): Promise<WebhookVerification>;
+
+  /** Normalizes a verified request. Unknown event types are skipped, not errors. */
+  parseEvents(request: WebhookRequest): ParsedWebhook;
+
+  /** Creates the webhook through the provider API (KTD13). Without it, the UI shows `manualSteps`. */
+  setupEvents?(
+    credentials: Credentials,
+    target: WebhookTarget,
+    ctx: AdapterContext,
+  ): Promise<EventsSetup>;
+
+  /** Removes what `setupEvents` created. Best effort: delete goes on when it fails. */
+  teardownEvents?(credentials: Credentials, ctx: AdapterContext): Promise<void>;
+
+  /** Steps the owner follows in the provider dashboard when auto setup is not possible. */
+  manualSteps(target: WebhookTarget): string[];
+
+  /** The exact DNS records from the provider API, when it lists them. */
+  domainRecords?(
+    credentials: Credentials,
+    domain: string,
+    ctx: AdapterContext,
+  ): Promise<DnsRecordHint[] | null>;
+}

@@ -10,10 +10,37 @@ export {
   resolveApiKey,
 } from "./api-keys";
 export { type AuditEntry, type AuditTarget, auditInsert, writeAudit } from "./audit";
+export {
+  type Connection,
+  ConnectionSchema,
+} from "./connections/model";
+export { ConnectionDetailSchema, validateCredentials } from "./connections/operations";
+export {
+  assertCampaignPolicy,
+  type CampaignPolicy,
+  type CampaignPolicyCode,
+  checkCampaignPolicy,
+  sendingConnection,
+} from "./connections/policy-gate";
+export {
+  requireSendingConnection,
+  type SystemEmail,
+  sendSystemEmail,
+  sendThroughConnection,
+} from "./connections/send";
+export { receiveProviderWebhook, type WebhookOutcome } from "./connections/webhooks";
 export { CONSENT_UPGRADE_BLOCKED, consentDecision } from "./consent/rules";
 export { normalizeEmail } from "./contacts/email";
 export { CONSENT_BASES, CONTACT_STATUSES, ContactSchema, loadContacts } from "./contacts/model";
 export { type UpsertContactInput, upsertContact } from "./contacts/upsert";
+export {
+  type CredentialCipher,
+  type CredentialKey,
+  CredentialKeyError,
+  createCredentialCipher,
+} from "./crypto/credentials";
+export { createDohClient, DOH_ENDPOINT } from "./domains/dns-check";
+export { SendingDomainSchema } from "./domains/operations";
 export { isOperationError, OperationError, type OperationErrorCode } from "./errors";
 export { type OperationDeps, runOperation } from "./executor";
 export { cleanupExpiredFiles } from "./import/cleanup";

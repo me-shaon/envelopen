@@ -8,6 +8,11 @@ interface EnvelopenSecrets {
   ENCRYPTION_KEY?: string;
   /** Base64, 32 bytes. Signs tokens. The Better Auth secret is derived from it. */
   SIGNING_KEY?: string;
+  /**
+   * End-to-end tests only: a localhost origin that receives every outbound provider and
+   * DNS request instead of the real host. Never set it on a deployed Worker.
+   */
+  OUTBOUND_MOCK_ORIGIN?: string;
 }
 
 declare namespace Cloudflare {

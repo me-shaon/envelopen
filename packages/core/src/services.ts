@@ -1,3 +1,5 @@
+import type { CredentialCipher } from "./crypto/credentials";
+
 // Platform services that some operations need besides the database. The Worker builds
 // them from its bindings and secrets. Tests pass their own. An operation asks for a
 // service with `requireService`, so a surface that lacks it fails clearly.
@@ -34,6 +36,12 @@ export interface Services {
   startImportJob(job: ImportJob): Promise<void>;
   /** Signs a download link for a file in the bucket. */
   signFileLink(file: FileLinkRequest): Promise<string>;
+  /** Encrypts provider credentials and webhook secrets (R11). Needs ENCRYPTION_KEY. */
+  credentials: CredentialCipher;
+  /** Outbound HTTP to providers and to DNS over HTTPS. Tests pass a mock. */
+  outboundFetch: typeof fetch;
+  /** The public origin of this deployment, for webhook URLs. For example `https://mail.example.com`. */
+  appOrigin: string;
 }
 
 /** Returns the service, or throws when the surface did not provide it. */

@@ -1,10 +1,10 @@
-import { ArrowUpRightIcon, FileTextIcon, type LucideIcon, PlugIcon, SendIcon } from "lucide-react";
+import { ArrowUpRightIcon, FileTextIcon, type LucideIcon, SendIcon } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { guideUrl } from "@/lib/guides";
 
-// Pages that later units fill (U6 to U9). Each shows a calm empty state with a guide.
+// Pages that later units fill (U8 and U9). Each shows a calm empty state with a guide.
 
 function Placeholder({
   title,
@@ -64,19 +64,6 @@ export function TemplatesPage() {
       emptyTitle="No templates yet"
       emptyText="The email editor and templates arrive in a later release."
       guide="docs/guides/README.md"
-    />
-  );
-}
-
-export function ConnectionsPage() {
-  return (
-    <Placeholder
-      title="Connections"
-      description="Email providers and sending domains for this workspace."
-      icon={PlugIcon}
-      emptyTitle="No provider connected"
-      emptyText="Provider connections and domain checks arrive in a later release. The guides explain each provider."
-      guide="docs/guides/README.md#email-providers"
     />
   );
 }

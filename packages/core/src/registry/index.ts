@@ -1,3 +1,21 @@
+import {
+  connectionsAcceptPolicy,
+  connectionsCreate,
+  connectionsDelete,
+  connectionsGet,
+  connectionsList,
+  connectionsSelect,
+  connectionsSetupEvents,
+  connectionsSetWebhookSecret,
+  connectionsTest,
+  providersList,
+} from "../connections/operations";
+import {
+  campaignsSendTest,
+  testAddressesAdd,
+  testAddressesList,
+  testAddressesRemove,
+} from "../connections/test-send";
 import { consentList, consentRecord } from "../consent/operations";
 import {
   contactsAddTags,
@@ -9,6 +27,14 @@ import {
   contactsUpdate,
   contactsUpsert,
 } from "../contacts/operations";
+import {
+  domainsCheck,
+  domainsCreate,
+  domainsDelete,
+  domainsGet,
+  domainsList,
+  domainsUpdate,
+} from "../domains/operations";
 import { exportsCreate, exportsList } from "../import/export";
 import {
   importsCreate,
@@ -132,4 +158,25 @@ export const registry = createRegistry([
   importsErrorFile,
   exportsList,
   exportsCreate,
+  // Providers, connections, sending domains, and test sends (U7).
+  providersList,
+  connectionsList,
+  connectionsGet,
+  connectionsCreate,
+  connectionsTest,
+  connectionsSelect,
+  connectionsAcceptPolicy,
+  connectionsSetupEvents,
+  connectionsSetWebhookSecret,
+  connectionsDelete,
+  domainsList,
+  domainsGet,
+  domainsCreate,
+  domainsUpdate,
+  domainsCheck,
+  domainsDelete,
+  testAddressesList,
+  testAddressesAdd,
+  testAddressesRemove,
+  campaignsSendTest,
 ]);

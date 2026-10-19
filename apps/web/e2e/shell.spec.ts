@@ -70,7 +70,7 @@ async function runSetup(page: Page, owner: { email: string; password?: string })
   await page.getByLabel("Setup token").fill(SETUP_TOKEN);
   await page.getByRole("button", { name: "Check the deployment" }).click();
   await expect(page.getByRole("heading", { name: "Check the deployment" })).toBeVisible();
-  await expect(page.getByText("8 of 8 pass")).toBeVisible();
+  await expect(page.getByText("9 of 9 pass")).toBeVisible();
   await expect(page.getByRole("rowheader", { name: "CPU time per request" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Your name").fill(OWNER.name);

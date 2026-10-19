@@ -5,12 +5,14 @@ import {
   pathParameters,
   type Registry,
   runOperation,
+  type Services,
 } from "@envelopen/core";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { OpenAPIHono, type RouteConfig } from "@hono/zod-openapi";
 import type { Handler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { createServices } from "../services";
 import { noSessionResolver, principalMiddleware, type SessionResolver } from "./auth";
 import type { ApiEnv } from "./context";
 import { ErrorSchema, errorJson, SERVICE_ERROR_STATUS } from "./errors";
@@ -32,6 +34,8 @@ export interface ApiRouterOptions {
   appOrigin?: AppOriginResolver;
   /** Defaults to `createDb(env)`. Tests turn on the workspace-scope check here. */
   createDb?: (env: Env) => DbConnection;
+  /** Defaults to the Worker's bindings: R2, the import Workflow, and SIGNING_KEY. */
+  createServices?: (env: Env) => Partial<Services>;
 }
 
 /** The fixed part of the OpenAPI document. The paths come from the registry. */
@@ -121,6 +125,7 @@ function handlerFor(operation: Operation): Handler<ApiEnv> {
     const input = { ...valid("query"), ...valid("json"), ...valid("param") };
     const output = await runOperation(c.var.principal, operation, input, {
       db: c.var.db,
+      services: c.var.services,
       ip: c.req.header("cf-connecting-ip") ?? null,
     });
     return c.json(output as object, operation.successStatus ?? 200);
@@ -138,6 +143,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): OpenAPIHono<Api
   const registry = options.registry ?? defaultRegistry;
   const rateLimiter = options.rateLimiter ?? createFixedWindowLimiter(DEFAULT_API_KEY_RATE_LIMIT);
   const connect = options.createDb ?? ((env: Env) => createDb(env));
+  const services = options.createServices ?? createServices;
 
   const api = new OpenAPIHono<ApiEnv>({
     defaultHook: (result, c) => {
@@ -177,6 +183,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): OpenAPIHono<Api
 
   api.use("*", async (c, next) => {
     c.set("db", connect(c.env));
+    c.set("services", services(c.env));
     await next();
   });
   api.use("*", principalMiddleware(options.resolveSession ?? noSessionResolver));

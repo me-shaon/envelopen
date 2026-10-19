@@ -1,11 +1,4 @@
-import {
-  ArrowUpRightIcon,
-  FileTextIcon,
-  type LucideIcon,
-  PlugIcon,
-  SendIcon,
-  UsersIcon,
-} from "lucide-react";
+import { ArrowUpRightIcon, FileTextIcon, type LucideIcon, PlugIcon, SendIcon } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -58,19 +51,6 @@ export function CampaignsPage() {
       emptyTitle="No campaigns yet"
       emptyText="Campaigns arrive in a later release. Connect a provider and import contacts first."
       guide="docs/guides/README.md"
-    />
-  );
-}
-
-export function ContactsPage() {
-  return (
-    <Placeholder
-      title="Contacts"
-      description="Your audience, with lists, tags, and consent."
-      icon={UsersIcon}
-      emptyTitle="No contacts yet"
-      emptyText="CSV import and contact lists arrive in a later release."
-      guide="docs/guides/import-contacts.md"
     />
   );
 }

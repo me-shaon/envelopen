@@ -48,7 +48,10 @@
     ]
   },
   // Free plan Durable Objects need the SQLite backend.
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AuthRateLimiter"] }]
-  // Workflows need an exported class, so later units declare them:
-  // "workflows": [{ "name": "...", "binding": "...", "class_name": "..." }],
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AuthRateLimiter"] }],
+  // Workflows run classes that the entry module exports.
+  "workflows": [
+    // CSV imports (U6): a preview run, then an import run, in chunks sized for Workers Free.
+    { "name": "envelopen-import", "binding": "IMPORT_WORKFLOW", "class_name": "ImportWorkflow" }
+  ]
 }

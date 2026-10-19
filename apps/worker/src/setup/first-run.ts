@@ -76,6 +76,9 @@ export const REQUIRED_TABLES = [
   "api_keys",
   "audit_log",
   "idempotency_keys",
+  // From migration 0003, so a deploy that skipped it is caught.
+  "imports",
+  "exports",
   AUTH_TABLES.user,
   AUTH_TABLES.session,
   AUTH_TABLES.account,
@@ -138,6 +141,14 @@ export async function runSetupChecks(env: Env): Promise<SetupCheck[]> {
   checks.push(check("bucket", "R2 bucket", env.BUCKET !== undefined, bindingHint("BUCKET")));
   checks.push(
     check("queue", "Send queue", env.SEND_QUEUE !== undefined, bindingHint("SEND_QUEUE")),
+  );
+  checks.push(
+    check(
+      "import_workflow",
+      "Import workflow",
+      env.IMPORT_WORKFLOW !== undefined,
+      bindingHint("IMPORT_WORKFLOW (Workflow)"),
+    ),
   );
   checks.push(
     check(

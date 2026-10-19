@@ -3,6 +3,7 @@ import type { z } from "zod";
 import type { AuditTarget } from "../audit";
 import type { Principal } from "../principal";
 import type { Scope } from "../scopes";
+import type { Services } from "../services";
 
 /**
  * Risk class of an operation (KTD9). Every class except `read` writes an audit log row.
@@ -33,6 +34,8 @@ export interface OperationContext {
   db: DbConnection;
   /** Unix milliseconds at the start of the operation. */
   now: number;
+  /** Platform services. Use `requireService` to read one. */
+  services: Partial<Services>;
 }
 
 export interface Operation<

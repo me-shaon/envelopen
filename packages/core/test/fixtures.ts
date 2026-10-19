@@ -1,7 +1,10 @@
 import { env } from "cloudflare:workers";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { generateApiKey } from "../src/api-keys";
+import { createFileLinkSigner } from "../src/import/file-links";
 import type { ApiKeyScope } from "../src/scopes";
+import type { ImportJob, Services } from "../src/services";
+import { createEmailHasher } from "../src/suppression/hash";
 
 /** A connection that fails any tenant query without a workspace_id condition. */
 export function testDb(): DbConnection {
@@ -63,4 +66,52 @@ export async function createOwnedWorkspace(
     .values({ workspace_id: workspaceId, user_id: userId, role: "owner" })
     .execute();
   return workspaceId;
+}
+
+/** A fixed test key, so hashes match across the tests of one run. */
+export const TEST_SIGNING_KEY = btoa(String.fromCharCode(...new Uint8Array(32).fill(7)));
+
+export interface TestServices extends Services {
+  /** Import runs that operations started, in order. */
+  jobs: ImportJob[];
+}
+
+/** Services as the Worker builds them, with a job recorder in place of the Workflow. */
+export async function testServices(): Promise<TestServices> {
+  const signer = await createFileLinkSigner(TEST_SIGNING_KEY);
+  const jobs: ImportJob[] = [];
+  return {
+    bucket: env.BUCKET,
+    hashEmail: await createEmailHasher(TEST_SIGNING_KEY),
+    signFileLink: (file) => signer.sign(file),
+    async startImportJob(job) {
+      jobs.push(job);
+    },
+    jobs,
+  };
+}
+
+export function insertContact(
+  conn: DbConnection,
+  workspaceId: number,
+  values: { email: string; consent_basis?: "existing_customer" | "explicit_opt_in" | "unknown" },
+) {
+  return conn.db
+    .insertInto("contacts")
+    .values({
+      workspace_id: workspaceId,
+      email: values.email,
+      first_name: null,
+      last_name: null,
+      consent_basis: values.consent_basis ?? "explicit_opt_in",
+      consent_source: "test",
+      consent_at: Date.now(),
+      source: "test",
+      email_hash: null,
+      unsubscribed_at: null,
+      unsubscribe_source: null,
+      unsubscribe_campaign_id: null,
+    })
+    .returning("id")
+    .executeTakeFirstOrThrow();
 }

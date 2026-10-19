@@ -12,6 +12,8 @@ export default defineConfig(async () => {
         miniflare: {
           compatibilityDate: "2026-10-01",
           d1Databases: ["DB"],
+          // Imports and exports keep their files in R2.
+          r2Buckets: ["BUCKET"],
           // Test-only binding. The setup file applies these migrations.
           bindings: { TEST_MIGRATIONS: migrations },
         },

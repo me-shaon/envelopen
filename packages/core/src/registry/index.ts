@@ -1,3 +1,36 @@
+import { consentList, consentRecord } from "../consent/operations";
+import {
+  contactsAddTags,
+  contactsCount,
+  contactsDelete,
+  contactsGet,
+  contactsList,
+  contactsRemoveTag,
+  contactsUpdate,
+  contactsUpsert,
+} from "../contacts/operations";
+import { exportsCreate, exportsList } from "../import/export";
+import {
+  importsCreate,
+  importsErrorFile,
+  importsGet,
+  importsList,
+  importsPreview,
+  importsStart,
+} from "../import/operations";
+import {
+  listsAddContacts,
+  listsCreate,
+  listsDelete,
+  listsList,
+  listsRemoveContact,
+  listsUpdate,
+  tagsCreate,
+  tagsDelete,
+  tagsList,
+  tagsRename,
+} from "../lists/operations";
+import { suppressionsAdd, suppressionsList, suppressionsRemove } from "../suppression/operations";
 import { apiKeysCreate, apiKeysList, apiKeysPresets, apiKeysRevoke } from "./operations/api-keys";
 import { auditList } from "./operations/audit";
 import { onboardingStatus } from "./operations/onboarding";
@@ -67,4 +100,36 @@ export const registry = createRegistry([
   apiKeysRevoke,
   auditList,
   onboardingStatus,
+  // Contacts. `contacts.count` comes before `contacts.get`, so /contacts/count is not an id.
+  contactsList,
+  contactsCount,
+  contactsGet,
+  contactsUpsert,
+  contactsUpdate,
+  contactsDelete,
+  contactsAddTags,
+  contactsRemoveTag,
+  consentList,
+  consentRecord,
+  listsList,
+  listsCreate,
+  listsUpdate,
+  listsDelete,
+  listsAddContacts,
+  listsRemoveContact,
+  tagsList,
+  tagsCreate,
+  tagsRename,
+  tagsDelete,
+  suppressionsList,
+  suppressionsAdd,
+  suppressionsRemove,
+  importsList,
+  importsCreate,
+  importsGet,
+  importsPreview,
+  importsStart,
+  importsErrorFile,
+  exportsList,
+  exportsCreate,
 ]);

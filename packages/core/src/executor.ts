@@ -4,9 +4,12 @@ import { writeAudit } from "./audit";
 import { OperationError } from "./errors";
 import type { Principal } from "./principal";
 import type { Operation, OperationInputSchema } from "./registry/operation";
+import type { Services } from "./services";
 
 export interface OperationDeps {
   db: DbConnection;
+  /** R2, the email hasher, the import Workflow, and file links. Each one is optional. */
+  services?: Partial<Services>;
   /** The client IP for the audit log, when the transport knows it. */
   ip?: string | null;
   /** Clock for tests. Defaults to `Date.now`. */
@@ -48,7 +51,12 @@ export async function runOperation<I extends OperationInputSchema, O extends z.Z
   }
 
   const now = (deps.now ?? Date.now)();
-  const result = await operation.handler(parsed.data, { principal, db: deps.db, now });
+  const result = await operation.handler(parsed.data, {
+    principal,
+    db: deps.db,
+    now,
+    services: deps.services ?? {},
+  });
   const output = operation.output.parse(result) as z.output<O>;
 
   if (operation.risk !== "read") {

@@ -175,6 +175,12 @@ export interface ContactsTable {
   consent_source: string;
   consent_at: number;
   source: string;
+  /** Keyed hash of the normalized address, as in `suppressions.email_hash`. */
+  email_hash: string | null;
+  /** Unsubscribed from every list (R64). Imports and API upserts never clear it (R73). */
+  unsubscribed_at: number | null;
+  unsubscribe_source: string | null;
+  unsubscribe_campaign_id: number | null;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -252,6 +258,70 @@ export interface SuppressionsTable {
   source: string | null;
   campaign_id: number | null;
   created_at: Generated<number>;
+}
+
+export type ImportStatus =
+  | "uploaded"
+  | "previewing"
+  | "previewed"
+  | "importing"
+  | "completed"
+  | "failed"
+  | "expired";
+
+export interface ImportsTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  status: Defaulted<ImportStatus>;
+  filename: string;
+  /** R2 key of the uploaded CSV. NULL after the file is deleted. */
+  file_key: string | null;
+  size_bytes: number;
+  /** JSON array of the header names. */
+  headers: string;
+  delimiter: Defaulted<string>;
+  /** JSON mapping of column index to field. */
+  mapping: string | null;
+  consent_basis: ConsentBasis | null;
+  /** JSON array of tag names, from the preview request. */
+  tag_names: string | null;
+  /** JSON array of tag ids, resolved when the import starts. */
+  tag_ids: string | null;
+  /** JSON array of list ids. */
+  list_ids: string | null;
+  preview_generation: Defaulted<number>;
+  /** JSON counts of the preview run. */
+  preview: string | null;
+  /** JSON counts of the import run. */
+  counts: string | null;
+  processed_rows: Defaulted<number>;
+  cursor_offset: Defaulted<number>;
+  rows_written: Defaulted<number>;
+  error_count: Defaulted<number>;
+  error_file_key: string | null;
+  failure: string | null;
+  created_by: string;
+  created_at: Generated<number>;
+  updated_at: Defaulted<number>;
+  started_at: number | null;
+  completed_at: number | null;
+  expires_at: number;
+}
+
+export interface ExportsTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  status: Defaulted<"ready" | "expired">;
+  /** R2 key of the CSV. NULL after the file is deleted. */
+  file_key: string | null;
+  filename: string;
+  /** JSON with the contact filters. */
+  filters: string;
+  row_count: number;
+  size_bytes: number;
+  created_by: string;
+  created_at: Generated<number>;
+  expires_at: number;
 }
 
 // Content ------------------------------------------------------------------------------
@@ -515,6 +585,8 @@ export interface Database {
   contact_tags: ContactTagsTable;
   consent_events: ConsentEventsTable;
   suppressions: SuppressionsTable;
+  imports: ImportsTable;
+  exports: ExportsTable;
   templates: TemplatesTable;
   saved_blocks: SavedBlocksTable;
   campaigns: CampaignsTable;
@@ -559,6 +631,8 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   contact_tags: "tenant",
   consent_events: "tenant",
   suppressions: "tenant",
+  imports: "tenant",
+  exports: "tenant",
   templates: "tenant",
   saved_blocks: "tenant",
   campaigns: "tenant",

@@ -6,11 +6,17 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
+import type { ContactFilters } from "./api/queries";
 import { sessionQuery } from "./api/queries";
 import { AppShell } from "./components/app-shell";
+import { ContactDetailPage } from "./features/contacts/contact-detail";
+import { ContactsPage } from "./features/contacts/contacts-page";
+import { ListsPage, TagsPage } from "./features/contacts/lists-tags";
+import { SuppressionsPage } from "./features/contacts/suppressions-page";
+import { ImportPage } from "./features/import/import-page";
 import { LoginPage } from "./routes/login";
 import { OverviewPage } from "./routes/overview";
-import { CampaignsPage, ConnectionsPage, ContactsPage, TemplatesPage } from "./routes/placeholders";
+import { CampaignsPage, ConnectionsPage, TemplatesPage } from "./routes/placeholders";
 import { RecoverPage } from "./routes/recover";
 import { SettingsPage } from "./routes/settings";
 import { SetupPage } from "./routes/setup";
@@ -78,10 +84,69 @@ const campaignsRoute = createRoute({
   path: "/campaigns",
   component: CampaignsPage,
 });
+function positiveId(value: unknown): number | undefined {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+}
+
+const STATUSES = new Set(["subscribed", "unsubscribed", "suppressed"]);
+
+// Contact filters live in the URL, so a list or a tag can link to its members.
 const contactsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/contacts",
-  component: ContactsPage,
+  validateSearch: (search: Record<string, unknown>): ContactFilters => ({
+    ...(typeof search.search === "string" && search.search ? { search: search.search } : {}),
+    ...(positiveId(search.listId) ? { listId: positiveId(search.listId) } : {}),
+    ...(positiveId(search.tagId) ? { tagId: positiveId(search.tagId) } : {}),
+    ...(typeof search.status === "string" && STATUSES.has(search.status)
+      ? { status: search.status as ContactFilters["status"] }
+      : {}),
+  }),
+  component: function Contacts() {
+    const filters = contactsRoute.useSearch();
+    const navigate = contactsRoute.useNavigate();
+    return (
+      <ContactsPage
+        filters={filters}
+        onFiltersChange={(next) => void navigate({ search: next, replace: true })}
+      />
+    );
+  },
+});
+const contactRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/contacts/$contactId",
+  component: function Contact() {
+    const { contactId } = contactRoute.useParams();
+    return <ContactDetailPage key={contactId} contactId={Number(contactId)} />;
+  },
+});
+const importRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/contacts/import",
+  validateSearch: (search: Record<string, unknown>): { id?: number } =>
+    positiveId(search.id) ? { id: positiveId(search.id) } : {},
+  component: function Import() {
+    const { id } = importRoute.useSearch();
+    // No key: the page keeps the upload sample in state when the URL gets the import id.
+    return <ImportPage importId={id} />;
+  },
+});
+const listsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/contacts/lists",
+  component: ListsPage,
+});
+const tagsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/contacts/tags",
+  component: TagsPage,
+});
+const suppressionsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/contacts/suppressions",
+  component: SuppressionsPage,
 });
 const templatesRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -107,6 +172,11 @@ const routeTree = rootRoute.addChildren([
     overviewRoute,
     campaignsRoute,
     contactsRoute,
+    contactRoute,
+    importRoute,
+    listsRoute,
+    tagsRoute,
+    suppressionsRoute,
     templatesRoute,
     connectionsRoute,
     settingsRoute,

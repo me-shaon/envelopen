@@ -28,6 +28,9 @@
       "BUCKET": {
         "description": "R2 bucket for uploaded images and CSV import files."
       },
+      "IMPORT_WORKFLOW": {
+        "description": "Workflow that previews and imports CSV files in chunks, then deletes the file."
+      },
       "SEND_QUEUE": {
         "description": "Queue that carries campaign batch pointers to the send consumer."
       },

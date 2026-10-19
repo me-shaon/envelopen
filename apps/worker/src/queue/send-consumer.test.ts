@@ -14,6 +14,7 @@ import { getAdapter } from "@envelopen/providers";
 import { describe, expect, it } from "vitest";
 import {
   batchRow,
+  campaignDb,
   campaignRow,
   countingD1,
   dbOver,
@@ -21,6 +22,7 @@ import {
   recipientRows,
   recordingQueue,
   sendingCampaign,
+  snapshot,
   T0,
   testDeps,
   testKeys,
@@ -246,6 +248,110 @@ describe("exactly once and uncertain batches", () => {
     expect((await campaignRow(db, seeded.workspaceId, campaignId)).status).toBe("sent");
   });
 
+  it("keeps the set and the key after a refusal that follows an unknown attempt, so nobody gets two copies", async () => {
+    const { db, seeded, campaignId, pointers } = await sendingCampaign({
+      provider: "resend",
+      contacts: 3,
+    });
+    const pointer = pointers[0] as (typeof pointers)[number];
+    const deps = await testDeps(db);
+    // Attempt 1: Resend may have accepted the batch, but the answer is lost.
+    deps.mock.respond = () =>
+      new Response(JSON.stringify({ name: "internal_server_error" }), { status: 500 });
+    expect((await processPointer(deps, pointer)).result).toBe("unknown");
+    const claimed = await batchRow(db, seeded.workspaceId, pointer.batchId);
+    expect(claimed.recipient_set).not.toBeNull();
+    expect(claimed.idempotency_key).toMatch(/^envelopen-/);
+
+    // The lease expires, and the sweep sends a retry pointer with the stored set and key.
+    const sweep = sweepDeps(db, deps.clock.now + LEASE_MS + 1);
+    expect((await expireLeases(sweep)).retried).toContain(pointer.batchId);
+    const retryPointer = sweep.queue.sent.find((item) => item.batchId === pointer.batchId);
+
+    // Attempt 2: a 429. The batch waits, and keeps the set and the key.
+    deps.mock.respond = () =>
+      new Response(JSON.stringify({ name: "rate_limit_exceeded", message: "Too many requests" }), {
+        status: 429,
+        headers: { "retry-after": "2" },
+      });
+    deps.clock.now = sweep.now + 1;
+    expect((await processPointer(deps, retryPointer)).result).toBe("returned");
+    expect(await batchRow(db, seeded.workspaceId, pointer.batchId)).toMatchObject({
+      status: "pending",
+      recipient_set: claimed.recipient_set,
+      idempotency_key: claimed.idempotency_key,
+    });
+
+    // A contact changes between the attempts. The third attempt must not notice.
+    await db.db
+      .updateTable("contacts")
+      .set({ first_name: "Changed" })
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("email", "=", "student1@example.org")
+      .execute();
+
+    // Attempt 3, after the wait: the same payload with the same key.
+    const later = sweepDeps(db, deps.clock.now + 2001);
+    await redispatchWaiting(later);
+    const again = later.queue.sent.find((item) => item.batchId === pointer.batchId);
+    expect(again).toBeDefined();
+    deps.mock.respond = undefined;
+    deps.clock.now = later.now + 1;
+    expect((await processPointer(deps, again)).result).toBe("sent");
+
+    const [first, second, third] = deps.mock.calls;
+    expect(second?.body).toBe(first?.body);
+    expect(third?.body).toBe(first?.body);
+    expect(third?.headers["idempotency-key"]).toBe(claimed.idempotency_key);
+    expect(second?.headers["idempotency-key"]).toBe(claimed.idempotency_key);
+    // The done batch forgets the set, because it holds personal data.
+    expect(await batchRow(db, seeded.workspaceId, pointer.batchId)).toMatchObject({
+      status: "done",
+      sent_count: 3,
+      recipient_set: null,
+    });
+    expect((await campaignRow(db, seeded.workspaceId, campaignId)).status).toBe("sent");
+  });
+
+  it("keeps the set and the key when a quota error pauses the campaign after an unknown attempt", async () => {
+    const { db, seeded, campaignId, pointers } = await sendingCampaign({
+      provider: "resend",
+      contacts: 2,
+    });
+    const pointer = pointers[0] as (typeof pointers)[number];
+    const deps = await testDeps(db);
+    deps.mock.respond = () =>
+      new Response(JSON.stringify({ name: "internal_server_error" }), { status: 500 });
+    expect((await processPointer(deps, pointer)).result).toBe("unknown");
+    const claimed = await batchRow(db, seeded.workspaceId, pointer.batchId);
+    const sweep = sweepDeps(db, deps.clock.now + LEASE_MS + 1);
+    await expireLeases(sweep);
+    const retryPointer = sweep.queue.sent.find((item) => item.batchId === pointer.batchId);
+    deps.mock.respond = () =>
+      new Response(JSON.stringify({ name: "daily_quota_exceeded", message: "Quota" }), {
+        status: 429,
+      });
+    deps.clock.now = sweep.now + 1;
+    expect((await processPointer(deps, retryPointer)).result).toBe("returned");
+    expect((await campaignRow(db, seeded.workspaceId, campaignId)).status).toBe("paused");
+
+    const { campaignsResume } = await import("@envelopen/core");
+    const queue = recordingQueue();
+    await runOperation(
+      seeded.principal,
+      campaignsResume,
+      { id: campaignId },
+      { db, services: { sendQueue: queue }, now: () => deps.clock.now + 60_000 },
+    );
+    deps.mock.respond = undefined;
+    deps.clock.now += 60_001;
+    const resumed = queue.sent.find((item) => item.batchId === pointer.batchId);
+    expect((await processPointer(deps, resumed)).result).toBe("sent");
+    const last = deps.mock.calls.at(-1);
+    expect(last?.body).toBe(deps.mock.calls[0]?.body);
+    expect(last?.headers["idempotency-key"]).toBe(claimed.idempotency_key);
+  });
+
   it("returns the batch to pending after a 429 or a credits error, not to uncertain", async () => {
     const limited = await sendingCampaign({ provider: "resend", contacts: 2 });
     const deps = await testDeps(limited.db);
@@ -469,6 +575,67 @@ describe("snapshot and send-time rules", () => {
     expect((await campaignRow(db, seeded.workspaceId, campaignId)).recipient_count).toBe(2);
   });
 
+  it("puts links and List-Unsubscribe on the tracking domain only after its check passes", async () => {
+    const { campaignsConfirm, campaignsPrepare } = await import("@envelopen/core");
+    const { createDraft, seedCampaignWorkspace } = await import(
+      "@envelopen/core/testing/campaign-fixtures"
+    );
+    for (const [trackingStatus, origin] of [
+      ["fail", "https://app.envelopen.test"],
+      ["unknown", "https://app.envelopen.test"],
+      ["pass", "https://links.example.com"],
+    ] as const) {
+      const db = campaignDb();
+      const keys = await testKeys();
+      const seeded = await seedCampaignWorkspace(db, keys, { provider: "resend", contacts: 1 });
+      await db.db
+        .updateTable("sending_domains")
+        .set({ tracking_domain: "links.example.com", tracking_status: trackingStatus })
+        .where("workspace_id", "=", seeded.workspaceId)
+        .where("id", "=", seeded.domainId)
+        .execute();
+      const campaignId = await createDraft(db, seeded);
+      const services = {
+        ...keys,
+        appOrigin: "https://app.envelopen.test",
+        startCampaignJob: async () => {},
+      };
+      const context = { db, services, now: () => T0 };
+      const prepared = await runOperation(
+        seeded.principal,
+        campaignsPrepare,
+        { id: campaignId, mode: "send_now" },
+        context,
+      );
+      expect(prepared.blocked).toBe(false);
+      // An unverified tracking domain is a warning, not a block.
+      expect(prepared.checklist.find((item) => item.id === "domain_auth")?.status).toBe(
+        trackingStatus === "pass" ? "pass" : "warn",
+      );
+      await runOperation(
+        seeded.principal,
+        campaignsConfirm,
+        { id: campaignId, token: prepared.token as string },
+        context,
+      );
+      expect((await campaignRow(db, seeded.workspaceId, campaignId)).link_origin).toBe(origin);
+
+      const queue = recordingQueue();
+      await snapshot(db, { workspaceId: seeded.workspaceId, campaignId, startedAt: T0 }, queue);
+      const deps = await testDeps(db);
+      expect((await processPointer(deps, queue.sent[0])).result).toBe("sent");
+      const [email] = JSON.parse(deps.mock.calls[0]?.body ?? "[]") as {
+        html: string;
+        headers: Record<string, string>;
+      }[];
+      expect(email?.headers["List-Unsubscribe"]?.startsWith(`<${origin}/u/`)).toBe(true);
+      expect(email?.html).toContain(`${origin}/t/c/`);
+      expect(email?.html).not.toContain(
+        trackingStatus === "pass" ? "app.envelopen.test" : "links.example.com",
+      );
+    }
+  });
+
   it("personalizes each recipient with signed one-click unsubscribe headers", async () => {
     const { db, pointers } = await sendingCampaign({ provider: "resend", contacts: 1 });
     const deps = await testDeps(db);
@@ -505,6 +672,9 @@ describe("snapshot and send-time rules", () => {
       expect((await campaignRow(db, seeded.workspaceId, campaignId)).status).toBe("needs_decision");
       const owner = sessionPrincipal({ workspaceId: seeded.workspaceId, userId: seeded.userId });
       if (decision === "skip") {
+        expect(
+          (await batchRow(db, seeded.workspaceId, pointer.batchId)).recipient_set,
+        ).not.toBeNull();
         const result = await runOperation(
           owner,
           campaignsSkipBatch,
@@ -512,6 +682,8 @@ describe("snapshot and send-time rules", () => {
           { db },
         );
         expect(result.campaign.status).toBe("sent");
+        // A skipped batch forgets the frozen set, which holds personal data.
+        expect((await batchRow(db, seeded.workspaceId, pointer.batchId)).recipient_set).toBeNull();
         continue;
       }
       // Retry needs the explicit acceptance of the duplicate risk.

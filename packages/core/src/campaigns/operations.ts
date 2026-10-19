@@ -10,7 +10,12 @@ import { decodeCursor, encodeCursor, pageInputShape, pageOf } from "../paginatio
 import { defineOperation, type OperationContext } from "../registry/operation";
 import { requireService } from "../services";
 import { getTemplateRow } from "../templates/operations";
-import { contactValues, personalizePreview, testLinkOrigin } from "../templates/preview";
+import {
+  contactValues,
+  personalizePreview,
+  testLinkOrigin,
+  verifiedTrackingDomain,
+} from "../templates/preview";
 import { estimateAudience } from "./audience";
 import { ChecklistItemSchema, runChecklist } from "./checklist";
 import { confirmError, consumeConfirmToken, issueConfirmToken } from "./confirm-token";
@@ -583,12 +588,12 @@ async function linkOrigin(ctx: OperationContext, campaign: CampaignRow): Promise
   const row = domain
     ? await ctx.db.db
         .selectFrom("sending_domains")
-        .select("tracking_domain")
+        .select(["tracking_domain", "tracking_status"])
         .where("workspace_id", "=", ctx.principal.workspaceId)
         .where("domain", "=", domain)
         .executeTakeFirst()
     : undefined;
-  return testLinkOrigin(ctx.services.appOrigin, row?.tracking_domain);
+  return testLinkOrigin(ctx.services.appOrigin, verifiedTrackingDomain(row));
 }
 
 export const campaignsConfirm = defineOperation({
@@ -990,7 +995,7 @@ WHERE workspace_id = ${workspaceId} AND batch_id = ${input.batchId} AND status =
   AND EXISTS (SELECT 1 FROM campaign_batches b WHERE b.workspace_id = ${workspaceId} AND b.id = ${input.batchId} AND b.status = 'uncertain')`.compile(
         db.db,
       ),
-      sql`UPDATE campaign_batches SET status = 'skipped',
+      sql`UPDATE campaign_batches SET status = 'skipped', recipient_set = NULL,
   skipped_count = recipient_count - sent_count - failed_count, updated_at = ${now}
 WHERE workspace_id = ${workspaceId} AND id = ${input.batchId} AND status = 'uncertain'`.compile(
         db.db,

@@ -456,7 +456,10 @@ export interface CampaignBatchesTable {
   status: Defaulted<BatchStatus>;
   generation: Defaulted<number>;
   lease_until: number | null;
-  /** JSON array of campaign_recipients ids, frozen at the first claim. */
+  /**
+   * The frozen recipient set (JSON), stored at the first claim. It holds personal data,
+   * so a done or skipped batch drops it, and an erase removes the contact from it.
+   */
   recipient_set: string | null;
   idempotency_key: string | null;
   recipient_count: Defaulted<number>;

@@ -146,6 +146,67 @@ async function addTraces(
     .execute();
 }
 
+/**
+ * A campaign whose batch is still open, with a frozen recipient set that holds every
+ * contact (batch.ts). With a key, the batch waits for an idempotent retry.
+ */
+async function openBatch(
+  db: DbConnection,
+  seeded: Awaited<ReturnType<typeof seedCampaignWorkspace>>,
+  idempotencyKey: string | null,
+) {
+  const ws = seeded.workspaceId;
+  const sent = await seedSentCampaign(db, seeded, { startedAt: T0 });
+  const rows = await db.db
+    .selectFrom("campaign_recipients as r")
+    .innerJoin("contacts as c", "c.id", "r.contact_id")
+    .select(["r.id", "r.batch_id", "c.email", "c.first_name", "c.last_name"])
+    .where("r.workspace_id", "=", ws)
+    .where("r.campaign_id", "=", sent.campaignId)
+    .orderBy("r.id")
+    .execute();
+  const recipientSet = {
+    v: 1,
+    origin: "https://envelopen.test",
+    recipients: rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      fields: {
+        email: row.email,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        cohort: row.last_name === SURNAME ? `${SURNAME} 2026` : null,
+      },
+    })),
+    skipped: [],
+  };
+  await db.db
+    .updateTable("campaign_recipients")
+    .set({ status: "pending", provider_message_id: null, sent_at: null })
+    .where("workspace_id", "=", ws)
+    .where("campaign_id", "=", sent.campaignId)
+    .execute();
+  const batchId = rows[0]?.batch_id as number;
+  await db.db
+    .updateTable("campaign_batches")
+    .set({
+      status: "pending",
+      sent_count: 0,
+      recipient_set: JSON.stringify(recipientSet),
+      idempotency_key: idempotencyKey,
+    })
+    .where("workspace_id", "=", ws)
+    .where("id", "=", batchId)
+    .execute();
+  await db.db
+    .updateTable("campaigns")
+    .set({ status: "sending", completed_at: null })
+    .where("workspace_id", "=", ws)
+    .where("id", "=", sent.campaignId)
+    .execute();
+  return { batchId, recipientIds: rows.map((row) => row.id), sent };
+}
+
 /** Every text value in every table of the database that contains one of the markers. */
 async function plaintextHits(markers: readonly string[]): Promise<string[]> {
   const tables = await env.DB.prepare(
@@ -261,8 +322,13 @@ describe("contact export", () => {
 describe("contact erase", () => {
   it("leaves no plaintext address in any table or raw event, and keeps rollups and the suppression hash", async () => {
     const { db, services, seeded, sent, recipient, contactId, owner, run } = await setup();
+    // Two more campaigns whose batches still hold a frozen set with the contact: one
+    // waits for an idempotent retry with its stored key, one has no key.
+    const retrying = await openBatch(db, seeded, "envelopen-retry-key");
+    const waiting = await openBatch(db, seeded, null);
     const markers = [EMAIL, SURNAME];
-    expect((await plaintextHits(markers)).length).toBeGreaterThan(0);
+    const before = await plaintextHits(markers);
+    expect(before).toContain(`campaign_batches.recipient_set has "${EMAIL}"`);
 
     const result = await run<{ id: number; removed: Record<string, number> }>(
       owner,
@@ -270,11 +336,51 @@ describe("contact erase", () => {
       { id: contactId, confirm: EMAIL.toUpperCase() },
     );
     expect(result.id).toBe(contactId);
-    expect(result.removed).toMatchObject({ events: 2, providerEvents: 1, recipients: 1 });
+    expect(result.removed).toMatchObject({ events: 2, providerEvents: 1, recipients: 3 });
 
     expect(await plaintextHits(markers)).toEqual([]);
 
     const ws = seeded.workspaceId;
+    // The sets lose the contact's entry, keep the others, and skip the recipient.
+    for (const open of [retrying, waiting]) {
+      const erasedId = (
+        await db.db
+          .selectFrom("campaign_recipients")
+          .select("id")
+          .where("workspace_id", "=", ws)
+          .where("campaign_id", "=", open.sent.campaignId)
+          .where("contact_id", "is", null)
+          .executeTakeFirstOrThrow()
+      ).id;
+      const batch = await db.db
+        .selectFrom("campaign_batches")
+        .selectAll()
+        .where("workspace_id", "=", ws)
+        .where("id", "=", open.batchId)
+        .executeTakeFirstOrThrow();
+      const set = JSON.parse(batch.recipient_set ?? "null") as {
+        recipients: { id: number }[];
+        skipped: { id: number; reason: string }[];
+      };
+      expect(set.recipients.map((item) => item.id)).toEqual(
+        open.recipientIds.filter((id) => id !== erasedId),
+      );
+      expect(set.skipped).toEqual([{ id: erasedId, reason: "deleted" }]);
+    }
+    // A changed payload cannot reuse the stored key, and a new key could send the
+    // others a second copy. The batch waits for the owner's decision instead.
+    expect(
+      await db.db
+        .selectFrom("campaign_batches")
+        .select(["status", "idempotency_key"])
+        .where("workspace_id", "=", ws)
+        .where("id", "in", [retrying.batchId, waiting.batchId])
+        .orderBy("id")
+        .execute(),
+    ).toEqual([
+      { status: "uncertain", idempotency_key: "envelopen-retry-key" },
+      { status: "pending", idempotency_key: null },
+    ]);
     expect(await failure(run(owner, contactsGet, { id: contactId }))).toBe("not_found");
     const recipientRow = await db.db
       .selectFrom("campaign_recipients")

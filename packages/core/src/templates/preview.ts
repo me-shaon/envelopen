@@ -14,8 +14,19 @@ export const SAMPLE_VALUES: Readonly<Record<string, string>> = {
 };
 
 /**
- * The origin of the `/u/test` links in previews and test sends. RFC 8058 needs an
- * https List-Unsubscribe URL, so the scheme is https even for a local app origin.
+ * The tracking domain of a sending domain, when its check passes. Until then, the
+ * domain may not reach this Worker, so links on it (unsubscribe too) would break.
+ */
+export function verifiedTrackingDomain(
+  row: { tracking_domain: string | null; tracking_status: string } | undefined,
+): string | null {
+  return row?.tracking_domain && row.tracking_status === "pass" ? row.tracking_domain : null;
+}
+
+/**
+ * The origin of the unsubscribe and tracking links: the verified tracking domain
+ * (`verifiedTrackingDomain`), or else the app's host. RFC 8058 needs an https
+ * List-Unsubscribe URL, so the scheme is https even for a local app origin.
  */
 export function testLinkOrigin(appOrigin: string | undefined, trackingDomain?: string | null) {
   if (trackingDomain) return `https://${trackingDomain}`;

@@ -13,6 +13,9 @@ import { sql } from "kysely";
 //   hash or one of the contact's provider message ids.
 // - `campaign_recipients`: the rows stay for the batch bookkeeping, but lose the
 //   contact link, the provider message id, and the provider error text.
+// - `campaign_batches.recipient_set` of an open batch (batch.ts). A done or skipped
+//   batch has no set. The erase removes the contact's entry from the set, and records
+//   the recipient as skipped, so the batch never sends to the address.
 // - `audit_log` metadata about the contact, or with the address in it.
 // - `idempotency_keys` with a stored response that holds the address.
 // - `test_addresses` with the same address.
@@ -34,6 +37,9 @@ export interface EraseResult {
   recipients: number;
   auditEntries: number;
 }
+
+const ERASED_IN_RETRY =
+  "A contact in this batch was erased while the batch waited for a retry with its stored key. Retry or skip the batch.";
 
 /** A LIKE pattern that matches the text anywhere, with the wildcards in it escaped. */
 export function containsPattern(text: string): string {
@@ -63,6 +69,8 @@ export async function eraseContact(
     .where("contact_id", "=", target.id)
     .where("provider_message_id", "is not", null);
 
+  // An open batch that will send its stored set again with its stored key.
+  const retrying = sql`(idempotency_key IS NOT NULL AND status IN ('pending', 'enqueued', 'claimed'))`;
   const results = await db.atomic([
     db.db
       .insertInto("suppressions")
@@ -91,13 +99,35 @@ export async function eraseContact(
           eb("provider_message_id", "in", messageIds),
         ]),
       ),
-    // 2. Recipient rows keep their status and times for the campaign counts.
+    // 2. Frozen sets of open batches. The recipient rows still carry the contact id here.
+    // A set with a stored key belongs to an idempotent retry: an earlier attempt can have
+    // reached the provider. A changed payload cannot reuse that key, and a new key can
+    // send the others a second copy. So the batch becomes uncertain, and the owner decides.
+    sql`UPDATE campaign_batches SET
+  status = CASE WHEN ${retrying} THEN 'uncertain' ELSE status END,
+  uncertain_at = CASE WHEN ${retrying} THEN ${options.now} ELSE uncertain_at END,
+  lease_until = CASE WHEN ${retrying} THEN NULL ELSE lease_until END,
+  last_error = CASE WHEN ${retrying} THEN ${ERASED_IN_RETRY} ELSE last_error END,
+  recipient_set = json_set(
+    json_insert(recipient_set, '$.skipped[#]', json_object('id', r.rid, 'reason', 'deleted')),
+    '$.recipients',
+    (SELECT json_group_array(json(e.value)) FROM json_each(campaign_batches.recipient_set, '$.recipients') e
+      WHERE json_extract(e.value, '$.id') IS NOT r.rid)
+  ),
+  updated_at = ${options.now}
+FROM (SELECT id AS rid, batch_id FROM campaign_recipients
+  WHERE workspace_id = ${workspaceId} AND contact_id = ${target.id} AND batch_id IS NOT NULL) AS r
+WHERE campaign_batches.workspace_id = ${workspaceId} AND campaign_batches.id = r.batch_id
+  AND campaign_batches.recipient_set IS NOT NULL
+  AND EXISTS (SELECT 1 FROM json_each(campaign_batches.recipient_set, '$.recipients') e
+    WHERE json_extract(e.value, '$.id') = r.rid)`.compile(db.db),
+    // 3. Recipient rows keep their status and times for the campaign counts.
     db.db
       .updateTable("campaign_recipients")
       .set({ contact_id: null, provider_message_id: null, error: null })
       .where("workspace_id", "=", workspaceId)
       .where("contact_id", "=", target.id),
-    // 3. Audit metadata. The rows stay, so the log still shows that the actions happened.
+    // 4. Audit metadata. The rows stay, so the log still shows that the actions happened.
     db.db
       .updateTable("audit_log")
       .set({ metadata: null })
@@ -116,7 +146,7 @@ export async function eraseContact(
       .deleteFrom("test_addresses")
       .where("workspace_id", "=", workspaceId)
       .where("email", "=", target.email),
-    // 4. The contact. Foreign keys cascade to tags, memberships, fields, and consent.
+    // 5. The contact. Foreign keys cascade to tags, memberships, fields, and consent.
     db.db
       .deleteFrom("contacts")
       .where("workspace_id", "=", workspaceId)
@@ -126,7 +156,7 @@ export async function eraseContact(
   return {
     events: changes(1),
     providerEvents: changes(2),
-    recipients: changes(3),
-    auditEntries: changes(4),
+    recipients: changes(4),
+    auditEntries: changes(5),
   };
 }

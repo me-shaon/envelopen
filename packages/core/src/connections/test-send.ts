@@ -11,7 +11,12 @@ import { OperationError } from "../errors";
 import { defineOperation } from "../registry/operation";
 import { TEST_SEND_ACTION } from "../registry/operations/onboarding";
 import { getTemplateRow } from "../templates/operations";
-import { contactValues, personalizePreview, testLinkOrigin } from "../templates/preview";
+import {
+  contactValues,
+  personalizePreview,
+  testLinkOrigin,
+  verifiedTrackingDomain,
+} from "../templates/preview";
 import { requireSendingConnection, sendThroughConnection } from "./send";
 
 // Test sends (R30, R72). A test goes only to the owner's address and to the addresses
@@ -217,7 +222,7 @@ export const campaignsSendTest = defineOperation({
     const domain = fromDomain
       ? await db.db
           .selectFrom("sending_domains")
-          .select(["domain", "tracking_domain"])
+          .select(["domain", "tracking_domain", "tracking_status"])
           .where("workspace_id", "=", workspaceId)
           .where("domain", "=", fromDomain)
           .executeTakeFirst()
@@ -231,10 +236,10 @@ export const campaignsSendTest = defineOperation({
 
     const row = await requireSendingConnection(db, workspaceId);
     // The test link goes to the unsubscribe page, which shows a generic message for it.
-    // Without a tracking domain it is on the app's host, as in the template preview.
+    // Without a verified tracking domain it is on the app's host, as in the template preview.
     const origin = testLinkOrigin(
       ctx.services.appOrigin ?? `https://${domain.domain}`,
-      domain.tracking_domain,
+      verifiedTrackingDomain(domain),
     );
     const mailbox = input.fromName ? `${input.fromName.replaceAll(/["<>]/g, "")} <${from}>` : from;
     // A template test uses the preview's personalization, so it matches the preview.

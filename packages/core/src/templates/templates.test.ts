@@ -334,6 +334,28 @@ describe("templates (R26 to R29, R69)", () => {
     expect(email.subject).toBe("[Test] Hello Ada");
     expect(email.html).toBe(preview.html);
     expect(email.html).toContain('href="https://envelopen.test/u/test"');
+
+    // A tracking domain carries the links only after its check passes.
+    for (const [status, origin] of [
+      ["fail", "https://envelopen.test"],
+      ["pass", "https://links.example.com"],
+    ] as const) {
+      await db.db
+        .updateTable("sending_domains")
+        .set({ tracking_domain: "links.example.com", tracking_status: status })
+        .where("workspace_id", "=", workspaceId)
+        .where("domain", "=", "mail.example.com")
+        .execute();
+      await run(
+        db,
+        principal,
+        campaignsSendTest,
+        { to: [`${userId}@example.com`], from: "news@mail.example.com", templateId: created.id },
+        { services: await testServices({ fetch: mock.fetch }) },
+      );
+      const [sent] = JSON.parse(mock.calls.at(-1)?.body ?? "{}").emails;
+      expect(sent.html).toContain(`href="${origin}/u/test"`);
+    }
   });
 });
 

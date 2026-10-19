@@ -59,7 +59,8 @@ import { createServices, tokenSigner } from "../services";
 // 7. Write the results in one atomic batch, guarded by the generation:
 //    - every recipient has a result: the batch is done, and the campaign may finish;
 //    - the provider refused (429, quota, credits, auth): nothing went out for the rest,
-//      so the batch returns to pending, and quota, credits, or auth pause the campaign;
+//      so the batch returns to pending, and quota, credits, or auth pause the campaign.
+//      After an earlier attempt with the stored key, the batch keeps the set and the key;
 //    - some results are unknown: the batch stays claimed. When the lease expires, the
 //      sweep retries an idempotent provider and marks any other batch uncertain (R38).
 //
@@ -391,10 +392,19 @@ async function handlePointer(deps: ConsumerDeps, pointer: BatchPointer): Promise
   if (refused) {
     const retryAfter = result.failure?.retryAfterMs ?? DEFAULT_RETRY_DELAY_MS;
     const message = result.failure?.message || refusal || "The provider refused the batch.";
+    // This attempt sent nothing, but an earlier attempt with the stored key may have
+    // (an unknown result, then a lease retry). The batch then keeps the set and the key.
+    const keepSet = stored !== null && batch.idempotency_key !== null;
     await writeBatchResults(
       deps.db,
       pointer,
-      { ...results, status: "pending", notBefore: deps.now() + retryAfter, error: message },
+      {
+        ...results,
+        status: "pending",
+        notBefore: deps.now() + retryAfter,
+        error: message,
+        keepSet,
+      },
       deps.now(),
     );
     if (refused === "rate_limited") await deps.rateLimiter(connection.id).backoff(retryAfter);

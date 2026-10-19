@@ -186,11 +186,21 @@ export interface BatchResults {
   skipped: { id: number; reason: string }[];
   /**
    * - `done`: every recipient has a result.
-   * - `pending`: a provider refusal left some unsent. The batch waits until `notBefore`
-   *   and forgets the frozen set and the key, because nothing of it went out.
+   * - `pending`: a provider refusal left some unsent. The batch waits until `notBefore`.
+   *   It forgets the frozen set and the key, unless `keepSet` is true.
    * - `claimed`: some results are unknown. The lease decides (sweep.ts).
+   *
+   * A `done` batch forgets the frozen set, because the set holds personal data (R21).
    */
   status: "done" | "pending" | "claimed";
+  /**
+   * With status `pending`: keep the frozen set and the key. The consumer sets it when
+   * the claim reused a stored key, because an earlier attempt with that key can have
+   * reached the provider. The next claim then sends the same payload with the same key,
+   * and the provider drops the copies (KTD18). With a fresh key, every recipient that
+   * the earlier attempt reached would get the email twice.
+   */
+  keepSet?: boolean;
   notBefore?: number | null;
   error?: string | null;
   /** Tracked links of the campaign, stored once (KTD26). */
@@ -274,16 +284,24 @@ ON CONFLICT (workspace_id, day) DO UPDATE SET sent = sent + excluded.sent`.compi
     );
   }
 
-  const releasing = results.status === "pending";
+  const retaining = results.status === "pending" && results.keepSet === true;
+  const releasing = results.status === "pending" && !retaining;
+  // A batch that keeps its set and key stays uncertain if an erase marked it so (erase.ts).
+  const status =
+    results.status === "claimed"
+      ? sql`status`
+      : retaining
+        ? sql`CASE WHEN status = 'uncertain' THEN 'uncertain' ELSE 'pending' END`
+        : results.status;
   queries.push(
     sql`UPDATE campaign_batches SET
-  status = ${results.status === "claimed" ? sql`status` : results.status},
+  status = ${status},
   sent_count = sent_count + ${sent},
   failed_count = failed_count + ${results.failed.length},
   skipped_count = skipped_count + ${results.skipped.length},
   lease_until = ${results.status === "claimed" ? sql`lease_until` : null},
-  not_before = ${releasing ? (results.notBefore ?? null) : null},
-  recipient_set = ${releasing ? null : sql`recipient_set`},
+  not_before = ${results.status === "pending" ? (results.notBefore ?? null) : null},
+  recipient_set = ${releasing || results.status === "done" ? null : sql`recipient_set`},
   idempotency_key = ${releasing ? null : sql`idempotency_key`},
   uncertain_at = ${results.status === "done" ? null : sql`uncertain_at`},
   last_error = ${results.error ?? null},

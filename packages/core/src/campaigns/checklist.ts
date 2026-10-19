@@ -5,6 +5,7 @@ import { z } from "zod";
 import { type CampaignPolicy, checkCampaignPolicy } from "../connections/policy-gate";
 import { normalizeEmail } from "../contacts/email";
 import type { Services } from "../services";
+import { verifiedTrackingDomain } from "../templates/preview";
 import type { AudienceEstimate } from "./audience";
 import { type CampaignRow, isAudienceEmpty, parseAudience } from "./model";
 
@@ -177,7 +178,7 @@ export async function runChecklist(input: ChecklistInput): Promise<Checklist> {
   const domain = fromDomain
     ? await db.db
         .selectFrom("sending_domains")
-        .select(["id", "domain", "verified_at"])
+        .select(["id", "domain", "verified_at", "tracking_domain", "tracking_status"])
         .where("workspace_id", "=", workspaceId)
         .where("domain", "=", fromDomain)
         .executeTakeFirst()
@@ -207,15 +208,29 @@ export async function runChecklist(input: ChecklistInput): Promise<Checklist> {
       fix: null,
     });
   }
+  // A tracking domain that does not pass its check is not used. Links stay on the app's
+  // host (linkOrigin in operations.ts). That is a warning, not a block.
+  const unverifiedTracking =
+    domain?.tracking_domain && !verifiedTrackingDomain(domain) ? domain.tracking_domain : null;
   items.push(
     domain?.verified_at
-      ? {
-          id: "domain_auth",
-          label: "Domain authentication",
-          status: "pass",
-          message: `SPF, DKIM, and DMARC pass for ${domain.domain}.`,
-          fix: null,
-        }
+      ? unverifiedTracking
+        ? {
+            id: "domain_auth",
+            label: "Domain authentication",
+            status: "warn",
+            message:
+              `SPF, DKIM, and DMARC pass for ${domain.domain}. The tracking domain ` +
+              `${unverifiedTracking} does not pass its check, so links use the app address.`,
+            fix: { label: "Check the DNS records", path: `/connections/domains/${domain.id}` },
+          }
+        : {
+            id: "domain_auth",
+            label: "Domain authentication",
+            status: "pass",
+            message: `SPF, DKIM, and DMARC pass for ${domain.domain}.`,
+            fix: null,
+          }
       : {
           id: "domain_auth",
           label: "Domain authentication",

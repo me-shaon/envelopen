@@ -7,6 +7,7 @@ import {
 } from "@envelopen/providers";
 import { normalizeEmail } from "../contacts/email";
 import { chunk } from "../contacts/writes";
+import type { ProviderEventRef } from "../events/model";
 import { requireService, type Services } from "../services";
 import { adapterContext, decryptWebhookSecret, refsOf } from "./model";
 
@@ -16,9 +17,11 @@ import { adapterContext, decryptWebhookSecret, refsOf } from "./model";
 // - Every verified event lands in `provider_events` once. The unique event id turns a
 //   replayed delivery into a no-op.
 // - A hard bounce or a complaint writes the suppression at once, as the event flow says.
-// - U10 reads unprocessed rows (`processed_at IS NULL`), matches them to campaign
-//   recipients by `provider_message_id`, updates stats, and sets `processed_at`. U10 may
-//   move the storage into the EventBuffer Durable Object and keep this function's contract.
+// - The outcome lists the rows that this request added (`events`). The hook route hands
+//   them to the workspace's EventBuffer Durable Object, whose flush matches them to
+//   campaign recipients by `provider_message_id`, writes the raw events and rollups, and
+//   sets `processed_at` (events/flush.ts). The cron hands over rows that stay
+//   unprocessed, for example when that hand-off failed (events/retention.ts).
 
 export interface WebhookOutcome {
   /** HTTP status for the provider: 200 stops its retries, 401 and 404 mean "not for us". */
@@ -26,6 +29,8 @@ export interface WebhookOutcome {
   received: number;
   stored: number;
   confirmedSubscription: boolean;
+  /** The rows that this request added, for the event pipeline. Replays add none. */
+  events: ProviderEventRef[];
 }
 
 export interface WebhookDeps {
@@ -40,7 +45,7 @@ export async function receiveProviderWebhook(
   target: { provider: string; workspaceId: number; connectionId: number },
   request: WebhookRequest,
 ): Promise<WebhookOutcome> {
-  const none = { received: 0, stored: 0, confirmedSubscription: false };
+  const none = { received: 0, stored: 0, confirmedSubscription: false, events: [] };
   const adapter = getAdapter(target.provider);
   if (!adapter) return { status: 404, ...none };
   const row = await deps.db.db
@@ -81,8 +86,14 @@ export async function receiveProviderWebhook(
       parsed.confirmSubscriptionUrl,
     );
   }
-  const stored = await storeEvents(deps, row.workspace_id, row.id, adapter.id, parsed.events);
-  return { status: 200, received: parsed.events.length, stored, confirmedSubscription };
+  const events = await storeEvents(deps, row.workspace_id, row.id, adapter.id, parsed.events);
+  return {
+    status: 200,
+    received: parsed.events.length,
+    stored: events.length,
+    confirmedSubscription,
+    events,
+  };
 }
 
 /** SNS: a GET of the SubscribeURL confirms the subscription. The adapter checked its host. */
@@ -119,8 +130,8 @@ async function storeEvents(
   connectionId: number,
   provider: string,
   events: readonly NormalizedEvent[],
-): Promise<number> {
-  if (events.length === 0) return 0;
+): Promise<ProviderEventRef[]> {
+  if (events.length === 0) return [];
   const hashEmail = requireService(deps.services, "hashEmail");
   const rows = [];
   for (const event of events.slice(0, 100)) {
@@ -145,7 +156,8 @@ async function storeEvents(
       .values(part)
       .onConflict((conflict) =>
         conflict.columns(["workspace_id", "provider", "event_id"]).doNothing(),
-      ),
+      )
+      .returning(["id", "type", "provider_message_id", "email_hash", "occurred_at"]),
   );
   const suppressions = rows.flatMap((row) => {
     const reason = SUPPRESS[row.type as keyof typeof SUPPRESS];
@@ -164,8 +176,21 @@ async function storeEvents(
         ]
       : [];
   });
-  const results = await db.atomic([...inserts, ...suppressions]);
-  return results
-    .slice(0, inserts.length)
-    .reduce((sum, result) => sum + (result.meta.changes ?? 0), 0);
+  const results = await db.atomic<{
+    id: number;
+    type: ProviderEventRef["type"];
+    provider_message_id: string | null;
+    email_hash: string | null;
+    occurred_at: number;
+  }>([...inserts, ...suppressions]);
+  return results.slice(0, inserts.length).flatMap((result) =>
+    (result.results ?? []).map((added) => ({
+      source: "provider" as const,
+      id: added.id,
+      type: added.type,
+      providerMessageId: added.provider_message_id,
+      emailHash: added.email_hash,
+      occurredAt: added.occurred_at,
+    })),
+  );
 }

@@ -159,4 +159,107 @@ test.describe("campaigns", () => {
     await page.goto("/");
     await expect(page.getByRole("region", { name: "Recent campaigns" })).toContainText("Sent");
   });
+
+  // Tracking and unsubscribe (plan U10) on the campaign that the test above sent.
+  test("tracks an open and a click, unsubscribes in one click and on the page, and shows both contacts as unsubscribed", async ({
+    page,
+    request,
+  }) => {
+    const sent = (await (await request.get(`${MOCK}/sent`)).json()) as {
+      to: string[];
+      subject: string;
+      html: string;
+      headers: Record<string, string>;
+    }[];
+    const byRecipient = (email: string) => {
+      const found = sent.find(
+        (item) => item.to[0] === email && item.subject.startsWith("A new course"),
+      );
+      if (!found) throw new Error(`No campaign email to ${email}.`);
+      return found;
+    };
+    // The links point at the https app host. The local Worker serves the same paths.
+    const local = (url: string) => {
+      const parsed = new URL(url);
+      return `${BASE}${parsed.pathname}${parsed.search}`;
+    };
+    const tester = byRecipient("tester@example.com");
+
+    // The open pixel answers with the image.
+    const pixelUrl = /src="([^"]+\/t\/o\/[^"]+)"/.exec(tester.html)?.[1];
+    expect(pixelUrl).toBeDefined();
+    const pixel = await request.get(local(pixelUrl as string));
+    expect(pixel.status()).toBe(200);
+    expect(pixel.headers()["content-type"]).toBe("image/gif");
+
+    // The click goes to the stored URL.
+    const clickUrl = /href="([^"]+\/t\/c\/[^"]+)"/.exec(tester.html)?.[1];
+    expect(clickUrl).toBeDefined();
+    const click = await request.get(local(clickUrl as string), { maxRedirects: 0 });
+    expect(click.status()).toBe(302);
+    expect(click.headers().location).toBe("https://example.com/course");
+
+    // RFC 8058 one-click: a form POST to the List-Unsubscribe URL, with no redirect.
+    const listUnsubscribe = tester.headers["List-Unsubscribe"]?.slice(1, -1) ?? "";
+    const oneClick = await request.post(local(listUnsubscribe), {
+      form: { "List-Unsubscribe": "One-Click" },
+      maxRedirects: 0,
+    });
+    expect(oneClick.status()).toBe(200);
+    expect(await oneClick.text()).toContain("You are unsubscribed");
+
+    // The owner uses the preference page from the footer link, without JavaScript.
+    const owner = byRecipient(OWNER.email);
+    const footer = /href="([^"]+\/u\/[^"]+)"/.exec(owner.html)?.[1];
+    expect(footer).toBeDefined();
+    const browser = page.context().browser();
+    if (!browser) throw new Error("No browser.");
+    const noScript = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1360, height: 1000 },
+    });
+    // Axe and the screenshots run scripts, so they look at the same pages in a second
+    // context. A GET of these pages changes nothing.
+    const inspector = await browser.newContext({
+      bypassCSP: true,
+      viewport: { width: 1360, height: 1000 },
+    });
+    const inspect = async (url: string, name: string) => {
+      const view = await inspector.newPage();
+      await view.goto(url);
+      await expectNoSeriousViolations(view);
+      await screenshot(view, name);
+      await view.close();
+    };
+    const publicPage = await noScript.newPage();
+    await publicPage.goto(local(footer as string));
+    await expect(publicPage.getByRole("heading", { name: "Email preferences" })).toBeVisible();
+    await expect(publicPage.getByRole("checkbox", { name: "Course testers" })).toBeChecked();
+    await inspect(publicPage.url(), "preference-page");
+    await publicPage.getByRole("link", { name: "Unsubscribe from all" }).click();
+    await expect(
+      publicPage.getByRole("heading", { name: "Unsubscribe from all emails?" }),
+    ).toBeVisible();
+    await publicPage.getByRole("button", { name: "Unsubscribe from all" }).click();
+    await expect(publicPage.getByRole("heading", { name: "You are unsubscribed" })).toBeVisible();
+    await expect(publicPage.getByRole("button", { name: "Subscribe again" })).toBeVisible();
+    await inspect(publicPage.url(), "unsubscribed-state");
+    await noScript.close();
+    await inspector.close();
+
+    // The owner sees both contacts as unsubscribed, with the source and the campaign.
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(OWNER.email);
+    await page.getByLabel("Password").fill(OWNER.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).not.toHaveURL(/\/login/);
+    await page.getByRole("link", { name: "Contacts" }).first().click();
+    const rows = page.getByTestId("contact-row");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.filter({ hasText: "tester@example.com" })).toContainText("Unsubscribed");
+    await expect(rows.filter({ hasText: OWNER.email })).toContainText("Unsubscribed");
+    await page.getByRole("link", { name: /tester@example\.com/ }).click();
+    await expect(page.getByText("Unsubscribed from every list")).toBeVisible();
+    await expect(page.getByText(/One-click unsubscribe, campaign #\d+/)).toBeVisible();
+  });
 });

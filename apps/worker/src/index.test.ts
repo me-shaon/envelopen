@@ -11,9 +11,11 @@ describe("worker shell", () => {
   });
 
   it("routes /u/<token> to the Worker, not the SPA", async () => {
+    // An unknown token gets the generic page from the Worker.
     const res = await exports.default.fetch(`${BASE}/u/abc123`);
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("Envelopen subscription page");
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");
+    expect(await res.text()).toContain("This link is not valid");
   });
 
   // The test runner calls the Worker directly and skips the asset router, so this

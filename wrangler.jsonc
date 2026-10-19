@@ -39,6 +39,8 @@
   },
   // Per-minute cron: starts due scheduled campaigns, runs the recovery sweep, resumes
   // campaigns after the D1 daily limit resets, and deletes expired files (U9, KTD19).
+  // It also hands unapplied provider events to the EventBuffer and, once an hour,
+  // deletes raw events past the retention period (U10, R51).
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     // PBKDF2-SHA256 iterations for password hashes (KTD7). Workers accept at most 100000.
@@ -53,13 +55,16 @@
       // Daily D1 writes and the platform_limit flag, one instance per deployment (KTD24).
       { "name": "USAGE_METER", "class_name": "UsageMeter" },
       // A token bucket per provider connection (KTD25).
-      { "name": "RATE_LIMITER", "class_name": "RateLimiter" }
+      { "name": "RATE_LIMITER", "class_name": "RateLimiter" },
+      // Tracking and provider events on their way to D1, one instance per workspace (KTD31).
+      { "name": "EVENT_BUFFER", "class_name": "EventBuffer" }
     ]
   },
   // Free plan Durable Objects need the SQLite backend.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["AuthRateLimiter"] },
-    { "tag": "v2", "new_sqlite_classes": ["UsageMeter", "RateLimiter"] }
+    { "tag": "v2", "new_sqlite_classes": ["UsageMeter", "RateLimiter"] },
+    { "tag": "v3", "new_sqlite_classes": ["EventBuffer"] }
   ],
   // Workflows run classes that the entry module exports.
   "workflows": [

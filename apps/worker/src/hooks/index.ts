@@ -1,12 +1,15 @@
 import { receiveProviderWebhook, type Services } from "@envelopen/core";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { Hono } from "hono";
+import { type EventSink, eventSink } from "../do/events";
 import { createServices } from "../services";
 
 // Provider webhooks (R43): POST /hooks/<provider>/<workspace id>/<connection id>.
 // No session and no API key: each adapter verifies the provider's signature, or the
-// secret in the URL or the Basic auth (see packages/providers). Verified events go to
-// the `provider_events` hand-off for the event pipeline (packages/core/src/connections/webhooks.ts).
+// secret in the URL or the Basic auth (see packages/providers). Verified events land in
+// `provider_events` (packages/core/src/connections/webhooks.ts), where hard bounces and
+// complaints suppress the address at once. The new rows then go to the workspace's
+// EventBuffer after the response, which applies them to stats (U10, KTD31).
 //
 // Answers:
 // - 200 for a verified request, also when it has no event that Envelopen keeps.
@@ -18,6 +21,7 @@ const MAX_BODY_BYTES = 256 * 1024;
 export interface HookRoutesOptions {
   createDb?: (env: Env) => DbConnection;
   createServices?: (env: Env, request: Request) => Partial<Services>;
+  sink?: (env: Env) => EventSink;
 }
 
 export function createHookRoutes(options: HookRoutesOptions = {}) {
@@ -51,6 +55,15 @@ export function createHookRoutes(options: HookRoutesOptions = {}) {
       },
     );
     c.executionCtx.waitUntil(db.meter.flush());
+    if (outcome.events.length > 0) {
+      const sink = (options.sink ?? eventSink)(c.env);
+      // The cron hands the rows over again if this fails (events/retention.ts).
+      c.executionCtx.waitUntil(
+        sink(workspaceId, outcome.events).catch((error) =>
+          console.error("Event hand-off failed", error),
+        ),
+      );
+    }
     if (outcome.status !== 200) {
       return c.json(
         { error: outcome.status === 401 ? "unauthorized" : "not_found" },

@@ -99,6 +99,7 @@ import {
   workspacesGet,
   workspacesList,
   workspacesRename,
+  workspacesUpdateSettings,
 } from "./operations/workspaces";
 import { createRegistry } from "./registry";
 
@@ -140,6 +141,7 @@ export {
   workspacesGet,
   workspacesList,
   workspacesRename,
+  workspacesUpdateSettings,
 } from "./operations/workspaces";
 export { createRegistry, pathParameters, type Registry, validateOperation } from "./registry";
 
@@ -149,6 +151,7 @@ export { createRegistry, pathParameters, type Registry, validateOperation } from
  */
 export const registry = createRegistry([
   workspacesGet,
+  workspacesUpdateSettings,
   workspacesList,
   workspacesCreate,
   workspacesRename,

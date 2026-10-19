@@ -22,6 +22,14 @@ export const workspacesQuery = queryOptions({
   queryFn: () => unwrap(api.GET("/workspaces")),
 });
 
+/** The current workspace with its tracking and retention settings. */
+export function workspaceSettingsQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "settings"],
+    queryFn: () => unwrap(api.GET("/workspace")),
+  });
+}
+
 export function onboardingQuery(workspaceId: number) {
   return queryOptions({
     queryKey: ["ws", workspaceId, "onboarding"],

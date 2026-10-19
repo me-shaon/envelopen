@@ -2,6 +2,7 @@ import { type DbConnection, unscoped } from "@envelopen/db";
 import { sql } from "kysely";
 import { z } from "zod";
 import { OperationError } from "../../errors";
+import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS } from "../../events/retention";
 import { defineOperation } from "../operation";
 
 export const WorkspaceSchema = z
@@ -55,6 +56,51 @@ export const workspacesGet = defineOperation({
       createdAt: row.created_at,
     };
   },
+});
+
+export const workspacesUpdateSettings = defineOperation({
+  id: "workspaces.update_settings",
+  summary: "Update the workspace settings",
+  description:
+    "Turns open and click tracking on or off for every campaign of the workspace (R45), " +
+    "and sets how many days raw events are kept (R51). A campaign can turn tracking off " +
+    "for itself, but not on when the workspace has it off. Rollups are kept for good.",
+  method: "patch",
+  path: "/workspace",
+  scope: "workspace:admin",
+  risk: "write",
+  mcp: {
+    class: "never",
+    reason: "Workspace settings are for the owner. API keys cannot hold the workspace:admin scope.",
+  },
+  input: z.object({
+    trackingOpens: z.boolean().optional(),
+    trackingClicks: z.boolean().optional(),
+    eventRetentionDays: z.number().int().min(MIN_RETENTION_DAYS).max(MAX_RETENTION_DAYS).optional(),
+  }),
+  output: WorkspaceSchema,
+  async handler(input, ctx) {
+    const { principal, db, now } = ctx;
+    const set: { tracking_opens?: 0 | 1; tracking_clicks?: 0 | 1; event_retention_days?: number } =
+      {};
+    if (input.trackingOpens !== undefined) set.tracking_opens = input.trackingOpens ? 1 : 0;
+    if (input.trackingClicks !== undefined) set.tracking_clicks = input.trackingClicks ? 1 : 0;
+    if (input.eventRetentionDays !== undefined) set.event_retention_days = input.eventRetentionDays;
+    if (Object.keys(set).length > 0) {
+      await db.db
+        .updateTable("workspaces")
+        .set({ ...set, updated_at: now })
+        .where("id", "=", principal.workspaceId)
+        .where("archived_at", "is", null)
+        .execute();
+    }
+    return workspacesGet.handler({}, ctx);
+  },
+  auditTarget: (input, output) => ({
+    targetType: "workspace",
+    targetId: output.id,
+    metadata: { ...input },
+  }),
 });
 
 // Workspace management (R5). Owner session only: workspace:admin, never through MCP.

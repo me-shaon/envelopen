@@ -2,14 +2,18 @@ import {
   cleanupExpiredFiles,
   expireLeases,
   finalizeIdle,
+  purgeExpiredEvents,
+  type RetentionResult,
   redispatchWaiting,
   rescueSnapshots,
   resumeAfterPlatformLimit,
   type SweepDeps,
   startDueCampaigns,
+  unappliedProviderEvents,
 } from "@envelopen/core";
 import { createDb, type DbConnection, isD1DailyLimitError, nextUtcMidnight } from "@envelopen/db";
 import { purgeExpiredIdempotencyKeys } from "./api/idempotency";
+import { type EventSink, eventSink } from "./do/events";
 import { usageMeter, usageSink } from "./do/usage";
 import { campaignStarter, sendQueue } from "./services";
 
@@ -23,6 +27,9 @@ import { campaignStarter, sendQueue } from "./services";
 //    uncertain batch, or a retry on an idempotent provider), dispatch waiting and
 //    dead-lettered batches again, and finish idle campaigns.
 // 4. The existing cleanup: idempotency keys and expired files.
+// 5. The event pipeline (U10): provider events that no flush applied go to their
+//    EventBuffer again, and once an hour raw events past the workspace's retention
+//    period are deleted (R51). Rollups stay.
 //
 // Each job runs on its own, so one failure does not stop the others. Every job bounds
 // its work, so one run stays inside the Free limits.
@@ -123,6 +130,42 @@ export async function runCampaignCron(deps: CronDeps): Promise<CronReport> {
   return report;
 }
 
+/** A provider event waits this long for its flush before the cron hands it over again. */
+export const RESCUE_AFTER_MS = 5 * 60 * 1000;
+/** The minute of each hour when the retention job runs. */
+export const RETENTION_MINUTE = 17;
+
+export interface EventCronReport {
+  rescued: number;
+  retention: RetentionResult | null;
+}
+
+/** The event pipeline jobs of the cron. Each runs on its own. */
+export async function runEventCron(
+  db: DbConnection,
+  sink: EventSink,
+  now: number,
+): Promise<EventCronReport> {
+  const report: EventCronReport = { rescued: 0, retention: null };
+  try {
+    const waiting = await unappliedProviderEvents(db, now, RESCUE_AFTER_MS);
+    for (const [workspaceId, events] of waiting) {
+      await sink(workspaceId, events);
+      report.rescued += events.length;
+    }
+  } catch (error) {
+    console.error("Cron job rescue provider events failed", error);
+  }
+  if (new Date(now).getUTCMinutes() === RETENTION_MINUTE) {
+    try {
+      report.retention = await purgeExpiredEvents(db, now);
+    } catch (error) {
+      console.error("Cron job event retention failed", error);
+    }
+  }
+  return report;
+}
+
 /** The `scheduled()` handler. */
 export async function runCron(
   env: Env,
@@ -139,6 +182,7 @@ export async function runCron(
     await purgeExpiredIdempotencyKeys(db);
     // Uploads, error files, and exports that hold contact data expire after 24 hours.
     await cleanupExpiredFiles(db, env.BUCKET);
+    if (!report.limited) await runEventCron(db, eventSink(env), now);
     return report;
   } finally {
     ctx.waitUntil(db.meter.flush().catch((error) => console.error("Usage report failed", error)));

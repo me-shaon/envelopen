@@ -48,6 +48,7 @@ export {
 export { createDohClient, DOH_ENDPOINT } from "./domains/dns-check";
 export { SendingDomainSchema } from "./domains/operations";
 export { isOperationError, OperationError, type OperationErrorCode } from "./errors";
+export * from "./events";
 export { type OperationDeps, runOperation } from "./executor";
 export { cleanupExpiredFiles } from "./import/cleanup";
 export { csvCell, csvLine, parseCsv } from "./import/csv";
@@ -101,7 +102,20 @@ export {
   type UsageReader,
   type UsageStatus,
 } from "./services";
-export { createEmailHasher } from "./suppression/hash";
+export {
+  aggregateRollups,
+  COUNTERS,
+  type Counter,
+  type Counts,
+  countersOf,
+  HOUR_MS,
+  type RollupEvent,
+  type Rollups,
+  rollupQueries,
+  utcDayOf,
+  utcHour,
+} from "./stats/rollups";
+export { createEmailHasher, deriveHmacKey, hmacHex } from "./suppression/hash";
 export {
   MAX_SOURCE_LENGTH,
   prepareContent,

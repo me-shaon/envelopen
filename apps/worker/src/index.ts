@@ -8,9 +8,11 @@ import { runCron } from "./cron";
 import { createHookRoutes } from "./hooks";
 import { handleSendBatch } from "./queue/send-consumer";
 import { createSetupRoutes } from "./setup/first-run";
+import { createTrackingRoutes, createUnsubscribeRoutes } from "./tracking";
 
 // Durable Object and Workflow classes must be exported from the entry module.
 export { AuthRateLimiter } from "./auth/rate-limit-do";
+export { EventBuffer } from "./do/event-buffer";
 export { RateLimiter } from "./do/rate-limiter";
 export { UsageMeter } from "./do/usage-meter";
 export { CampaignWorkflow } from "./workflows/campaign-workflow";
@@ -35,8 +37,10 @@ app.route("/api", createApiRouter({ resolveSession: betterAuthSessionResolver() 
 // Provider webhooks (U7). Each adapter verifies its own signature or secret.
 app.route("/hooks", createHookRoutes());
 
-// Placeholder for the unsubscribe and preference pages (U10).
-app.get("/u/:token", (c) => c.text("Envelopen subscription page"));
+// Tracking (U10): the open pixel, click redirects, and the honeypot link.
+app.route("/t", createTrackingRoutes());
+// Unsubscribe and the preference page (U10). One-click POST per RFC 8058.
+app.route("/u", createUnsubscribeRoutes());
 
 export default {
   fetch: app.fetch,

@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
+    <img src=".github/assets/logo-light.svg" alt="Envelopen" width="320">
+  </picture>
+</p>
+
 # Envelopen
 
 Envelopen is a self-hosted email marketing tool that runs on Cloudflare Workers. It sends campaigns through an email provider that you already use: Amazon SES, Resend, or Postmark. toSend and Cloudflare Email can send system email and test sends.

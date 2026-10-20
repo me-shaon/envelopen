@@ -230,6 +230,55 @@
     text-decoration: none;
   }
 
+  /* Every control that does something on click shows the pointer. Tailwind's preflight
+     sets buttons to the default cursor, so this rule puts the pointer back in one place.
+     A disabled control shows not-allowed, and its hover styles stay off (see button.tsx).
+     A busy control (a mutation runs) shows progress. Text inputs keep the text cursor. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([data-disabled]),
+  [role="menuitemcheckbox"]:not([data-disabled]),
+  [role="menuitemradio"]:not([data-disabled]),
+  [role="option"]:not([aria-disabled="true"]):not([data-disabled]),
+  [role="tab"]:not([data-disabled]),
+  [role="switch"]:not([data-disabled]),
+  [role="checkbox"]:not([data-disabled]),
+  [role="radio"]:not([data-disabled]),
+  summary,
+  label:has(input[type="checkbox"]:not(:disabled)),
+  label:has(input[type="radio"]:not(:disabled)),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="file"]:not(:disabled)::file-selector-button,
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  [role="menuitem"][data-disabled],
+  [role="menuitemcheckbox"][data-disabled],
+  [role="menuitemradio"][data-disabled],
+  [role="option"][aria-disabled="true"],
+  [role="option"][data-disabled],
+  [role="tab"][data-disabled],
+  [role="switch"][data-disabled],
+  [role="checkbox"][data-disabled],
+  [role="radio"][data-disabled],
+  label:has(input[type="checkbox"]:disabled),
+  label:has(input[type="radio"]:disabled),
+  input[type="checkbox"]:disabled,
+  input[type="radio"]:disabled,
+  input[type="file"]:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
+
+  [aria-busy="true"]:disabled {
+    cursor: progress;
+  }
+
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;

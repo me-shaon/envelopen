@@ -123,7 +123,7 @@ export function EngagementChart({
             type="button"
             aria-pressed={full}
             onClick={() => setFull((value) => !value)}
-            className="inline-flex min-h-[30px] cursor-pointer items-center rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground max-sm:min-h-11"
+            className="inline-flex min-h-[30px] items-center rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground max-sm:min-h-11"
           >
             {full ? `Fit to ${fitted.hours} hours` : "Show all 48 hours"}
           </button>
@@ -232,7 +232,7 @@ export function EngagementChart({
       <figcaption className="text-xs text-muted-foreground">{summary}</figcaption>
       {active.length > 0 ? (
         <details className="text-xs text-muted-foreground">
-          <summary className="inline-flex min-h-[30px] cursor-pointer items-center font-medium hover:text-foreground max-sm:min-h-11">
+          <summary className="inline-flex min-h-[30px] items-center font-medium hover:text-foreground max-sm:min-h-11">
             Show the numbers as a table
           </summary>
           <table className="mt-2 w-full max-w-[420px] border-collapse text-left">

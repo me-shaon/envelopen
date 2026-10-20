@@ -12,6 +12,7 @@ import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { Reveal } from "@/components/ui/reveal";
 import { KpiSkeleton, LoadingRegion, Skeleton } from "@/components/ui/skeleton";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, Figure } from "@/features/contacts/shared";
 import { CampaignEngagement, CampaignResults } from "@/features/stats/campaign-stats";
@@ -171,7 +172,7 @@ function SendBanner({ notice, onDismiss }: { notice: SendNotice; onDismiss: () =
           {text.body}{" "}
           <button
             type="button"
-            className="cursor-pointer font-medium underline underline-offset-2 max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
+            className="font-medium underline underline-offset-2 max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
             onClick={() => {
               const target = document.getElementById("progress");
               target?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -185,7 +186,7 @@ function SendBanner({ notice, onDismiss }: { notice: SendNotice; onDismiss: () =
       <Button
         variant="ghost"
         size="icon-sm"
-        className="-my-1 -mr-2 text-tone-brand-foreground hover:bg-transparent hover:opacity-70"
+        className="-my-1 -mr-2 text-tone-brand-foreground not-disabled:hover:bg-transparent not-disabled:hover:opacity-70"
         onClick={onDismiss}
         aria-label="Dismiss"
       >
@@ -419,9 +420,11 @@ function CampaignView({
           return unwrap(api.POST("/campaigns/{id}/unschedule", params));
       }
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, verb) => {
       setCancelling(false);
       await refresh();
+      // Pause, resume, and unschedule change the status in view. Cancel closes a dialog.
+      if (verb === "cancel") toast(`Campaign "${campaign.name}" cancelled.`);
     },
   });
   const status = campaign.status;
@@ -460,14 +463,20 @@ function CampaignView({
               </Button>
             ) : null}
             {cancellable ? (
-              <Button variant="destructive-ghost" onClick={() => setCancelling(true)}>
+              <Button
+                variant="destructive-ghost"
+                onClick={() => {
+                  action.reset();
+                  setCancelling(true);
+                }}
+              >
                 Cancel campaign
               </Button>
             ) : null}
           </>
         }
       />
-      <FormError message={errorText(action.error)} />
+      <FormError message={cancelling ? null : errorText(action.error)} />
 
       {/* The send banner slides in after the confirm and folds away on dismiss. */}
       <Reveal show={notice !== null} className="-mt-12">
@@ -524,11 +533,16 @@ function CampaignView({
 
       <ConfirmDialog
         open={cancelling}
-        onOpenChange={setCancelling}
+        onOpenChange={(open) => {
+          setCancelling(open);
+          action.reset();
+        }}
         title={`Cancel ${campaign.name}?`}
         description="No more emails go out. Recipients who got it keep it. You cannot undo this."
         confirmLabel="Cancel campaign"
+        cancelLabel="Keep sending"
         pending={action.isPending}
+        error={errorText(action.error)}
         onConfirm={() => action.mutate("cancel")}
       />
     </div>
@@ -566,7 +580,10 @@ function UncertainBatches({ campaign }: { campaign: Detail }) {
     ...campaignBatchesQuery(current.id, campaign.id),
     refetchInterval: campaign.status === "sending" ? 3000 : false,
   });
-  const [retrying, setRetrying] = useState<Schemas["CampaignBatch"] | null>(null);
+  const [deciding, setDeciding] = useState<{
+    batch: Schemas["CampaignBatch"];
+    decision: "retry" | "skip";
+  } | null>(null);
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ["ws", current.id, "campaigns"] });
   const decide = useMutation({
@@ -587,12 +604,18 @@ function UncertainBatches({ campaign }: { campaign: Detail }) {
           )
         : unwrap(api.POST("/campaigns/{id}/batches/{batchId}/skip", { params }));
     },
-    onSuccess: async () => {
-      setRetrying(null);
+    onSuccess: async (_data, { batch, decision }) => {
+      setDeciding(null);
       await refresh();
+      toast(
+        decision === "retry"
+          ? `Batch ${batch.seq} is sending again.`
+          : `Batch ${batch.seq} skipped.`,
+      );
     },
   });
   const items = batches.data?.items ?? [];
+  const retrying = deciding?.decision === "retry" ? deciding.batch : null;
 
   return (
     <section aria-labelledby="uncertain-title" className="flex flex-col gap-4">
@@ -606,7 +629,6 @@ function UncertainBatches({ campaign }: { campaign: Detail }) {
         the emails went out. It never sends them again on its own. If you retry, people who already
         got the email get it a second time. If you skip, people who did not get it never will.
       </p>
-      <FormError message={errorText(decide.error)} />
       {items.length === 0 && !batches.isPending ? (
         <EmptyState icon={UsersIcon} title="No uncertain batches">
           Every batch has a result.
@@ -634,18 +656,17 @@ function UncertainBatches({ campaign }: { campaign: Detail }) {
                 <Button
                   size="sm"
                   variant="outline"
-                  pending={
-                    decide.isPending &&
-                    decide.variables?.batch.id === batch.id &&
-                    decide.variables.decision === "skip"
-                  }
                   disabled={decide.isPending}
-                  onClick={() => decide.mutate({ batch, decision: "skip" })}
+                  onClick={() => setDeciding({ batch, decision: "skip" })}
                 >
-                  Skip
+                  Skip<span className="sr-only"> batch {batch.seq}</span>
                 </Button>
-                <Button size="sm" disabled={decide.isPending} onClick={() => setRetrying(batch)}>
-                  Retry
+                <Button
+                  size="sm"
+                  disabled={decide.isPending}
+                  onClick={() => setDeciding({ batch, decision: "retry" })}
+                >
+                  Retry<span className="sr-only"> batch {batch.seq}</span>
                 </Button>
               </div>
             </li>
@@ -653,13 +674,22 @@ function UncertainBatches({ campaign }: { campaign: Detail }) {
         </ul>
       )}
       <ConfirmDialog
-        open={retrying !== null}
-        onOpenChange={(open) => !open && setRetrying(null)}
-        title="Retry this batch?"
-        description={`Envelopen sends to ${retrying?.open ?? 0} people again. Some of them may already have the email, and they will get it twice.`}
-        confirmLabel="Retry and accept duplicates"
+        open={deciding !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDeciding(null);
+          decide.reset();
+        }}
+        title={retrying ? "Retry this batch?" : "Skip this batch?"}
+        description={
+          retrying
+            ? `Envelopen sends to ${retrying.open} people again. Some of them may already have the email, and they will get it twice.`
+            : `Envelopen marks the ${deciding?.batch.open ?? 0} open sends as not sent. People who did not get the email never will. You cannot undo this.`
+        }
+        confirmLabel={retrying ? "Retry and accept duplicates" : "Skip batch"}
         pending={decide.isPending}
-        onConfirm={() => retrying && decide.mutate({ batch: retrying, decision: "retry" })}
+        error={errorText(decide.error)}
+        onConfirm={() => deciding && decide.mutate(deciding)}
       />
     </section>
   );

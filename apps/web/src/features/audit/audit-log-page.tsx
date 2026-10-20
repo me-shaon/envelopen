@@ -469,7 +469,7 @@ function GroupRows({
             type="button"
             aria-expanded={open}
             onClick={onToggle}
-            className="-mx-1.5 -my-1 flex cursor-pointer items-start gap-1.5 rounded-md px-1.5 py-1 text-left transition-colors duration-(--duration-press) hover:bg-accent max-sm:min-h-11"
+            className="-mx-1.5 -my-1 flex items-start gap-1.5 rounded-md px-1.5 py-1 text-left transition-colors duration-(--duration-press) hover:bg-accent max-sm:min-h-11"
           >
             <ChevronRightIcon
               className={cn(

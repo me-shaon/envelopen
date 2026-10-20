@@ -8,7 +8,6 @@ import { EmptyState } from "@/components/empty-state";
 import { SectionHeader } from "@/components/page-header";
 import { ConfirmDialog } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { FormError } from "@/components/ui/field";
 import { Pill, type Tone } from "@/components/ui/pill";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
@@ -58,17 +57,29 @@ export function TemplatesPage() {
       unwrap(api.POST("/templates/{id}/duplicate", { params: { path: { id } }, body: {} })),
     onSuccess: async (copy) => {
       await refresh();
-      toast(`Template duplicated as ${copy.name}.`);
+      toast(`Template duplicated as "${copy.name}".`);
+    },
+    // A row action has no place for an inline error, so the error is a toast.
+    onError: (error, id) => {
+      const name = templates.data?.items.find((item) => item.id === id)?.name ?? "the template";
+      toast.error(`"${name}" was not duplicated. ${errorText(error)}`, {
+        retry: () => duplicate.mutate(id),
+      });
     },
   });
   const remove = useMutation({
-    mutationFn: (item: { id: number; kind: "template" | "block" }): Promise<unknown> =>
+    mutationFn: (item: {
+      id: number;
+      name: string;
+      kind: "template" | "block";
+    }): Promise<unknown> =>
       item.kind === "template"
         ? unwrap(api.DELETE("/templates/{id}", { params: { path: { id: item.id } } }))
         : unwrap(api.DELETE("/saved-blocks/{id}", { params: { path: { id: item.id } } })),
-    onSuccess: async () => {
+    onSuccess: async (_data, item) => {
       setDeleting(null);
       await refresh();
+      toast(`${item.kind === "template" ? "Template" : "Block"} "${item.name}" deleted.`);
     },
   });
 
@@ -92,7 +103,6 @@ export function TemplatesPage() {
           </Button>
         }
       />
-      <FormError message={errorText(duplicate.error) ?? errorText(remove.error)} />
 
       {templates.isPending ? (
         <TableSkeleton label="Loading the templates" rows={4} columns={5} />
@@ -226,15 +236,20 @@ export function TemplatesPage() {
 
       <ConfirmDialog
         open={deleting !== null}
-        onOpenChange={(open) => !open && setDeleting(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDeleting(null);
+          remove.reset();
+        }}
         title={`Delete ${deleting?.name ?? "this item"}?`}
         description={
           deleting?.kind === "block"
-            ? "Templates that use the block keep their copy."
-            : "Campaigns keep their own copy of the content."
+            ? "The block leaves the block panel. Templates that use the block keep their copy. You cannot undo this."
+            : "The template is deleted. Campaigns keep their own copy of the content. You cannot undo this."
         }
-        confirmLabel="Delete"
+        confirmLabel={deleting?.kind === "block" ? "Delete block" : "Delete template"}
         pending={remove.isPending}
+        error={errorText(remove.error)}
         onConfirm={() => deleting && remove.mutate(deleting)}
       />
     </div>

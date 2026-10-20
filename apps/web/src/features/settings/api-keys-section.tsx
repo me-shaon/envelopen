@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ListSkeleton } from "@/components/ui/skeleton";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { CopyValue } from "@/features/providers/shared";
 import { formatDate } from "@/lib/format";
@@ -54,6 +55,7 @@ function AgentConfig({ apiKey }: { apiKey: Schemas["CreatedApiKey"] }) {
       setCopied(true);
     } catch {
       setCopied(false);
+      toast.error("The agent config was not copied. Select the text and copy it.");
     }
   }
 
@@ -198,6 +200,7 @@ function ShowKeyDialog({
       setCopied(true);
     } catch {
       setCopied(false);
+      toast.error("The key was not copied. Select the text and copy it.");
     }
   }
 
@@ -293,11 +296,12 @@ export function ApiKeysSection() {
   const [revoking, setRevoking] = useState<ApiKey | null>(null);
 
   const revoke = useMutation({
-    mutationFn: (id: number) =>
-      unwrap(api.POST("/api-keys/{id}/revoke", { params: { path: { id } } })),
-    onSuccess: async () => {
+    mutationFn: (key: ApiKey) =>
+      unwrap(api.POST("/api-keys/{id}/revoke", { params: { path: { id: key.id } } })),
+    onSuccess: async (_data, key) => {
       setRevoking(null);
       await queryClient.invalidateQueries({ queryKey: apiKeysQuery(current.id).queryKey });
+      toast(`Key "${key.name}" revoked.`);
     },
   });
 
@@ -367,14 +371,11 @@ export function ApiKeysSection() {
         open={revoking !== null}
         onOpenChange={(open) => !open && setRevoking(null)}
         title={`Revoke ${revoking?.name ?? "key"}?`}
-        description={
-          revoke.error
-            ? errorText(revoke.error)
-            : "The key fails from the next request on. This cannot be undone."
-        }
-        confirmLabel="Revoke"
+        description="The key fails from the next request on. You cannot undo this."
+        confirmLabel="Revoke key"
         pending={revoke.isPending}
-        onConfirm={() => revoking && revoke.mutate(revoking.id)}
+        error={errorText(revoke.error)}
+        onConfirm={() => revoking && revoke.mutate(revoking)}
       />
     </section>
   );

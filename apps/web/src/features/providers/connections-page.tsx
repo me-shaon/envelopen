@@ -212,11 +212,12 @@ export function ConnectionsPage() {
   const [accepting, setAccepting] = useState<Connection | null>(null);
   const [removing, setRemoving] = useState<Connection | null>(null);
   const remove = useMutation({
-    mutationFn: (id: number) =>
-      unwrap(api.DELETE("/connections/{id}", { params: { path: { id } } })),
-    onSuccess: async () => {
+    mutationFn: (connection: Connection) =>
+      unwrap(api.DELETE("/connections/{id}", { params: { path: { id: connection.id } } })),
+    onSuccess: async (_data, connection) => {
       setRemoving(null);
       await queryClient.invalidateQueries({ queryKey: ["ws", current.id] });
+      toast(`Connection ${connection.name} removed.`);
     },
   });
   const items = connections.data?.items ?? [];
@@ -317,6 +318,7 @@ export function ConnectionsPage() {
         onOpenChange={(open) => !open && setConnecting(null)}
         onConnected={(connection) => {
           setConnecting(null);
+          toast(`${connection.name} connected.`);
           if (connection.eventsSetup === "manual" || connection.webhook.needsSecret)
             setWebhookFor(connection.id);
         }}
@@ -330,13 +332,11 @@ export function ConnectionsPage() {
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title={`Remove ${removing?.name ?? "this connection"}?`}
-        description={
-          errorText(remove.error) ??
-          "Envelopen deletes the stored key and removes the webhook it created. Campaigns cannot send until you connect a provider again."
-        }
-        confirmLabel="Remove"
+        description="Envelopen deletes the stored key and removes the webhook it created. Campaigns cannot send until you connect a provider again."
+        confirmLabel="Remove connection"
         pending={remove.isPending}
-        onConfirm={() => removing && remove.mutate(removing.id)}
+        error={errorText(remove.error)}
+        onConfirm={() => removing && remove.mutate(removing)}
       />
     </div>
   );

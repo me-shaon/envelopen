@@ -14,6 +14,7 @@ import { Pill, type Tone } from "@/components/ui/pill";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { ContactsNav, errorText, Figure, formatDateTime, PageTop, sourceLabel } from "./shared";
 
@@ -95,11 +96,16 @@ export function SuppressionsPage() {
   const suppressions = useInfiniteQuery(suppressionsQuery(current.id, email));
   const [removing, setRemoving] = useState<Suppression | null>(null);
   const remove = useMutation({
-    mutationFn: (id: number) =>
-      unwrap(api.DELETE("/suppressions/{id}", { params: { path: { id } } })),
-    onSuccess: async () => {
+    mutationFn: (item: Suppression) =>
+      unwrap(api.DELETE("/suppressions/{id}", { params: { path: { id: item.id } } })),
+    onSuccess: async (_data, item) => {
       setRemoving(null);
       await queryClient.invalidateQueries({ queryKey: ["ws", current.id] });
+      toast(
+        item.email
+          ? `Suppression of ${item.email} removed.`
+          : "Suppression removed. Email can reach the address again.",
+      );
     },
   });
   const items = suppressions.data?.pages.flatMap((page) => page.items) ?? [];
@@ -221,15 +227,21 @@ export function SuppressionsPage() {
       </div>
       <ConfirmDialog
         open={removing !== null}
-        onOpenChange={(open) => !open && setRemoving(null)}
-        title="Remove this suppression?"
-        description={
-          errorText(remove.error) ??
-          "Email can reach the address again. Remove a bounce or a complaint only when you know the address works and wants your email."
+        onOpenChange={(open) => {
+          if (open) return;
+          setRemoving(null);
+          remove.reset();
+        }}
+        title={
+          removing?.email
+            ? `Remove the suppression of ${removing.email}?`
+            : "Remove this suppression?"
         }
-        confirmLabel="Remove"
+        description="Email can reach the address again. Remove a bounce or a complaint only when you know the address works and wants your email."
+        confirmLabel="Remove suppression"
         pending={remove.isPending}
-        onConfirm={() => removing && remove.mutate(removing.id)}
+        error={errorText(remove.error)}
+        onConfirm={() => removing && remove.mutate(removing)}
       />
     </div>
   );

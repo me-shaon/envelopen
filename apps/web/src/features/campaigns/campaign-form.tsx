@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { UnsavedChangesGuard } from "@/components/unsaved-changes";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
 import { CAMPAIGN_TYPES } from "./shared";
@@ -174,7 +175,12 @@ export function CampaignForm({
       await queryClient.invalidateQueries({ queryKey: ["ws", current.id, "campaigns"] });
       setDraft(draftOf(saved));
       if (!campaign) {
-        await navigate({ to: "/campaigns/$campaignId", params: { campaignId: String(saved.id) } });
+        // The draft is saved, so the move to its page does not ask about unsaved changes.
+        await navigate({
+          to: "/campaigns/$campaignId",
+          params: { campaignId: String(saved.id) },
+          ignoreBlocker: true,
+        });
       }
     },
   });
@@ -189,7 +195,7 @@ export function CampaignForm({
 
   return (
     <form className="flex max-w-[720px] flex-col gap-8" onSubmit={onSubmit} aria-label="Campaign">
-      <FormError message={errorText(save.error)} />
+      <UnsavedChangesGuard when={changed && !save.isPending} what="this campaign" />
       <Section id="campaign-basics" title="Campaign">
         <Field id="campaign-name" label="Campaign name" hint="Only you see it.">
           <Input
@@ -401,6 +407,12 @@ export function CampaignForm({
       </Section>
 
       <div className="flex flex-wrap items-center gap-3 border-t border-hairline pt-6">
+        {/* The form is long, so a save error shows here, next to the button. */}
+        {save.error ? (
+          <div className="w-full">
+            <FormError message={errorText(save.error)} />
+          </div>
+        ) : null}
         {campaign && !changed && !save.isPending ? (
           // Nothing to save: a quiet status, not a disabled button that looks broken.
           <span

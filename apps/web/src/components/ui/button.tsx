@@ -15,20 +15,21 @@ import { Spinner } from "./spinner";
 // width does not change.
 
 export const buttonVariants = cva(
-  "relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] font-medium transition-[color,background-color,border-color,opacity,scale] duration-(--duration-press) ease-out active:scale-[0.98] disabled:pointer-events-none [&:disabled:not([data-pending])]:opacity-50 data-[pending]:opacity-80 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "relative inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] font-medium transition-[color,background-color,border-color,opacity,scale] duration-(--duration-press) ease-out not-disabled:active:scale-[0.98] [&:disabled:not([data-pending])]:opacity-50 data-[pending]:opacity-80 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        outline: "border border-input bg-card text-foreground hover:bg-accent",
-        ghost: "text-foreground hover:bg-accent",
-        soft: "bg-tone-teal text-tone-teal-foreground hover:opacity-90",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        default: "bg-primary text-primary-foreground not-disabled:hover:bg-primary/90",
+        outline: "border border-input bg-card text-foreground not-disabled:hover:bg-accent",
+        ghost: "text-foreground not-disabled:hover:bg-accent",
+        soft: "bg-tone-teal text-tone-teal-foreground not-disabled:hover:opacity-90",
+        destructive:
+          "bg-destructive text-destructive-foreground not-disabled:hover:bg-destructive/90",
         "destructive-ghost":
-          "text-destructive hover:bg-tone-danger hover:text-tone-danger-foreground",
+          "text-destructive not-disabled:hover:bg-tone-danger not-disabled:hover:text-tone-danger-foreground",
         "destructive-outline":
-          "border border-input bg-card text-destructive hover:border-transparent hover:bg-tone-danger hover:text-tone-danger-foreground",
-        brand: "bg-brand-strong text-brand-strong-foreground hover:bg-brand-strong/90",
+          "border border-input bg-card text-destructive not-disabled:hover:border-transparent not-disabled:hover:bg-tone-danger not-disabled:hover:text-tone-danger-foreground",
+        brand: "bg-brand-strong text-brand-strong-foreground not-disabled:hover:bg-brand-strong/90",
       },
       size: {
         default: "min-h-9 px-3.5 text-[13px] max-sm:min-h-11",

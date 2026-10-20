@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronsUpDownIcon, LogOutIcon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react";
-import { type SessionUser, signOut } from "@/auth/auth-client";
+import { AuthRequestError, type SessionUser, signOut } from "@/auth/auth-client";
 import { initials } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
 import {
@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { toast } from "./ui/toast";
 
 export function UserMenu({ user }: { user: SessionUser }) {
   const queryClient = useQueryClient();
@@ -22,16 +23,24 @@ export function UserMenu({ user }: { user: SessionUser }) {
   async function handleSignOut() {
     try {
       await signOut();
-    } finally {
-      queryClient.clear();
-      await navigate({ to: "/login" });
+    } catch (error) {
+      // A 401 means the session has already ended. Any other error keeps the session,
+      // and the menu has closed, so a toast tells the owner.
+      if (!(error instanceof AuthRequestError && error.status === 401)) {
+        toast.error("You are still signed in. Check the connection and try again.", {
+          retry: () => void handleSignOut(),
+        });
+        return;
+      }
     }
+    queryClient.clear();
+    await navigate({ to: "/login" });
   }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="flex min-h-10 max-md:min-h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-2 text-left hover:bg-sidebar-accent"
+        className="flex min-h-10 max-md:min-h-11 w-full items-center justify-between gap-2 rounded-lg px-2 text-left hover:bg-sidebar-accent"
         aria-label={`Account: ${display}`}
       >
         <span className="flex min-w-0 items-center gap-2">

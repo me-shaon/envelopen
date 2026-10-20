@@ -183,6 +183,20 @@ test.describe("contacts", () => {
     await expectNoSeriousViolations(page);
   });
 
+  test("removes a tag without a question and puts it back with Undo", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/contacts");
+    await page.getByRole("link", { name: /ben@example\.com/ }).click();
+    await expect(page.getByRole("heading", { name: "ben@example.com" })).toBeVisible();
+    await page.getByRole("button", { name: "Remove tag Intro to Data" }).click();
+    const toast = page.getByTestId("toast");
+    await expect(toast).toContainText('Tag "Intro to Data" removed from ben@example.com.');
+    await expect(page.getByRole("button", { name: "Remove tag Intro to Data" })).toHaveCount(0);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await toast.getByRole("button", { name: "Undo" }).click();
+    await expect(page.getByRole("button", { name: "Remove tag Intro to Data" })).toBeVisible();
+  });
+
   // Motion on: the loading skeleton, its replacement by content, and a toast.
   test.describe("with motion", () => {
     test.use({ reducedMotion: "no-preference" });
@@ -203,12 +217,14 @@ test.describe("contacts", () => {
       await expect(skeleton).toHaveCount(0);
       await page.unroute(contactList);
 
-      // A tag added on a contact fades in and a toast confirms it.
+      // A tag added on a contact fades in. A removed tag fades out, and a toast offers Undo.
       await page.getByRole("link", { name: /ana\.silva@example\.com/ }).click();
       await page.getByLabel("New tag").fill("Alumni");
       await page.getByRole("button", { name: "Add", exact: true }).click();
       await expect(page.getByRole("button", { name: "Remove tag Alumni" })).toBeVisible();
-      await expect(page.getByTestId("toast")).toContainText('Tag "Alumni" added.');
+      await page.getByRole("button", { name: "Remove tag Alumni" }).click();
+      await expect(page.getByTestId("toast")).toContainText('Tag "Alumni" removed');
+      await expect(page.getByRole("button", { name: "Remove tag Alumni" })).toHaveCount(0);
       await expectNoSeriousViolations(page);
     });
   });

@@ -13,7 +13,7 @@ export function RadioGroupItem({
   return (
     <RadioPrimitive.Item
       className={cn(
-        "mt-0.5 inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full border border-input bg-card data-[state=checked]:border-foreground",
+        "mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-input bg-card data-[state=checked]:border-foreground",
         className,
       )}
       {...props}

@@ -1,15 +1,22 @@
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
 import type { ReactNode } from "react";
 import { Button } from "./button";
+import { FormError } from "./field";
 
-/** A confirmation for a destructive action. Focus starts on Cancel. */
+/**
+ * A confirmation for a destructive action. Focus starts on Cancel, and Escape cancels.
+ * The dialog stays open while the action runs. When the action fails, `error` shows in
+ * the dialog, next to the buttons, and the dialog stays open.
+ */
 export function ConfirmDialog({
   open,
   onOpenChange,
   title,
   description,
   confirmLabel,
+  cancelLabel = "Cancel",
   pending,
+  error,
   onConfirm,
 }: {
   open: boolean;
@@ -17,7 +24,11 @@ export function ConfirmDialog({
   title: string;
   description: ReactNode;
   confirmLabel: string;
+  /** The label of the safe choice, which has the focus when the dialog opens. */
+  cancelLabel?: string;
   pending?: boolean;
+  /** The error of the last try, shown in the dialog. */
+  error?: string | null;
   onConfirm: () => void;
 }) {
   return (
@@ -33,9 +44,10 @@ export function ConfirmDialog({
               {description}
             </AlertDialogPrimitive.Description>
           </div>
-          <div className="flex justify-end gap-2">
+          <FormError message={error} />
+          <div className="flex flex-wrap justify-end gap-2">
             <AlertDialogPrimitive.Cancel asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{cancelLabel}</Button>
             </AlertDialogPrimitive.Cancel>
             <Button
               variant="destructive"

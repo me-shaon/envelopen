@@ -212,7 +212,7 @@ function SetupComplete({ steps, total }: { steps: Step[]; total: number }) {
             <span className="figure">{total}</span> of <span className="figure">{total}</span> steps
             done.
           </span>
-          <Collapsible.Trigger className="inline-flex min-h-[30px] cursor-pointer items-center text-[12.5px] font-medium text-muted-foreground underline-offset-4 transition-colors duration-(--duration-press) hover:text-foreground hover:underline max-sm:min-h-11">
+          <Collapsible.Trigger className="inline-flex min-h-[30px] items-center text-[12.5px] font-medium text-muted-foreground underline-offset-4 transition-colors duration-(--duration-press) hover:text-foreground hover:underline max-sm:min-h-11">
             {open ? "Hide the steps" : "Show the steps"}
           </Collapsible.Trigger>
         </div>

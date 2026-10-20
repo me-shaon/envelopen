@@ -12,6 +12,7 @@ import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { formatDate } from "@/lib/format";
 import { presenceClass, usePresence } from "@/lib/motion";
@@ -127,19 +128,27 @@ function useAudienceMutations(kind: "lists" | "tags") {
         : unwrap(api.POST("/tags", { body: { name } })),
     onSuccess: refresh,
   });
+  const noun = kind === "lists" ? "List" : "Tag";
+  // The rename dialog closes on success, so a toast confirms the new name.
   const rename = useMutation({
     mutationFn: ({ id, name }: { id: number; name: string }): Promise<unknown> =>
       kind === "lists"
         ? unwrap(api.PATCH("/lists/{id}", { params: { path: { id } }, body: { name } }))
         : unwrap(api.PATCH("/tags/{id}", { params: { path: { id } }, body: { name } })),
-    onSuccess: refresh,
+    onSuccess: async (_data, input) => {
+      await refresh();
+      toast(`${noun} renamed to "${input.name}".`);
+    },
   });
   const remove = useMutation({
-    mutationFn: (id: number): Promise<unknown> =>
+    mutationFn: (item: Item): Promise<unknown> =>
       kind === "lists"
-        ? unwrap(api.DELETE("/lists/{id}", { params: { path: { id } } }))
-        : unwrap(api.DELETE("/tags/{id}", { params: { path: { id } } })),
-    onSuccess: refresh,
+        ? unwrap(api.DELETE("/lists/{id}", { params: { path: { id: item.id } } }))
+        : unwrap(api.DELETE("/tags/{id}", { params: { path: { id: item.id } } })),
+    onSuccess: async (_data, item) => {
+      await refresh();
+      toast(`${noun} "${item.name}" deleted.`);
+    },
   });
   return { create, rename, remove };
 }
@@ -234,16 +243,18 @@ export function ListsPage() {
       />
       <ConfirmDialog
         open={deleting !== null}
-        onOpenChange={(open) => !open && setDeleting(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDeleting(null);
+          remove.reset();
+        }}
         title={`Delete ${deleting?.name ?? "list"}?`}
-        description={
-          errorText(remove.error) ??
-          "The list and its memberships go away. The contacts stay, with their tags and any unsubscribe from every list."
-        }
-        confirmLabel="Delete"
+        description="The list and its memberships go away. The contacts stay, with their tags and any unsubscribe from every list. You cannot undo this."
+        error={errorText(remove.error)}
+        confirmLabel="Delete list"
         pending={remove.isPending}
         onConfirm={() =>
-          deleting && remove.mutate(deleting.id, { onSuccess: () => setDeleting(null) })
+          deleting && remove.mutate(deleting, { onSuccess: () => setDeleting(null) })
         }
       />
     </div>
@@ -335,15 +346,18 @@ export function TagsPage() {
       />
       <ConfirmDialog
         open={deleting !== null}
-        onOpenChange={(open) => !open && setDeleting(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDeleting(null);
+          remove.reset();
+        }}
         title={`Delete ${deleting?.name ?? "tag"}?`}
-        description={
-          errorText(remove.error) ?? "The tag comes off every contact. The contacts stay."
-        }
-        confirmLabel="Delete"
+        description="The tag comes off every contact. The contacts stay. You cannot undo this."
+        error={errorText(remove.error)}
+        confirmLabel="Delete tag"
         pending={remove.isPending}
         onConfirm={() =>
-          deleting && remove.mutate(deleting.id, { onSuccess: () => setDeleting(null) })
+          deleting && remove.mutate(deleting, { onSuccess: () => setDeleting(null) })
         }
       />
     </div>

@@ -10,6 +10,7 @@ import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
 import { type Connection, type ConnectionDetail, CopyValue, Note, type Provider } from "./shared";
@@ -289,6 +290,7 @@ export function PolicyDialog({
       await queryClient.invalidateQueries({ queryKey: ["ws", current.id] });
       setUnderstood(false);
       onOpenChange(false);
+      if (connection) toast(`Warning for ${connection.name} accepted.`);
     },
   });
   return (

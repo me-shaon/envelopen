@@ -88,10 +88,11 @@ export function CopyValue({
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      toast(`${label} copied.`);
+      toast(`${label[0]?.toUpperCase()}${label.slice(1)} copied.`);
       setTimeout(() => setCopied(false), 1500);
     } catch {
       setCopied(false);
+      toast.error(`The ${label} was not copied. Select the text and copy it.`);
     }
   }
   return (

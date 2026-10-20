@@ -40,7 +40,7 @@ function RenameDialog({
     onSuccess: async (_data, input) => {
       await queryClient.invalidateQueries({ queryKey: workspacesQuery.queryKey });
       onOpenChange(false);
-      toast(`Workspace renamed to ${input.name}.`);
+      toast(`Workspace renamed to "${input.name}".`);
     },
   });
 
@@ -98,17 +98,18 @@ export function WorkspacesSection() {
     onSuccess: async (_data, value) => {
       setName("");
       await queryClient.invalidateQueries({ queryKey: workspacesQuery.queryKey });
-      toast(`Workspace ${value} created. Switch to it from the sidebar.`);
+      toast(`Workspace "${value}" created. Switch to it from the sidebar.`);
     },
   });
 
   const archive = useMutation({
-    mutationFn: (id: number) =>
-      unwrap(api.POST("/workspaces/{id}/archive", { params: { path: { id } } })),
-    onSuccess: async () => {
+    mutationFn: (workspace: Workspace) =>
+      unwrap(api.POST("/workspaces/{id}/archive", { params: { path: { id: workspace.id } } })),
+    onSuccess: async (_data, workspace) => {
       setArchiving(null);
       // The shell moves to another workspace when the current one is archived.
       await queryClient.invalidateQueries();
+      toast(`Workspace ${workspace.name} archived.`);
     },
   });
 
@@ -193,16 +194,17 @@ export function WorkspacesSection() {
       <RenameDialog workspace={renaming} onOpenChange={(open) => !open && setRenaming(null)} />
       <ConfirmDialog
         open={archiving !== null}
-        onOpenChange={(open) => !open && setArchiving(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setArchiving(null);
+          archive.reset();
+        }}
         title={`Archive ${archiving?.name ?? "workspace"}?`}
-        description={
-          archive.error
-            ? errorText(archive.error)
-            : "Its API keys stop working, and it leaves the workspace switcher. The data stays."
-        }
-        confirmLabel="Archive"
+        description="Its API keys stop working, and it leaves the workspace switcher. The data stays."
+        confirmLabel="Archive workspace"
         pending={archive.isPending}
-        onConfirm={() => archiving && archive.mutate(archiving.id)}
+        error={errorText(archive.error)}
+        onConfirm={() => archiving && archive.mutate(archiving)}
       />
     </section>
   );

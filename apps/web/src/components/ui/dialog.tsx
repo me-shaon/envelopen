@@ -24,7 +24,7 @@ export function DialogContent({
       >
         {children}
         <DialogPrimitive.Close
-          className="absolute top-4 right-4 inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--duration-press) hover:bg-accent hover:text-foreground"
+          className="absolute top-4 right-4 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--duration-press) hover:bg-accent hover:text-foreground"
           aria-label="Close"
         >
           <XIcon className="size-4" aria-hidden="true" />

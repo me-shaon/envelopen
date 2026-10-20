@@ -54,6 +54,8 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/toast";
+import { UnsavedChangesGuard } from "@/components/unsaved-changes";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
 import { cn } from "@/lib/utils";
@@ -219,6 +221,8 @@ function useSaveTemplate(templateId: number | null) {
           to: "/templates/$templateId",
           params: { templateId: String(saved.id) },
           replace: true,
+          // The template is saved, so the move to its address does not ask first.
+          ignoreBlocker: true,
         });
       }
     },
@@ -563,7 +567,7 @@ function BlockPanel({ editor, onSaveBlock }: { editor: Editor; onSaveBlock: () =
                 type="button"
                 aria-label={`Add ${block.label.toLowerCase()}`}
                 onClick={() => insertBlocks(editor, [defaultBlock(block.type)])}
-                className="flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-[12.5px] transition-colors hover:bg-accent"
+                className="flex min-h-9 items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-[12.5px] transition-colors hover:bg-accent"
               >
                 <Icon
                   className="size-3.5 shrink-0 text-muted-foreground"
@@ -639,9 +643,10 @@ function SaveBlockDialog({
         }),
       );
     },
-    onSuccess: async () => {
+    onSuccess: async (block) => {
       await queryClient.invalidateQueries({ queryKey: ["ws", current.id, "saved-blocks"] });
       onOpenChange(false);
+      toast(`Block "${block.name}" saved.`);
     },
   });
   return (
@@ -725,6 +730,8 @@ function BlockEditor({ template }: { template: Template | null }) {
     preheader: template?.preheader ?? "",
   });
   const [dirty, setDirty] = useState(template === null);
+  // A new template starts as unsaved, but leaving it untouched loses nothing.
+  const [edited, setEdited] = useState(false);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [dialog, setDialog] = useState<"link" | "block" | "test" | null>(null);
   const save = useSaveTemplate(template?.id ?? null);
@@ -738,7 +745,10 @@ function BlockEditor({ template }: { template: Template | null }) {
         class: "email-canvas-body",
       },
     },
-    onUpdate: () => setDirty(true),
+    onUpdate: () => {
+      setDirty(true);
+      setEdited(true);
+    },
   });
   const selected = useEditorState({
     editor,
@@ -748,6 +758,7 @@ function BlockEditor({ template }: { template: Template | null }) {
   const onDraft = (next: Draft) => {
     setDraft(next);
     setDirty(true);
+    setEdited(true);
   };
 
   const renderHtml = useMemo(
@@ -773,6 +784,7 @@ function BlockEditor({ template }: { template: Template | null }) {
       text: rendered.text,
     });
     setDirty(false);
+    setEdited(false);
     return saved;
   }
 
@@ -780,6 +792,10 @@ function BlockEditor({ template }: { template: Template | null }) {
 
   return (
     <div className="flex flex-col gap-8">
+      <UnsavedChangesGuard
+        when={dirty && (template !== null || edited) && !save.isPending}
+        what="this template"
+      />
       <EditorHeader
         draft={draft}
         onDraft={onDraft}
@@ -886,6 +902,7 @@ function SourceEditor({ template }: { template: Template }) {
 
   return (
     <div className="flex flex-col gap-8">
+      <UnsavedChangesGuard when={dirty && !save.isPending} what="this template" />
       <EditorHeader
         draft={draft}
         onDraft={(next) => {

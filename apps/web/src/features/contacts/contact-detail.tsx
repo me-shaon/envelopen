@@ -88,18 +88,41 @@ function TagsSection({ contact }: { contact: Contact }) {
           body: { tags: [tag] },
         }),
       ),
-    onSuccess: async (_data, tag) => {
+    // The new tag shows in the row at once, so there is no toast.
+    onSuccess: async () => {
       setName("");
       await invalidate();
-      toast(`Tag "${tag}" added.`);
     },
   });
-  const remove = useMutation({
-    mutationFn: (tagId: number) =>
+  // Removing a tag is easy to reverse, so it asks nothing and offers Undo instead.
+  const restore = useMutation({
+    mutationFn: (tag: string) =>
       unwrap(
-        api.DELETE("/contacts/{id}/tags/{tagId}", { params: { path: { id: contact.id, tagId } } }),
+        api.POST("/contacts/{id}/tags", {
+          params: { path: { id: contact.id } },
+          body: { tags: [tag] },
+        }),
       ),
     onSuccess: invalidate,
+    // The Undo button was in a toast that is gone, so the error is a toast too.
+    onError: (error, tag) =>
+      toast.error(`Tag "${tag}" was not added back. ${errorText(error)}`, {
+        retry: () => restore.mutate(tag),
+      }),
+  });
+  const remove = useMutation({
+    mutationFn: (tag: { id: number; name: string }) =>
+      unwrap(
+        api.DELETE("/contacts/{id}/tags/{tagId}", {
+          params: { path: { id: contact.id, tagId: tag.id } },
+        }),
+      ),
+    onSuccess: async (_data, tag) => {
+      await invalidate();
+      toast.undo(`Tag "${tag.name}" removed from ${contact.email}.`, () =>
+        restore.mutate(tag.name),
+      );
+    },
   });
   // A new tag fades in. A removed tag fades out before it leaves the row.
   const tags = usePresence(contact.tags, tagKey);
@@ -124,10 +147,10 @@ function TagsSection({ contact }: { contact: Contact }) {
               {/* The x stays 16 px. Below sm, a 44 px hit area centers on it for touch. */}
               <button
                 type="button"
-                className="relative inline-flex size-4 cursor-pointer items-center justify-center rounded-full transition-colors duration-(--duration-press) before:absolute before:top-1/2 before:left-1/2 before:size-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] hover:bg-black/10 disabled:cursor-default sm:before:hidden dark:hover:bg-white/10"
+                className="relative inline-flex size-4 items-center justify-center rounded-full transition-colors duration-(--duration-press) before:absolute before:top-1/2 before:left-1/2 before:size-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] not-disabled:hover:bg-black/10 sm:before:hidden dark:not-disabled:hover:bg-white/10"
                 aria-label={`Remove tag ${tag.name}`}
-                disabled={state === "exit" || (remove.isPending && remove.variables === tag.id)}
-                onClick={() => remove.mutate(tag.id)}
+                disabled={state === "exit" || (remove.isPending && remove.variables?.id === tag.id)}
+                onClick={() => remove.mutate({ id: tag.id, name: tag.name })}
               >
                 <XIcon className="size-3" aria-hidden="true" />
               </button>
@@ -619,14 +642,16 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
 
       <ConfirmDialog
         open={confirm === "unsubscribe"}
-        onOpenChange={(open) => !open && setConfirm(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setConfirm(null);
+          unsubscribe.reset();
+        }}
         title={`Unsubscribe ${data.email}?`}
-        description={
-          errorText(unsubscribe.error) ??
-          "The contact leaves every list and gets no campaign email. The contact stays visible. Only the contact can resubscribe."
-        }
-        confirmLabel="Unsubscribe"
+        description="The contact leaves every list and gets no campaign email. The contact stays visible. Only the contact can resubscribe."
+        confirmLabel="Unsubscribe from all"
         pending={unsubscribe.isPending}
+        error={errorText(unsubscribe.error)}
         onConfirm={() => unsubscribe.mutate()}
       />
       <EraseDialog
@@ -637,6 +662,7 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
           setConfirm(null);
           await navigate({ to: "/contacts" });
           await invalidate();
+          toast(`Contact ${data.email} erased.`);
         }}
       />
     </div>

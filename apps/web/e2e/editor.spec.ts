@@ -233,4 +233,66 @@ test.describe("editor", () => {
     expect(email?.html).toContain("Start the course");
     expect(email?.html).not.toMatch(/<script|onerror/i);
   });
+  test("a failed row action shows an error toast with Try again", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/templates");
+    const duplicate = "**/api/templates/*/duplicate";
+    await page.route(duplicate, (route) =>
+      route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "internal", message: "The server failed." } }),
+      }),
+    );
+    await page.getByRole("button", { name: "Duplicate Welcome email" }).first().click();
+    const error = page.locator('[data-testid="toast"][data-tone="danger"]');
+    await expect(error).toContainText('"Welcome email" was not duplicated. The server failed.');
+    // The same failure again replaces the toast instead of stacking a second one.
+    await page.getByRole("button", { name: "Duplicate Welcome email" }).first().click();
+    await expect(error).toHaveCount(1);
+    await expectNoSeriousViolations(page);
+    await screenshot(page, "toast-error");
+
+    await page.unroute(duplicate);
+    await error.getByRole("button", { name: "Try again" }).click();
+    await expect(
+      page.getByTestId("toast").filter({ hasText: "Template duplicated as" }),
+    ).toBeVisible();
+  });
+
+  test("asks before it leaves a template with unsaved changes", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/templates/1");
+    await page.getByLabel("Subject").fill("Welcome back, {{ first_name }}");
+    await expect(page.getByTestId("save-status")).toHaveText("Unsaved changes");
+
+    // An in-app link opens the app dialog. Focus starts on the safe choice.
+    await page.getByRole("link", { name: "Templates" }).first().click();
+    const dialog = page.getByRole("alertdialog", { name: "Leave without saving?" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Keep editing" })).toBeFocused();
+    await expectNoSeriousViolations(page);
+    await screenshot(page, "unsaved-changes");
+
+    // Escape keeps the page and the changes.
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(/\/templates\/1$/);
+    await expect(page.getByLabel("Subject")).toHaveValue("Welcome back, {{ first_name }}");
+
+    // Leave without saving: the page changes and the template keeps the saved subject.
+    await page.getByRole("link", { name: "Templates" }).first().click();
+    await dialog.getByRole("button", { name: "Leave without saving" }).click();
+    await expect(page).toHaveURL(/\/templates$/);
+    const saved = await apiGet(page, "/templates/1");
+    expect(saved.subject).toBe("Welcome, {{ first_name }}");
+
+    // After a save, the page changes without a question.
+    await page.goto("/templates/1");
+    await page.getByLabel("Subject").fill("Welcome, {{ first_name }}!");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByTestId("save-status")).toHaveText("Saved");
+    await page.getByRole("link", { name: "Templates" }).first().click();
+    await expect(page).toHaveURL(/\/templates$/);
+  });
 });

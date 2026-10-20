@@ -10,6 +10,7 @@ import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
 import { presenceClass, usePresence } from "@/lib/motion";
@@ -43,10 +44,24 @@ export function TestSendSection({ hasConnection }: { hasConnection: boolean }) {
       await invalidate();
     },
   });
-  const remove = useMutation({
-    mutationFn: (id: number) =>
-      unwrap(api.DELETE("/test-addresses/{id}", { params: { path: { id } } })),
+  // Removing a test address is easy to reverse, so it asks nothing and offers Undo.
+  const restore = useMutation({
+    mutationFn: (email: string) => unwrap(api.POST("/test-addresses", { body: { email } })),
     onSuccess: invalidate,
+    // The Undo button was in a toast that is gone, so the error is a toast too.
+    onError: (error, email) =>
+      toast.error(`${email} was not added back. ${errorText(error)}`, {
+        retry: () => restore.mutate(email),
+      }),
+  });
+  const remove = useMutation({
+    mutationFn: (item: { id: number; email: string }) =>
+      unwrap(api.DELETE("/test-addresses/{id}", { params: { path: { id: item.id } } })),
+    onSuccess: async (_data, item) => {
+      setPicked((value) => value?.filter((email) => email !== item.email) ?? null);
+      await invalidate();
+      toast.undo(`Test address ${item.email} removed.`, () => restore.mutate(item.email));
+    },
   });
   const send = useMutation({
     mutationFn: (input: { to: string[]; from: string }) =>
@@ -115,7 +130,11 @@ export function TestSendSection({ hasConnection }: { hasConnection: boolean }) {
                     <Button
                       variant="destructive-ghost"
                       size="icon-sm"
-                      onClick={() => item.id !== null && remove.mutate(item.id)}
+                      disabled={state === "exit"}
+                      pending={remove.isPending && remove.variables?.id === item.id}
+                      onClick={() =>
+                        item.id !== null && remove.mutate({ id: item.id, email: item.email })
+                      }
                     >
                       <XIcon className="size-3.5" aria-hidden="true" />
                       <span className="sr-only">Remove {item.email}</span>

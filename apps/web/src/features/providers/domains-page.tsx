@@ -275,6 +275,7 @@ export function DomainDetailPage({ domainId }: { domainId: number }) {
     onSuccess: async () => {
       await invalidate();
       await navigate({ to: "/connections/domains" });
+      if (data) toast(`Domain ${data.domain} removed.`);
     },
   });
   const data = domain.data;
@@ -421,14 +422,15 @@ export function DomainDetailPage({ domainId }: { domainId: number }) {
       )}
       <ConfirmDialog
         open={removing}
-        onOpenChange={setRemoving}
+        onOpenChange={(open) => {
+          setRemoving(open);
+          if (!open) remove.reset();
+        }}
         title={`Remove ${data?.domain ?? "this domain"}?`}
-        description={
-          errorText(remove.error) ??
-          "Envelopen stops using the domain. Your DNS records and the domain at your provider stay as they are."
-        }
-        confirmLabel="Remove"
+        description="Envelopen stops using the domain. Your DNS records and the domain at your provider stay as they are."
+        confirmLabel="Remove domain"
         pending={remove.isPending}
+        error={errorText(remove.error)}
         onConfirm={() => remove.mutate()}
       />
     </div>

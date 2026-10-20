@@ -50,7 +50,7 @@ export function WorkspaceSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="flex min-h-10 max-md:min-h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] border border-input bg-card px-2.5 text-left"
+        className="flex min-h-10 max-md:min-h-11 w-full items-center justify-between gap-2 rounded-[10px] border border-input bg-card px-2.5 text-left"
         aria-label={`Workspace: ${current.name}. Switch workspace`}
       >
         <span className="flex min-w-0 items-center gap-2">

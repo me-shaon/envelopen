@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader, SectionHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { useCurrentWorkspace } from "@/components/workspace-context";
+import { RecentActivity } from "@/features/audit/recent-activity";
 import { CampaignTable } from "@/features/campaigns/campaigns-page";
 import { OnboardingChecklist, useOnboarding } from "@/features/onboarding/onboarding-checklist";
 import { LatestCampaign } from "@/features/stats/latest-campaign";
@@ -90,15 +91,7 @@ export function OverviewPage() {
           <h2 id="activity-title" className="m-0 text-[13px] font-semibold">
             Activity
           </h2>
-          <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-3">
-            <span className="mt-[5px] size-2 rounded-full bg-chart-2" aria-hidden="true" />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[13px] leading-[1.45]">Workspace {current.name} is ready.</span>
-              <span className="text-xs text-muted-foreground">
-                Sends, imports, and unsubscribes will show here.
-              </span>
-            </div>
-          </div>
+          <RecentActivity workspaceId={current.id} />
         </section>
 
         <section aria-labelledby="resources-title" className="flex flex-col gap-2">

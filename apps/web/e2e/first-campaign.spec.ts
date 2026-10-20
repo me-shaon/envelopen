@@ -154,6 +154,10 @@ test.describe("first campaign", () => {
       "data-status",
       "done",
     );
+    // The activity panel shows the audit log, newest first.
+    const activity = page.getByTestId("recent-activity");
+    await expect(activity.getByRole("listitem").first()).toContainText("Test email sent.");
+    await expect(activity).toContainText("Email provider connected.");
 
     // Create the campaign to the tag, confirm, and wait for sent.
     await page.getByRole("link", { name: "New campaign" }).first().click();

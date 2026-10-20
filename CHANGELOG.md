@@ -14,22 +14,26 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [0.1.0] - 2026-10-20
 
-The first release.
+The first release of Envelopen: self-hosted email campaigns on Cloudflare Workers.
 
 ### Added
 
-- Deploy to Cloudflare button. It provisions D1, KV, R2, the send queue with a dead-letter queue, two Workflows, and four Durable Objects.
-- First-run setup with a setup token, deployment checks, and the plan limits. Owner login with a password or a passkey, and recovery with the setup token.
-- Workspaces, contacts, lists, and tags. CSV import with column mapping and consent basis, contact export, and contact erase.
-- Email providers: Amazon SES, Resend, and Postmark for campaigns. toSend and Cloudflare Email for system email and test sends. Envelopen creates the bounce and complaint webhooks where the provider allows it.
-- Sending domains with SPF, DKIM, and DMARC checks, and an optional tracking domain.
-- Templates with an email block editor, Markdown templates, and test sends.
-- Campaigns with a send checklist, a recipient estimate, scheduled sends, and batch sends through the queue within the provider rate limit.
-- Open and click tracking with machine-open detection, one-click unsubscribe, a suppression list, and campaign stats.
-- The audit log for every change, with the actor, the surface, and the target.
-- A REST API with an OpenAPI document, API keys with scopes, and an MCP server for AI agents.
-- Daily D1 write metering that pauses campaigns at the Workers Free limit and resumes them after the reset.
-- The update workflow for repositories made with the Deploy button, and the version in **Settings** and in `GET /api/health`.
+- One-click Deploy to Cloudflare, first-run setup, and owner login with a password or a passkey.
+- Contacts, lists, tags, CSV import, export, and GDPR erase.
+- Amazon SES, Resend, and Postmark for campaigns. toSend and Cloudflare Email for system email.
+- Sending domains with SPF, DKIM, and DMARC checks.
+- Block editor templates and test sends.
+- Campaigns with a send checklist, scheduling, and batched sends.
+- Open and click tracking, one-click unsubscribe, and campaign stats.
+- Audit log, REST API with API keys, and an MCP server.
+- Weekly update workflow for Deploy button repositories.
+- `pnpm demo` with sample data and no real email.
+
+### Fixed
+
+- No double send when a provider refuses a retried batch.
+- Erase also removes the contact from stored batch data.
+- Unsubscribe links use the tracking domain only after it is verified.
 
 [Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/me-shaon/envelopen/releases/tag/v0.1.0

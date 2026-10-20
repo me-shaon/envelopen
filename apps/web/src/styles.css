@@ -56,6 +56,15 @@
   --tone-danger: #fbe4dc;
   --tone-danger-foreground: #8a3b26;
 
+  /* Brand clay. Only the send moment uses it: the confirm-send button and the banner
+     after the send. Clay #b56c4d on white is 4.0:1, so the button fill is a deeper clay
+     (4.8:1 with white text). */
+  --brand: #b56c4d;
+  --brand-strong: #a5603f;
+  --brand-strong-foreground: #ffffff;
+  --tone-brand: #fbefe9;
+  --tone-brand-foreground: #7a4614;
+
   --shadow-raised: 0 1px 2px rgb(26 25 23 / 0.06), 0 0 0 1px rgb(26 25 23 / 0.05);
   --shadow-popover: 0 8px 24px rgb(26 25 23 / 0.08), 0 0 0 1px rgb(26 25 23 / 0.06);
 }
@@ -106,6 +115,12 @@
   --tone-neutral-foreground: #cbc6bc;
   --tone-danger: #3b221b;
   --tone-danger-foreground: #f4b4a0;
+
+  --brand: #d4906f;
+  --brand-strong: #d4906f;
+  --brand-strong-foreground: #141312;
+  --tone-brand: #2d1f18;
+  --tone-brand-foreground: #f0c3a8;
 
   --shadow-raised: 0 0 0 1px rgb(255 255 255 / 0.07);
   --shadow-popover: 0 8px 24px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.08);
@@ -161,6 +176,11 @@
   --color-tone-neutral-foreground: var(--tone-neutral-foreground);
   --color-tone-danger: var(--tone-danger);
   --color-tone-danger-foreground: var(--tone-danger-foreground);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-strong-foreground: var(--brand-strong-foreground);
+  --color-tone-brand: var(--tone-brand);
+  --color-tone-brand-foreground: var(--tone-brand-foreground);
 
   --shadow-raised: var(--shadow-raised);
   --shadow-popover: var(--shadow-popover);

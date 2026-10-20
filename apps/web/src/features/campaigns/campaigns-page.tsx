@@ -70,7 +70,7 @@ export function CampaignTable({ items }: { items: Schemas["CampaignSummary"][] }
       <tbody>
         {items.map((campaign) => (
           <TableRow key={campaign.id} data-testid="campaign-row">
-            <TableCell className="font-medium">
+            <TableCell className="min-w-[200px] font-medium">
               <Link
                 to="/campaigns/$campaignId"
                 params={{ campaignId: String(campaign.id) }}

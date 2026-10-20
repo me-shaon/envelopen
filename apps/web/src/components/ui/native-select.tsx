@@ -8,7 +8,7 @@ export function NativeSelect({ className, children, ...props }: ComponentProps<"
     <div className={cn("relative min-w-0", className)}>
       <select
         data-slot="select"
-        className="flex min-h-9 w-full min-w-0 cursor-pointer appearance-none rounded-[9px] border border-input bg-card py-0 pr-8 pl-3 text-[13.5px] text-foreground disabled:opacity-50 aria-invalid:border-destructive"
+        className="flex min-h-9 max-sm:min-h-11 w-full min-w-0 cursor-pointer appearance-none rounded-[9px] border border-input bg-card py-0 pr-8 pl-3 text-[13.5px] text-foreground disabled:opacity-50 aria-invalid:border-destructive"
         {...props}
       >
         {children}

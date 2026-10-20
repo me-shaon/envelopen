@@ -305,7 +305,7 @@ export function DomainDetailPage({ domainId }: { domainId: number }) {
                   <RefreshCwIcon className="size-3.5" aria-hidden="true" />
                   {check.isPending ? "Checking..." : "Check again"}
                 </Button>
-                <Button variant="ghost" onClick={() => setRemoving(true)}>
+                <Button variant="destructive-ghost" onClick={() => setRemoving(true)}>
                   Remove
                 </Button>
               </>

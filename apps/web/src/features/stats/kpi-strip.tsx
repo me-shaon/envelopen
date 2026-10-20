@@ -3,7 +3,7 @@ import { barWidth, type CampaignStats, formatRate, plural } from "./format";
 
 // The KPI strip of the Calm direction: large mono figures over hairline bars in the
 // pastel data colors. The overview shows the four headline numbers of the latest
-// campaign. The campaign view adds a second row with the detail numbers (R46).
+// campaign. The campaign view adds a compact second row with the detail numbers (R46).
 
 export interface Kpi {
   key: string;
@@ -19,37 +19,57 @@ export interface Kpi {
   muted?: boolean;
 }
 
-export function KpiStrip({ items, label }: { items: Kpi[]; label: string }) {
+export function KpiStrip({
+  items,
+  label,
+  compact = false,
+}: {
+  items: Kpi[];
+  label: string;
+  /** A quieter row for the secondary numbers: smaller figures and no bars. */
+  compact?: boolean;
+}) {
   return (
     <ul
       aria-label={label}
-      className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(150px,1fr))] overflow-hidden rounded-xl border border-border p-0"
+      // The 1 px gaps show the border color between the cells, so the lines stay whole
+      // when the four cells wrap into two rows.
+      className="m-0 grid list-none grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border p-0 md:grid-cols-4"
     >
-      {items.map((kpi, index) => (
+      {items.map((kpi) => (
         <li
           key={kpi.key}
           data-testid={`stat-${kpi.key}`}
-          className={cn("flex flex-col gap-2 p-[18px]", index > 0 && "border-l border-border")}
+          className={cn(
+            "flex flex-col bg-background",
+            compact ? "gap-1 px-[18px] py-3" : "gap-2 p-[18px]",
+          )}
         >
           <span className="text-xs text-muted-foreground">{kpi.label}</span>
           <span
             className={cn(
               "figure leading-[1.1]",
-              kpi.muted && kpi.value.length > 1
-                ? "text-[17px] text-muted-foreground"
-                : kpi.muted
-                  ? "text-[26px] text-muted-foreground"
-                  : "text-[26px]",
+              compact
+                ? kpi.muted
+                  ? "text-[15px] text-muted-foreground"
+                  : "text-[17px]"
+                : kpi.muted && kpi.value.length > 1
+                  ? "text-[17px] text-muted-foreground"
+                  : kpi.muted
+                    ? "text-[26px] text-muted-foreground"
+                    : "text-[30px]",
             )}
           >
             {kpi.value}
           </span>
-          <div className="h-[3px] overflow-hidden rounded-full bg-track" aria-hidden="true">
-            <div
-              className={cn("h-[3px] rounded-full", kpi.color)}
-              style={{ width: `${barWidth(kpi.share)}%` }}
-            />
-          </div>
+          {compact ? null : (
+            <div className="h-[3px] overflow-hidden rounded-full bg-track" aria-hidden="true">
+              <div
+                className={cn("h-[3px] rounded-full", kpi.color)}
+                style={{ width: `${barWidth(kpi.share)}%` }}
+              />
+            </div>
+          )}
           <span className="text-xs text-muted-foreground">{kpi.detail}</span>
         </li>
       ))}
@@ -143,7 +163,7 @@ export function detailKpis(stats: CampaignStats): Kpi[] {
       label: "Machine opens",
       value: stats.tracking.opens ? String(stats.machineOpens.toLocaleString()) : "-",
       share: stats.sent > 0 ? Math.min(1, stats.machineOpens / stats.sent) : null,
-      detail: "Counted apart from people",
+      detail: "Loaded by mail privacy tools, not people",
       color: "bg-chart-4",
     },
     {

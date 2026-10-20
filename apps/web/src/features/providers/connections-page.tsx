@@ -101,7 +101,7 @@ function ConnectionCard({
             <RefreshCwIcon className="size-3" aria-hidden="true" />
             {check.isPending ? "Checking..." : "Check"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => onRemove(connection)}>
+          <Button variant="destructive-ghost" size="sm" onClick={() => onRemove(connection)}>
             Remove<span className="sr-only"> {connection.name}</span>
           </Button>
         </div>

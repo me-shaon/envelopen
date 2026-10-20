@@ -81,10 +81,15 @@ export function RecoverPage() {
     >
       <form className="flex flex-col gap-4" onSubmit={(event) => void onSubmit(event)}>
         <FormError message={error} />
-        <Field id="recover-token" label="Setup token">
+        <Field
+          id="recover-token"
+          label="Setup token"
+          hint="The SETUP_TOKEN secret that you set when you deployed Envelopen."
+        >
           <Input
             id="recover-token"
             name="token"
+            aria-describedby="recover-token-hint"
             type="password"
             autoComplete="off"
             required

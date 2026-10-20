@@ -87,7 +87,7 @@ export function BlockSettings({
           {TITLES[type] ?? "Block"}
         </h2>
         <Button
-          variant="ghost"
+          variant="destructive-ghost"
           size="icon-sm"
           onClick={() => editor.chain().focus().deleteSelection().run()}
         >
@@ -307,7 +307,7 @@ function SocialSettings({
               onChange={(e) => update(index, { url: e.target.value })}
             />
             <Button
-              variant="ghost"
+              variant="destructive-ghost"
               size="icon-sm"
               onClick={() => onChange(links.filter((_, i) => i !== index))}
             >

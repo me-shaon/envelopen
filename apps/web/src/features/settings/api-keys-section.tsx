@@ -275,7 +275,7 @@ function KeyRow({ apiKey, onRevoke }: { apiKey: ApiKey; onRevoke: (key: ApiKey) 
         </span>
       </div>
       {revoked ? null : (
-        <Button variant="ghost" size="sm" onClick={() => onRevoke(apiKey)}>
+        <Button variant="destructive-ghost" size="sm" onClick={() => onRevoke(apiKey)}>
           Revoke<span className="sr-only"> {apiKey.name}</span>
         </Button>
       )}

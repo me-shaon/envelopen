@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, Outlet } from "@tanstack/react-router";
+import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   BookOpenIcon,
   FileTextIcon,
@@ -42,7 +42,7 @@ const MAIN_NAV: NavItem[] = [
 const WORKSPACE_NAV: NavItem[] = [{ to: "/connections", label: "Connections", icon: PlugIcon }];
 
 const navClass =
-  "flex min-h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-sidebar-muted transition-colors hover:text-sidebar-foreground";
+  "flex min-h-8 max-md:min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-sidebar-muted transition-colors hover:text-sidebar-foreground";
 const activeClass = "bg-sidebar-accent font-medium text-sidebar-foreground shadow-raised";
 
 function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
@@ -121,6 +121,9 @@ export function AppShell() {
   const workspaces = useQuery(workspacesQuery);
   const storedId = useWorkspaceId();
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  // The campaigns pages have their own "New campaign" action, so the header leaves it out.
+  const showNewCampaign = pathname !== "/campaigns" && pathname !== "/campaigns/new";
 
   const items = workspaces.data?.items ?? [];
   const active = items.filter((workspace) => workspace.archivedAt === null);
@@ -134,11 +137,17 @@ export function AppShell() {
   const user = session.data?.user;
   if (workspaces.isError) {
     return (
-      <div
-        className="flex min-h-screen items-center justify-center p-6 text-muted-foreground"
-        role="alert"
-      >
-        The workspaces did not load. Reload the page to try again.
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
+        <p role="alert" className="m-0 text-[13px] text-muted-foreground">
+          The workspaces did not load. Check the connection, then try again.
+        </p>
+        <Button
+          variant="outline"
+          disabled={workspaces.isFetching}
+          onClick={() => void workspaces.refetch()}
+        >
+          {workspaces.isFetching ? "Trying again..." : "Try again"}
+        </Button>
       </div>
     );
   }
@@ -195,12 +204,14 @@ export function AppShell() {
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Button asChild>
-                <Link to="/campaigns/new">
-                  <PlusIcon className="size-[13px]" strokeWidth={2.4} aria-hidden="true" />
-                  New campaign
-                </Link>
-              </Button>
+              {showNewCampaign ? (
+                <Button asChild>
+                  <Link to="/campaigns/new">
+                    <PlusIcon className="size-[13px]" strokeWidth={2.4} aria-hidden="true" />
+                    New campaign
+                  </Link>
+                </Button>
+              ) : null}
             </div>
           </header>
 

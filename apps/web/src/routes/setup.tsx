@@ -229,10 +229,15 @@ export function SetupPage() {
       >
         <form className="flex flex-col gap-4" onSubmit={onToken}>
           <FormError message={error} />
-          <Field id="token" label="Setup token">
+          <Field
+            id="token"
+            label="Setup token"
+            hint="The SETUP_TOKEN secret that you set when you deployed Envelopen."
+          >
             <Input
               id="token"
               name="token"
+              aria-describedby="token-hint"
               type="password"
               autoComplete="off"
               required

@@ -241,8 +241,10 @@ test.describe("first campaign", () => {
       expect.arrayContaining(["open", "click"]),
     );
 
-    // Erase needs the typed address.
-    await page.getByRole("button", { name: "Erase", exact: true }).click();
+    // Erase sits in the danger zone at the end of the page, and needs the typed address.
+    const danger = page.getByRole("region", { name: "Danger zone" });
+    await expect(danger).toContainText("You cannot undo it.");
+    await danger.getByRole("button", { name: "Erase contact" }).click();
     const dialog = page.getByRole("dialog", { name: "Erase this contact?" });
     const erase = dialog.getByRole("button", { name: "Erase contact" });
     await expect(erase).toBeDisabled();
@@ -267,13 +269,25 @@ test.describe("first campaign", () => {
       "suppressed",
     );
 
-    // The audit log shows the export and the erase, with the owner and the UI surface.
+    // The audit log shows the export and the erase as sentences, with the raw action
+    // key, the owner's name, and the UI surface.
     await page.getByRole("link", { name: "Settings" }).first().click();
     await page.getByRole("link", { name: "Open the audit log" }).click();
     await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
     const rows = page.getByTestId("audit-row");
-    await expect(rows.filter({ hasText: "contacts.erase" })).toContainText("Owner");
-    await expect(rows.filter({ hasText: "contacts.erase" })).toContainText("UI");
+    const erased = rows.filter({ hasText: "contacts.erase" });
+    await expect(erased).toContainText("Contact erased");
+    await expect(erased).toContainText(OWNER.name);
+    await expect(erased).toContainText("UI");
+    await expect(rows.filter({ hasText: "contacts.export" })).toContainText(
+      "Contact data exported",
+    );
+    // A target that still exists links to its record, with its name.
+    const created = rows.filter({ hasText: "campaigns.create" });
+    await expect(created.getByRole("link", { name: /Course launch/ })).toHaveAttribute(
+      "href",
+      /\/campaigns\/\d+$/,
+    );
     await expect(rows.filter({ hasText: "contacts.export" })).toHaveCount(1);
     await expectNoSeriousViolations(page);
     await screenshot(page, "audit-log");

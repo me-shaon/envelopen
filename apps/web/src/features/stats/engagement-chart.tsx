@@ -1,12 +1,15 @@
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 import { formatCount, plural } from "./format";
 
 // Engagement over the first 48 hours (R47), as plain SVG in the Calm hairline style:
 // one thin bar pair per hour in the pastel data colors, hairline grid lines, and mono
 // axis labels in HTML, so the text keeps its size while the plot stretches to the
-// width. Bars stay visible when only the first hours have data, which a line would not.
+// width. The x-axis fits the hours that have data (6, 12, 24, or 48 hours), so a new
+// send does not show as a thin line at the left edge. A toggle shows the full 48 hours.
 // Each hour has an invisible column with a native tooltip. Human opens and clicks only:
-// machine opens and bot clicks are not drawn. The caption states the totals for screen
-// readers.
+// machine opens and bot clicks are not drawn. The caption states the totals, and a
+// table under the chart gives the same numbers as text.
 
 export interface HourPoint {
   hour: number;
@@ -18,9 +21,32 @@ export interface HourPoint {
 const HOURS = 48;
 const WIDTH = 480;
 const HEIGHT = 120;
-const SLOT = WIDTH / HOURS;
-const BAR = SLOT * 0.3;
-const TICKS = [0, 12, 24, 36, 48];
+/** The x-axis windows, in hours, with their tick steps. */
+interface AxisWindow {
+  hours: number;
+  step: number;
+}
+const FULL: AxisWindow = { hours: HOURS, step: 12 };
+const WINDOWS: AxisWindow[] = [
+  { hours: 6, step: 1 },
+  { hours: 12, step: 3 },
+  { hours: 24, step: 6 },
+  FULL,
+];
+
+function lastActiveHour(hours: HourPoint[]): number {
+  for (let index = hours.length - 1; index >= 0; index--) {
+    const hour = hours[index];
+    if (hour && (hour.opens > 0 || hour.clicks > 0 || hour.machineOpens > 0)) return index;
+  }
+  return -1;
+}
+
+/** The smallest window that holds every hour with data. */
+function fitWindow(hours: HourPoint[]): AxisWindow {
+  const needed = lastActiveHour(hours) + 1;
+  return WINDOWS.find((item) => item.hours >= needed) ?? FULL;
+}
 
 function niceMax(value: number): number {
   if (value <= 4) return 4;
@@ -34,31 +60,55 @@ function barHeight(value: number, max: number): number {
   return value === 0 ? 0 : Math.max(2, (value / max) * (HEIGHT - 4));
 }
 
-export function EngagementChart({ hours }: { hours: HourPoint[] }) {
-  const opens = hours.map((hour) => hour.opens);
-  const clicks = hours.map((hour) => hour.clicks);
-  const max = niceMax(Math.max(1, ...opens, ...clicks));
+export function EngagementChart({ hours: all }: { hours: HourPoint[] }) {
+  const [full, setFull] = useState(false);
+  const fitted = fitWindow(all);
+  const view = full ? FULL : fitted;
+  const span = view.hours;
+  const slot = WIDTH / span;
+  const bar = slot * 0.3;
+  const ticks = Array.from({ length: span / view.step + 1 }, (_, i) => i * view.step);
+  const hours = all.slice(0, Math.min(span, HOURS));
+
+  const opens = all.map((hour) => hour.opens);
+  const clicks = all.map((hour) => hour.clicks);
+  const max = niceMax(Math.max(1, ...hours.map((h) => h.opens), ...hours.map((h) => h.clicks)));
   const totalOpens = opens.reduce((sum, n) => sum + n, 0);
   const totalClicks = clicks.reduce((sum, n) => sum + n, 0);
   const peak = opens.indexOf(Math.max(...opens, 0));
-  const span = hours.length === 1 ? "hour" : `${hours.length} hours`;
+  const elapsed = all.length === 1 ? "hour" : `${all.length} hours`;
   const summary =
-    hours.length === 0
+    all.length === 0
       ? "No engagement yet."
-      : `${plural(totalOpens, "open", "opens")} and ${plural(totalClicks, "click", "clicks")} by people in the first ${span}.` +
+      : `${plural(totalOpens, "open", "opens")} and ${plural(totalClicks, "click", "clicks")} by people in the first ${elapsed}.` +
         (totalOpens > 0 ? ` Opens peaked in hour ${peak + 1}.` : "");
+  const active = all
+    .map((hour, index) => ({ ...hour, index }))
+    .filter((hour) => hour.opens > 0 || hour.clicks > 0 || hour.machineOpens > 0);
 
   return (
     <figure className="m-0 flex flex-col gap-3" data-testid="engagement-chart">
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-[2px] bg-chart-1" aria-hidden="true" />
-          Opens by people
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-[2px] bg-chart-3" aria-hidden="true" />
-          Clicks by people
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-[2px] bg-chart-1" aria-hidden="true" />
+            Opens by people
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-[2px] bg-chart-3" aria-hidden="true" />
+            Clicks by people
+          </span>
+        </div>
+        {fitted.hours < HOURS ? (
+          <button
+            type="button"
+            aria-pressed={full}
+            onClick={() => setFull((value) => !value)}
+            className="inline-flex min-h-[30px] cursor-pointer items-center rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground max-sm:min-h-11"
+          >
+            {full ? `Fit to ${fitted.hours} hours` : "Show all 48 hours"}
+          </button>
+        ) : null}
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2">
         <div className="relative h-[140px]">
@@ -83,11 +133,11 @@ export function EngagementChart({ hours }: { hours: HourPoint[] }) {
                 />
               );
             })}
-            {TICKS.slice(1, -1).map((tick) => (
+            {ticks.slice(1, -1).map((tick) => (
               <line
                 key={tick}
-                x1={tick * SLOT}
-                x2={tick * SLOT}
+                x1={tick * slot}
+                x2={tick * slot}
                 y1={0}
                 y2={HEIGHT}
                 className="stroke-hairline"
@@ -97,7 +147,7 @@ export function EngagementChart({ hours }: { hours: HourPoint[] }) {
               />
             ))}
             {hours.map((hour, index) => {
-              const left = index * SLOT + (SLOT - 2 * BAR) / 2;
+              const left = index * slot + (slot - 2 * bar) / 2;
               const open = barHeight(hour.opens, max);
               const click = barHeight(hour.clicks, max);
               return (
@@ -105,18 +155,18 @@ export function EngagementChart({ hours }: { hours: HourPoint[] }) {
                   <rect
                     x={left}
                     y={HEIGHT - open}
-                    width={BAR}
+                    width={bar}
                     height={open}
                     className="fill-chart-1"
                   />
                   <rect
-                    x={left + BAR}
+                    x={left + bar}
                     y={HEIGHT - click}
-                    width={BAR}
+                    width={bar}
                     height={click}
                     className="fill-chart-3"
                   />
-                  <rect x={index * SLOT} y={0} width={SLOT} height={HEIGHT} fill="transparent">
+                  <rect x={index * slot} y={0} width={slot} height={HEIGHT} fill="transparent">
                     <title>{`Hour ${index + 1}: ${plural(hour.opens, "open", "opens")}, ${plural(hour.clicks, "click", "clicks")}, ${plural(hour.machineOpens, "machine open", "machine opens")}`}</title>
                   </rect>
                 </g>
@@ -136,11 +186,15 @@ export function EngagementChart({ hours }: { hours: HourPoint[] }) {
           className="figure relative mt-2 h-4 text-[11px] text-muted-foreground"
           aria-hidden="true"
         >
-          {TICKS.map((tick) => (
+          {ticks.map((tick, index) => (
             <span
               key={tick}
-              className="absolute -translate-x-1/2 first:translate-x-0 last:-translate-x-full"
-              style={{ left: `${(tick / HOURS) * 100}%` }}
+              className={cn(
+                "absolute -translate-x-1/2",
+                index === 0 && "translate-x-0",
+                index === ticks.length - 1 && "-translate-x-full",
+              )}
+              style={{ left: `${(tick / span) * 100}%` }}
             >
               {tick}h
             </span>
@@ -148,6 +202,44 @@ export function EngagementChart({ hours }: { hours: HourPoint[] }) {
         </div>
       </div>
       <figcaption className="text-xs text-muted-foreground">{summary}</figcaption>
+      {active.length > 0 ? (
+        <details className="text-xs text-muted-foreground">
+          <summary className="inline-flex min-h-[30px] cursor-pointer items-center font-medium hover:text-foreground max-sm:min-h-11">
+            Show the numbers as a table
+          </summary>
+          <table className="mt-2 w-full max-w-[420px] border-collapse text-left">
+            <caption className="sr-only">Opens and clicks by people, per hour</caption>
+            <thead>
+              <tr className="border-b border-border">
+                <th scope="col" className="py-1.5 pr-3 font-medium">
+                  Hour
+                </th>
+                <th scope="col" className="py-1.5 pr-3 text-right font-medium">
+                  Opens
+                </th>
+                <th scope="col" className="py-1.5 pr-3 text-right font-medium">
+                  Clicks
+                </th>
+                <th scope="col" className="py-1.5 text-right font-medium">
+                  Machine opens
+                </th>
+              </tr>
+            </thead>
+            <tbody className="figure text-foreground">
+              {active.map((hour) => (
+                <tr key={hour.index} className="border-b border-hairline last:border-b-0">
+                  <th scope="row" className="py-1.5 pr-3 font-normal">
+                    {hour.index + 1}
+                  </th>
+                  <td className="py-1.5 pr-3 text-right">{formatCount(hour.opens)}</td>
+                  <td className="py-1.5 pr-3 text-right">{formatCount(hour.clicks)}</td>
+                  <td className="py-1.5 text-right">{formatCount(hour.machineOpens)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      ) : null}
     </figure>
   );
 }

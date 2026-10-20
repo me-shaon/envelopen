@@ -1,7 +1,7 @@
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { DownloadIcon, SearchIcon, UploadIcon, UsersIcon } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api, type Schemas, unwrap } from "@/api/client";
 import {
   type ContactFilters,
@@ -45,8 +45,8 @@ function StatStrip() {
   const data = counts.data;
   return (
     <section aria-label="Audience totals">
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] overflow-hidden rounded-xl border border-border">
-        <div className="flex flex-col gap-2 p-[18px]">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-4">
+        <div className="flex flex-col gap-2 bg-background p-[18px]">
           <span className="text-xs text-muted-foreground">Contacts</span>
           <span className="text-[26px] leading-[1.1]" data-testid="contacts-total">
             {data ? <Figure value={data.total} /> : <span className="figure">-</span>}
@@ -58,7 +58,7 @@ function StatStrip() {
           const value = data?.[stat.key] ?? 0;
           const share = data && data.total > 0 ? Math.round((value / data.total) * 100) : 0;
           return (
-            <div key={stat.key} className="flex flex-col gap-2 border-l border-border p-[18px]">
+            <div key={stat.key} className="flex flex-col gap-2 bg-background p-[18px]">
               <span className="text-xs text-muted-foreground">{stat.label}</span>
               <span className="text-[26px] leading-[1.1]">
                 {data ? <Figure value={value} /> : <span className="figure">-</span>}
@@ -91,9 +91,34 @@ function Filters({
   const lists = useQuery(listsQuery(current.id));
   const tags = useQuery(tagsQuery(current.id));
   const [search, setSearch] = useState(filters.search ?? "");
+  // The latest filters, so the debounced search keeps a list or tag picked meanwhile.
+  const latest = useRef({ filters, onChange });
+  latest.current = { filters, onChange };
+  // The last search this field sent. A different search in the URL came from outside,
+  // for example the back button, so the field takes it.
+  const sent = useRef(filters.search ?? "");
+  const urlSearch = filters.search ?? "";
+  useEffect(() => {
+    if (urlSearch !== sent.current) {
+      sent.current = urlSearch;
+      setSearch(urlSearch);
+    }
+  }, [urlSearch]);
+
+  // The search runs 300 ms after the last keystroke. Enter runs it at once.
+  useEffect(() => {
+    const value = search.trim();
+    if ((latest.current.filters.search ?? "") === value) return;
+    const timer = setTimeout(() => {
+      sent.current = value;
+      latest.current.onChange({ ...latest.current.filters, search: value || undefined });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
+    sent.current = search.trim();
     onChange({ ...filters, search: search.trim() || undefined });
   }
 
@@ -115,11 +140,6 @@ function Filters({
           className="pl-8"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          onBlur={() => {
-            if ((filters.search ?? "") !== search.trim()) {
-              onChange({ ...filters, search: search.trim() || undefined });
-            }
-          }}
         />
       </div>
       <NativeSelect
@@ -312,8 +332,15 @@ export function ContactsPage({
   onFiltersChange: (filters: ContactFilters) => void;
 }) {
   const { current } = useCurrentWorkspace();
-  const contacts = useInfiniteQuery(contactsQuery(current.id, filters));
-  const matching = useQuery(contactCountsQuery(current.id, filters));
+  // The previous results stay while a new search loads, so the table does not flash.
+  const contacts = useInfiniteQuery({
+    ...contactsQuery(current.id, filters),
+    placeholderData: keepPreviousData,
+  });
+  const matching = useQuery({
+    ...contactCountsQuery(current.id, filters),
+    placeholderData: keepPreviousData,
+  });
   const [exporting, setExporting] = useState(false);
   const items = contacts.data?.pages.flatMap((page) => page.items) ?? [];
   const filtered = Object.values(filters).some((value) => value !== undefined && value !== "");
@@ -357,7 +384,7 @@ export function ContactsPage({
           </EmptyState>
         ) : (
           <>
-            <Filters key={filters.search ?? ""} filters={filters} onChange={onFiltersChange} />
+            <Filters filters={filters} onChange={onFiltersChange} />
             <div className="text-xs text-muted-foreground" aria-live="polite">
               {matching.data ? (
                 <>

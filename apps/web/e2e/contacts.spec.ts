@@ -145,6 +145,13 @@ test.describe("contacts", () => {
     await screenshot(page, "contact-unsubscribed");
 
     await page.getByRole("link", { name: "Contacts" }).first().click();
+    // The search updates as you type, without Enter.
+    const search = page.getByLabel("Search by email or name");
+    await search.fill("chen");
+    await expect(page.getByTestId("contact-row")).toHaveCount(1);
+    await expect(page).toHaveURL(/search=chen/);
+    await search.fill("");
+    await expect(page.getByTestId("contact-row")).toHaveCount(3);
     await page.getByLabel("Status").selectOption("unsubscribed");
     await expect(page.getByTestId("contact-row")).toHaveCount(1);
     await expect(page.getByTestId("contact-row")).toContainText("Unsubscribed");

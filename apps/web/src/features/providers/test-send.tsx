@@ -105,7 +105,7 @@ export function TestSendSection({ hasConnection }: { hasConnection: boolean }) {
                     <Pill>You</Pill>
                   ) : item.id !== null ? (
                     <Button
-                      variant="ghost"
+                      variant="destructive-ghost"
                       size="icon-sm"
                       onClick={() => item.id !== null && remove.mutate(item.id)}
                     >

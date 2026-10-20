@@ -31,7 +31,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-2 text-left hover:bg-sidebar-accent"
+        className="flex min-h-10 max-md:min-h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-2 text-left hover:bg-sidebar-accent"
         aria-label={`Account: ${display}`}
       >
         <span className="flex min-w-0 items-center gap-2">

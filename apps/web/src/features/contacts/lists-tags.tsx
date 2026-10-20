@@ -201,7 +201,7 @@ export function ListsPage() {
                     <Button variant="ghost" size="sm" onClick={() => setRenaming(list)}>
                       Rename<span className="sr-only"> {list.name}</span>
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleting(list)}>
+                    <Button variant="destructive-ghost" size="sm" onClick={() => setDeleting(list)}>
                       Delete<span className="sr-only"> {list.name}</span>
                     </Button>
                   </TableCell>
@@ -297,7 +297,7 @@ export function TagsPage() {
                     <Button variant="ghost" size="sm" onClick={() => setRenaming(tag)}>
                       Rename<span className="sr-only"> {tag.name}</span>
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleting(tag)}>
+                    <Button variant="destructive-ghost" size="sm" onClick={() => setDeleting(tag)}>
                       Delete<span className="sr-only"> {tag.name}</span>
                     </Button>
                   </TableCell>

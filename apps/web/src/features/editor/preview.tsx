@@ -41,7 +41,7 @@ export function Segmented<T extends string>({
             aria-pressed={active}
             onClick={() => onChange(option.id)}
             className={cn(
-              "inline-flex min-h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] transition-colors",
+              "inline-flex min-h-7 max-sm:min-h-11 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] transition-colors",
               active
                 ? "bg-card font-medium text-foreground shadow-raised"
                 : "text-muted-foreground hover:text-foreground",

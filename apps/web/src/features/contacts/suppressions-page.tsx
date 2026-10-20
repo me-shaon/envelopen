@@ -192,7 +192,11 @@ export function SuppressionsPage() {
                       {formatDateTime(item.createdAt)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => setRemoving(item)}>
+                      <Button
+                        variant="destructive-ghost"
+                        size="sm"
+                        onClick={() => setRemoving(item)}
+                      >
                         Remove
                       </Button>
                     </TableCell>

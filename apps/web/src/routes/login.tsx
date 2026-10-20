@@ -61,6 +61,9 @@ export function LoginPage({ redirect }: { redirect?: string }) {
               Recover with the setup token
             </Link>
           </span>
+          <span className="max-w-[340px] text-xs">
+            The setup token is the SETUP_TOKEN secret from your Cloudflare deploy.
+          </span>
         </>
       }
     >

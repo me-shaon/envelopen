@@ -142,7 +142,7 @@ export function TemplatesPage() {
                     Duplicate<span className="sr-only"> {template.name}</span>
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="destructive-ghost"
                     size="sm"
                     onClick={() =>
                       setDeleting({ id: template.id, name: template.name, kind: "template" })
@@ -188,7 +188,7 @@ export function TemplatesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
-                      variant="ghost"
+                      variant="destructive-ghost"
                       size="sm"
                       onClick={() => setDeleting({ id: block.id, name: block.name, kind: "block" })}
                     >

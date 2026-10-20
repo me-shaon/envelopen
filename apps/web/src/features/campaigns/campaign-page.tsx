@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeftIcon, PauseIcon, PlayIcon, SendIcon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon, PauseIcon, PlayIcon, SendIcon, UsersIcon, XIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { api, type Schemas, unwrap } from "@/api/client";
 import { campaignBatchesQuery, campaignEstimateQuery, campaignQuery } from "@/api/queries";
@@ -14,7 +14,7 @@ import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, Figure } from "@/features/contacts/shared";
 import { CampaignEngagement, CampaignResults } from "@/features/stats/campaign-stats";
 import { CampaignForm } from "./campaign-form";
-import { ConfirmSendDialog } from "./confirm-dialog";
+import { ConfirmSendDialog, type SendNotice } from "./confirm-dialog";
 import {
   CAMPAIGN_TYPES,
   CampaignStatusPill,
@@ -82,26 +82,102 @@ function Header({ campaign, actions }: { campaign: Detail; actions?: ReactNode }
   );
 }
 
+function noticeText(notice: SendNotice): { title: string; body: string } {
+  const people = `about ${notice.recipients.toLocaleString()} ${notice.recipients === 1 ? "person" : "people"}`;
+  return notice.mode === "schedule"
+    ? {
+        title: `Scheduled for ${formatWhen(notice.scheduledAt)}.`,
+        body: `Envelopen sends to ${people} at that time. Progress updates here.`,
+      }
+    : { title: `Sending to ${people}.`, body: "Progress updates here." };
+}
+
 export function CampaignPage({ campaignId }: { campaignId: number }) {
   const { current } = useCurrentWorkspace();
   const campaign = useQuery(campaignQuery(current.id, campaignId));
-  if (campaign.isPending) return <div className="h-40 rounded-xl border border-border bg-muted" />;
-  if (!campaign.data) {
-    return (
+  // The notice outlives the change from the draft page to the progress page.
+  const [notice, setNotice] = useState<SendNotice | null>(null);
+  const shown = notice?.campaignId === campaignId ? notice : null;
+  const text = shown ? noticeText(shown) : null;
+
+  let page: ReactNode;
+  if (campaign.isPending) {
+    page = <div className="h-40 rounded-xl border border-border bg-muted" />;
+  } else if (!campaign.data) {
+    page = (
       <div className="flex flex-col gap-8">
         <BackLink />
         <FormError message={errorText(campaign.error) ?? "The campaign does not exist."} />
       </div>
     );
+  } else if (campaign.data.status === "draft") {
+    page = <DraftPage campaign={campaign.data} onConfirmed={setNotice} />;
+  } else {
+    page = (
+      <CampaignView
+        campaign={campaign.data}
+        notice={shown}
+        onDismissNotice={() => setNotice(null)}
+      />
+    );
   }
-  return campaign.data.status === "draft" ? (
-    <DraftPage campaign={campaign.data} />
-  ) : (
-    <CampaignView campaign={campaign.data} />
+  return (
+    <>
+      {/* Mounted before the send, so screen readers announce the change. */}
+      <div role="status" className="sr-only">
+        {text ? `${text.title} ${text.body}` : ""}
+      </div>
+      {page}
+    </>
   );
 }
 
-function DraftPage({ campaign }: { campaign: Detail }) {
+/** The banner after the send or the schedule: the one place, with the button, in clay. */
+function SendBanner({ notice, onDismiss }: { notice: SendNotice; onDismiss: () => void }) {
+  const text = noticeText(notice);
+  return (
+    <div
+      className="flex items-start gap-3 rounded-xl border border-brand/30 bg-tone-brand px-4 py-3 text-tone-brand-foreground"
+      data-testid="send-banner"
+    >
+      <SendIcon className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden="true" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-[13px]">
+        <span className="font-semibold">{text.title}</span>
+        <span>
+          {text.body}{" "}
+          <button
+            type="button"
+            className="cursor-pointer font-medium underline underline-offset-2 max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
+            onClick={() => {
+              const target = document.getElementById("progress");
+              target?.scrollIntoView({ behavior: "smooth", block: "start" });
+              target?.focus({ preventScroll: true });
+            }}
+          >
+            See the progress
+          </button>
+        </span>
+      </div>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="-my-1 -mr-2 text-tone-brand-foreground hover:bg-transparent hover:opacity-70"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+      >
+        <XIcon className="size-3.5" aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
+function DraftPage({
+  campaign,
+  onConfirmed,
+}: {
+  campaign: Detail;
+  onConfirmed: (notice: SendNotice) => void;
+}) {
   const [sending, setSending] = useState(false);
   return (
     <div className="flex flex-wrap gap-12">
@@ -124,7 +200,12 @@ function DraftPage({ campaign }: { campaign: Detail }) {
       >
         <EstimatePanel campaign={campaign} />
       </aside>
-      <ConfirmSendDialog campaign={campaign} open={sending} onOpenChange={setSending} />
+      <ConfirmSendDialog
+        campaign={campaign}
+        open={sending}
+        onOpenChange={setSending}
+        onConfirmed={onConfirmed}
+      />
     </div>
   );
 }
@@ -183,7 +264,12 @@ function Kpis({ campaign }: { campaign: Detail }) {
     { key: "skipped", label: "Skipped or failed", value: progress.skipped + progress.failed },
   ] as const;
   return (
-    <section aria-labelledby="progress-title" className="flex flex-col gap-4">
+    <section
+      id="progress"
+      tabIndex={-1}
+      aria-labelledby="progress-title"
+      className="flex scroll-mt-6 flex-col gap-4 outline-none"
+    >
       <SectionHeader
         id="progress-title"
         title="Progress"
@@ -193,15 +279,11 @@ function Kpis({ campaign }: { campaign: Detail }) {
             : "Taking the recipient list"
         }
       />
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] overflow-hidden rounded-xl border border-border">
-        {items.map((item, index) => (
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-4">
+        {items.map((item) => (
           <div
             key={item.key}
-            className={
-              index > 0
-                ? "flex flex-col gap-2 border-l border-border p-[18px]"
-                : "flex flex-col gap-2 p-[18px]"
-            }
+            className="flex flex-col gap-2 bg-background p-[18px]"
             data-testid={`kpi-${item.key}`}
           >
             <span className="text-xs text-muted-foreground">{item.label}</span>
@@ -250,7 +332,15 @@ function Banner({
   );
 }
 
-function CampaignView({ campaign }: { campaign: Detail }) {
+function CampaignView({
+  campaign,
+  notice,
+  onDismissNotice,
+}: {
+  campaign: Detail;
+  notice: SendNotice | null;
+  onDismissNotice: () => void;
+}) {
   const { current } = useCurrentWorkspace();
   const queryClient = useQueryClient();
   const [cancelling, setCancelling] = useState(false);
@@ -309,7 +399,7 @@ function CampaignView({ campaign }: { campaign: Detail }) {
               </Button>
             ) : null}
             {cancellable ? (
-              <Button variant="ghost" onClick={() => setCancelling(true)}>
+              <Button variant="destructive-ghost" onClick={() => setCancelling(true)}>
                 Cancel campaign
               </Button>
             ) : null}
@@ -318,6 +408,7 @@ function CampaignView({ campaign }: { campaign: Detail }) {
       />
       <FormError message={errorText(action.error)} />
 
+      {notice ? <SendBanner notice={notice} onDismiss={onDismissNotice} /> : null}
       {status === "paused" && reason ? (
         <Banner
           tone="salmon"
@@ -337,7 +428,7 @@ function CampaignView({ campaign }: { campaign: Detail }) {
               `Paused ${formatWhen(campaign.pausedAt)}. Queued batches wait until you resume.`)}
         </Banner>
       ) : null}
-      {status === "scheduled" ? (
+      {status === "scheduled" && notice === null ? (
         <Banner tone="lavender" title={`Scheduled for ${formatWhen(campaign.scheduledAt)}`}>
           Envelopen takes the recipient list and starts sending at that time. Unschedule to edit the
           campaign.

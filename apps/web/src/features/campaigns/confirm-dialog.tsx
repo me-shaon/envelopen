@@ -33,6 +33,14 @@ type Prepared = Schemas["CampaignPrepare"];
 type Mode = Prepared["mode"];
 type Item = Schemas["ChecklistItem"];
 
+/** What the owner confirmed. The campaign page shows it in a banner after the send. */
+export interface SendNotice {
+  campaignId: number;
+  mode: Mode;
+  recipients: number;
+  scheduledAt: number | null;
+}
+
 const ICONS: Record<Item["status"], { icon: typeof CheckIcon; className: string; label: string }> =
   {
     pass: { icon: CheckIcon, className: "bg-tone-teal text-tone-teal-foreground", label: "Passed" },
@@ -111,10 +119,12 @@ export function ConfirmSendDialog({
   campaign,
   open,
   onOpenChange,
+  onConfirmed,
 }: {
   campaign: Schemas["Campaign"];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onConfirmed?: (notice: SendNotice) => void;
 }) {
   const { current } = useCurrentWorkspace();
   const queryClient = useQueryClient();
@@ -140,6 +150,15 @@ export function ConfirmSendDialog({
         }),
       ),
     onSuccess: async () => {
+      const done = prepare.data;
+      if (done) {
+        onConfirmed?.({
+          campaignId: campaign.id,
+          mode: done.mode,
+          recipients: done.estimate.recipients,
+          scheduledAt: done.scheduledAt ?? null,
+        });
+      }
       await queryClient.invalidateQueries({ queryKey: ["ws", current.id] });
       onOpenChange(false);
     },
@@ -231,6 +250,7 @@ export function ConfirmSendDialog({
           ) : (
             <Button
               type="button"
+              variant="brand"
               disabled={confirm.isPending || !prepared.token}
               onClick={() => prepared.token && confirm.mutate(prepared.token)}
             >
@@ -303,20 +323,20 @@ function Review({ prepared, onNavigate }: { prepared: Prepared; onNavigate: () =
   ][];
   return (
     <div className="flex flex-col gap-5">
-      <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] overflow-hidden rounded-xl border border-border">
-        <div className="flex flex-col gap-1 p-4">
+      <dl className="m-0 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3">
+        <div className="flex flex-col gap-1 bg-popover p-4">
           <dt className="text-xs text-muted-foreground">Recipients (estimate)</dt>
           <dd className="m-0 text-[22px] leading-none" data-testid="estimate">
             <Figure value={prepared.estimate.recipients} />
           </dd>
         </div>
-        <div className="flex flex-col gap-1 border-l border-border p-4">
+        <div className="flex min-w-0 flex-col gap-1 bg-popover p-4">
           <dt className="text-xs text-muted-foreground">Provider</dt>
           <dd className="m-0 truncate text-[13px] font-medium">
             {prepared.provider ? `${prepared.provider.providerName}` : "None"}
           </dd>
         </div>
-        <div className="flex flex-col gap-1 border-l border-border p-4">
+        <div className="flex flex-col gap-1 bg-popover p-4">
           <dt className="text-xs text-muted-foreground">Mode</dt>
           <dd className="m-0 text-[13px] font-medium">
             {prepared.mode === "schedule"

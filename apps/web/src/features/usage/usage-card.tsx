@@ -41,7 +41,10 @@ export function UsageCard({ onNavigate }: { onNavigate?: () => void }) {
       </span>
       <span className="text-xs text-sidebar-muted">
         <span className="figure text-sidebar-foreground">{formatCount(d1Writes.used)}</span> of{" "}
-        {formatCompact(d1Writes.limit)} D1 writes
+        {formatCompact(d1Writes.limit)} D1 writes today
+      </span>
+      <span className="text-[11px] leading-[1.4] text-sidebar-muted">
+        D1 is the database. Each save to it is one write.
       </span>
     </Link>
   );

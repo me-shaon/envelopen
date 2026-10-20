@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeftIcon, DownloadIcon, PlusIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, DownloadIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { api, type Schemas, unwrap } from "@/api/client";
 import { consentQuery, contactQuery } from "@/api/queries";
@@ -456,9 +456,6 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
               <DownloadIcon className="size-3.5" aria-hidden="true" />
               Export data
             </Button>
-            <Button variant="ghost" onClick={() => setConfirm("erase")}>
-              Erase
-            </Button>
           </div>
         </div>
         <FormError message={errorText(exportData.error)} />
@@ -534,6 +531,26 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
           <ConsentHistory contact={data} />
         </aside>
       </div>
+
+      <section
+        aria-labelledby="danger-title"
+        className="flex flex-col gap-4 border-t border-hairline pt-10"
+      >
+        <SectionHeader id="danger-title" title="Danger zone" />
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border px-4 py-3.5">
+          <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-0.5">
+            <span className="text-[13px] font-medium">Erase this contact</span>
+            <span className="text-xs text-muted-foreground">
+              Use this for a GDPR deletion request. It removes the person and their data. You cannot
+              undo it.
+            </span>
+          </div>
+          <Button variant="destructive-outline" onClick={() => setConfirm("erase")}>
+            <Trash2Icon className="size-3.5" aria-hidden="true" />
+            Erase contact
+          </Button>
+        </div>
+      </section>
 
       <ConfirmDialog
         open={confirm === "unsubscribe"}

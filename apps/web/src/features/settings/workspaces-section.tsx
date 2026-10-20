@@ -148,7 +148,7 @@ export function WorkspacesSection() {
                     Rename<span className="sr-only"> {workspace.name}</span>
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="destructive-ghost"
                     size="sm"
                     onClick={() => {
                       archive.reset();
@@ -164,7 +164,7 @@ export function WorkspacesSection() {
         })}
       </ul>
 
-      <form className="flex flex-wrap items-end gap-3" onSubmit={onCreate}>
+      <form className="flex max-w-[640px] flex-wrap items-end gap-3" onSubmit={onCreate}>
         <Field id="new-workspace" label="New workspace" className="min-w-[220px] flex-1">
           <Input
             id="new-workspace"
@@ -176,7 +176,11 @@ export function WorkspacesSection() {
             onChange={(event) => setName(event.target.value)}
           />
         </Field>
-        <Button type="submit" disabled={create.isPending || name.trim().length === 0}>
+        <Button
+          type="submit"
+          variant="outline"
+          disabled={create.isPending || name.trim().length === 0}
+        >
           Create workspace
         </Button>
       </form>

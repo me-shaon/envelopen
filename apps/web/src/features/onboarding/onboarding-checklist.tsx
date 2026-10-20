@@ -152,7 +152,7 @@ function StepCard({ step, index }: { step: Step; index: number }) {
             <Link
               to={action.to}
               hash={action.hash}
-              className="inline-flex min-h-[30px] items-center rounded-lg border border-input px-2.5 text-[12.5px] font-medium hover:bg-accent"
+              className="inline-flex min-h-[30px] max-sm:min-h-11 items-center rounded-lg border border-input px-2.5 text-[12.5px] font-medium hover:bg-accent"
             >
               {label}
             </Link>
@@ -161,7 +161,7 @@ function StepCard({ step, index }: { step: Step; index: number }) {
             href={guideUrl(step.guide)}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-[30px] items-center gap-1 text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
+            className="inline-flex min-h-[30px] max-sm:min-h-11 items-center gap-1 text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
           >
             Guide
             <span className="sr-only"> for {step.title} (opens in a new tab)</span>
@@ -200,7 +200,7 @@ function SetupComplete({ total, onShow }: { total: number; onShow: () => void })
       <button
         type="button"
         onClick={onShow}
-        className="inline-flex min-h-[30px] items-center text-[12.5px] font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        className="inline-flex min-h-[30px] max-sm:min-h-11 items-center text-[12.5px] font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
       >
         Show the steps
       </button>

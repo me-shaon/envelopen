@@ -210,7 +210,8 @@ function EditorHeader({
             value={draft.name}
             maxLength={100}
             onChange={(event) => onDraft({ ...draft, name: event.target.value })}
-            className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1 py-0.5 text-[30px] leading-[1.15] font-semibold tracking-[-0.035em] hover:border-border focus:border-input"
+            // The negative margin lines the text up with the back link above it.
+            className="-ml-[5px] min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1 py-0.5 text-[30px] leading-[1.15] font-semibold tracking-[-0.035em] hover:border-border focus:border-input"
           />
           <FormatPill format={format} />
         </div>
@@ -305,9 +306,13 @@ function SubjectFields({
           id="template-preheader"
           value={draft.preheader}
           maxLength={200}
-          placeholder="The line that inboxes show after the subject"
+          placeholder="Optional"
+          aria-describedby="template-preheader-hint"
           onChange={(event) => onDraft({ ...draft, preheader: event.target.value })}
         />
+        <p id="template-preheader-hint" className="m-0 text-xs text-muted-foreground">
+          The short line that inboxes show after the subject.
+        </p>
       </div>
     </div>
   );

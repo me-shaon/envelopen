@@ -36,7 +36,7 @@ export function CampaignResults({ campaignId }: { campaignId: number }) {
         aside={`${plural(data.sent, "email", "emails")} sent`}
       />
       <KpiStrip label="Headline results" items={headlineKpis(data)} />
-      <KpiStrip label="Detail results" items={detailKpis(data)} />
+      <KpiStrip label="Detail results" items={detailKpis(data)} compact />
       <ResultsNote stats={data} />
       <FollowUp stats={data} campaignId={campaignId} />
     </section>

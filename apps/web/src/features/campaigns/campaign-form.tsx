@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { CheckIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { api, type Schemas, unwrap } from "@/api/client";
 import { domainsQuery, listsQuery, tagsQuery, templatesQuery } from "@/api/queries";
@@ -400,19 +401,25 @@ export function CampaignForm({
       </Section>
 
       <div className="flex flex-wrap items-center gap-3 border-t border-hairline pt-6">
-        <Button
-          type="submit"
-          variant={campaign ? "outline" : "default"}
-          disabled={save.isPending || !draft.name.trim() || (campaign !== undefined && !changed)}
-        >
-          {save.isPending
-            ? "Saving..."
-            : campaign
-              ? changed
-                ? "Save changes"
-                : "Saved"
-              : "Create draft"}
-        </Button>
+        {campaign && !changed && !save.isPending ? (
+          // Nothing to save: a quiet status, not a disabled button that looks broken.
+          <span
+            role="status"
+            data-testid="campaign-save-status"
+            className="inline-flex min-h-9 items-center gap-1.5 text-[13px] text-muted-foreground"
+          >
+            <CheckIcon className="size-3.5" aria-hidden="true" />
+            Saved
+          </span>
+        ) : (
+          <Button
+            type="submit"
+            variant={campaign ? "outline" : "default"}
+            disabled={save.isPending || !draft.name.trim()}
+          >
+            {save.isPending ? "Saving..." : campaign ? "Save changes" : "Create draft"}
+          </Button>
+        )}
         {aside && !changed ? aside : null}
         {aside && changed ? (
           <span className="text-xs text-muted-foreground">Save the changes before you send.</span>

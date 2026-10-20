@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { BookOpenIcon, CodeIcon, PlugZapIcon, SendIcon } from "lucide-react";
+import type { Schemas } from "@/api/client";
 import { campaignsQuery } from "@/api/queries";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader, SectionHeader } from "@/components/page-header";
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { RecentActivity } from "@/features/audit/recent-activity";
 import { CampaignTable } from "@/features/campaigns/campaigns-page";
+import { formatWhen } from "@/features/campaigns/shared";
 import { OnboardingChecklist, useOnboarding } from "@/features/onboarding/onboarding-checklist";
 import { LatestCampaign } from "@/features/stats/latest-campaign";
 import { guideUrl } from "@/lib/guides";
@@ -63,15 +65,40 @@ const RESOURCES = [
   },
 ];
 
+/** The latest campaign in one line, for the subtitle after setup. */
+function latestLine(campaign: Schemas["CampaignSummary"] | undefined): string | undefined {
+  if (!campaign) return undefined;
+  const name = `"${campaign.name}"`;
+  switch (campaign.status) {
+    case "sent":
+      return `Latest campaign: ${name}, sent ${formatWhen(campaign.startedAt ?? campaign.updatedAt)}.`;
+    case "sending":
+      return `${name} is sending now.`;
+    case "scheduled":
+      return `${name} is scheduled for ${formatWhen(campaign.scheduledAt)}.`;
+    case "paused":
+      return `${name} is paused.`;
+    case "needs_decision":
+      return `${name} needs your decision.`;
+    case "draft":
+      return `Latest campaign: ${name}, a draft.`;
+    default:
+      return undefined;
+  }
+}
+
 export function OverviewPage() {
   const { current } = useCurrentWorkspace();
   const onboarding = useOnboarding();
+  // The same query as the recent campaigns list, so this costs no extra request.
+  const campaigns = useQuery(campaignsQuery(current.id, 5));
   const left = onboarding.data ? onboarding.data.total - onboarding.data.completed : null;
+  // When setup is complete, the checklist says so. The subtitle names the latest campaign.
   const subtitle =
     left === null
       ? `Workspace ${current.name}.`
       : left === 0
-        ? "Setup is complete. You are ready to send."
+        ? latestLine(campaigns.data?.items[0])
         : `${left} setup ${left === 1 ? "step is" : "steps are"} left in ${current.name}.`;
 
   return (
@@ -106,7 +133,7 @@ export function OverviewPage() {
                 href={resource.href}
                 target="_blank"
                 rel="noreferrer"
-                className="flex min-h-8 items-center gap-2.5 text-[13px] text-muted-foreground hover:text-foreground"
+                className="flex min-h-8 max-sm:min-h-11 items-center gap-2.5 text-[13px] text-muted-foreground hover:text-foreground"
               >
                 <Icon className="size-[15px]" strokeWidth={1.7} aria-hidden="true" />
                 {resource.label}

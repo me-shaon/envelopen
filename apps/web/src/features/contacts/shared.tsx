@@ -96,7 +96,7 @@ export function ContactsNav() {
           key={tab.to}
           to={tab.to}
           activeOptions={{ exact: true, includeSearch: false }}
-          className="-mb-px border-b-2 px-2.5 pt-1 pb-2.5 text-[13px] hover:text-foreground"
+          className="-mb-px inline-flex items-end border-b-2 px-2.5 pt-1 pb-2.5 text-[13px] hover:text-foreground max-sm:min-h-11"
           // The colors go in the state props: in one class list, the later utility in the
           // stylesheet wins, so an active tab would keep the transparent border.
           activeProps={{

@@ -135,7 +135,18 @@ test.describe("campaigns", () => {
 
     await dialog.getByRole("button", { name: "Send to about 2 people" }).click();
     await expect(dialog).toBeHidden();
+    // A banner confirms the send, and a status region announces it.
+    const banner = page.getByTestId("send-banner");
+    await expect(banner).toContainText("Sending to about 2 people.");
+    await screenshot(page, "send-banner");
+    await expect(
+      page.getByRole("status").filter({ hasText: "Progress updates here." }),
+    ).toHaveCount(1);
+    await banner.getByRole("button", { name: "See the progress" }).click();
+    await expect(page.locator("#progress")).toBeFocused();
     await expect(page.getByText("Sent", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await banner.getByRole("button", { name: "Dismiss" }).click();
+    await expect(banner).toBeHidden();
     await expect(page.getByTestId("kpi-sent")).toContainText("2");
     await expect(page.getByTestId("kpi-uncertain")).toContainText("0");
     await expectNoSeriousViolations(page);
@@ -305,6 +316,9 @@ test.describe("campaigns", () => {
     );
     await expect(page.getByTestId("click-map-link")).toHaveCount(1);
     await expect(page.getByTestId("click-map-link")).toContainText("https://example.com/course");
+    // No person clicked, so the email waits behind an empty state.
+    await expect(page.getByText("When people click, each tracked link")).toBeVisible();
+    await page.getByRole("button", { name: "Show the email" }).click();
     await expect(page.getByTitle("Email with clicks per link")).toHaveAttribute("sandbox", "");
     const email = page.frameLocator('iframe[title="Email with clicks per link"]');
     await expect(email.getByRole("link", { name: "See the course" })).toHaveAttribute(

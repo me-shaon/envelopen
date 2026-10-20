@@ -6,7 +6,7 @@ import { WorkspacesSection } from "@/features/settings/workspaces-section";
 
 export function SettingsPage() {
   return (
-    <div className="flex max-w-[760px] flex-col gap-12">
+    <div className="flex flex-col gap-12">
       <PageHeader
         title="Settings"
         description="Workspaces, tracking, API keys, and the audit log."

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { PASSWORD_PORT } from "../playwright.config";
 
@@ -7,6 +8,9 @@ import { PASSWORD_PORT } from "../playwright.config";
 // a real `wrangler dev` can show it.
 
 const BASE = `http://localhost:${PASSWORD_PORT}`;
+const VERSION: string = JSON.parse(
+  readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+).version;
 const SPA_MARKER = '<div id="root"></div>';
 // The headers of a browser navigation, so the SPA fallback applies where it can.
 const NAVIGATION = { accept: "text/html", "sec-fetch-mode": "navigate" };
@@ -14,7 +18,7 @@ const NAVIGATION = { accept: "text/html", "sec-fetch-mode": "navigate" };
 test.describe("asset routing", () => {
   test("sends /api/*, /mcp, /t/*, /u/*, and /hooks/* to the Worker", async ({ request }) => {
     const health = await request.get(`${BASE}/api/health`, { headers: NAVIGATION });
-    expect(await health.json()).toEqual({ status: "ok" });
+    expect(await health.json()).toEqual({ status: "ok", version: VERSION });
 
     const paths = [
       "/api/unknown-route",

@@ -139,6 +139,28 @@ Expected result: a new user sends a test campaign with only the README and the g
 2. Ask the person to deploy, connect a provider with its API key, verify a domain, import contacts, and send a test campaign.
 3. Record each step where the person needed help, and fix the guide.
 
+## Release process
+
+A release is a `vX.Y.Z` tag on `main`. The release workflow (`.github/workflows/release.yml`) checks the tag, runs the checks, and creates the GitHub release. The update workflow in each copy then finds the release.
+
+1. Do the checks in this guide that the release needs.
+2. Set `version` in the root `package.json` to the new version, for example `0.2.0`. This file is the only place that holds the version.
+3. In `CHANGELOG.md`, move the notes under **Unreleased** to a new section `## [0.2.0] - YYYY-MM-DD`.
+4. If the owner must do something by hand, write it under **Manual steps**. Write changes that need a decision under **Breaking**.
+5. Update the links at the end of `CHANGELOG.md`.
+6. Commit the changes, and push them to `main`.
+7. Wait for CI to pass.
+8. Make the tag: `git tag v0.2.0`.
+9. Push the tag: `git push origin v0.2.0`.
+10. Open the **Release** workflow run, and check that it created the release with the notes.
+
+Rules for each release:
+
+- Never change or delete a D1 migration that a release shipped. Put each change in a new migration file. CI fails if a shipped migration changes (`scripts/check-migrations.mjs`).
+- Never remove or reorder a Durable Object migration in `wrangler.jsonc`. Add new entries at the end.
+- Use a tag that matches `version` in `package.json`. The release workflow fails on a mismatch.
+- Do not move or delete a tag after the release. Copies compare their files with the tag of their version.
+
 ## Open questions to record
 
 The plan leaves these questions for a deployed check. Record the answers here:

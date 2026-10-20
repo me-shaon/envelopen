@@ -11,6 +11,7 @@ import { createMcpRoutes, MCP_PATH } from "./mcp/route";
 import { handleSendBatch } from "./queue/send-consumer";
 import { createSetupRoutes } from "./setup/first-run";
 import { createTrackingRoutes, createUnsubscribeRoutes } from "./tracking";
+import { ENVELOPEN_VERSION } from "./version";
 
 // Durable Object and Workflow classes must be exported from the entry module.
 export { AuthRateLimiter } from "./auth/rate-limit-do";
@@ -22,7 +23,7 @@ export { ImportWorkflow } from "./workflows/import-workflow";
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.get("/api/health", (c) => c.json({ status: "ok" }));
+app.get("/api/health", (c) => c.json({ status: "ok", version: ENVELOPEN_VERSION }));
 
 // Better Auth (login, passkeys, sessions) and the first-run screen. Both are mounted
 // before the API router, whose catch-all would answer their paths with 404. So is the

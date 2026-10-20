@@ -19,6 +19,8 @@ Your contacts and stats stay in your own Cloudflare account. Envelopen has an ad
 2. Enter the three secrets (see [Secrets](#secrets)).
 3. Wait for the build and the deploy to finish.
 
+To get updates, open Actions in your new repository and enable the Envelopen updates workflow. See [Update Envelopen](docs/guides/updating.md).
+
 The button creates the D1 database, the KV namespace, the R2 bucket, the queues with the dead-letter queue, the Workflows, and the Durable Objects. The deploy script applies the D1 migrations.
 
 Envelopen runs on the Workers Free plan. Free has daily limits, for example 100,000 D1 rows written each day. For regular campaigns, use Workers Paid (5 USD per month). The [platform guide](docs/guides/cloudflare-platform.md) shows what happens at each limit.

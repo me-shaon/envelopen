@@ -14,6 +14,7 @@ Vendors change their limits and prices often. Each guide shows the date of the l
 | [Import contacts](import-contacts.md) | CSV files, column mapping, consent basis, tags, lists, and export. |
 | [Send a test email](test-send.md) | Test addresses, test sends, and the unsubscribe headers in Gmail. |
 | [Connect an MCP client](mcp.md) | API keys, scope presets, and the confirm flow for agents. |
+| [Update Envelopen](updating.md) | The update workflow, update modes, manual updates, backups, and rollback. |
 
 ## Platform
 
@@ -41,7 +42,7 @@ A transactional-only provider always sends system email, such as test sends. The
 | Guide | What it covers |
 |---|---|
 | [Write a provider adapter](adapter-authoring.md) | The adapter contract and the conformance kit. |
-| [Release checklist](release-checklist.md) | The manual checks on a real deployment before a release. |
+| [Release checklist](release-checklist.md) | The manual checks on a real deployment before a release, and the release process. |
 
 ## Guide template
 

@@ -12,11 +12,17 @@ jobs:
       TURBO_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The migration check compares with the latest release tag, so it needs the tags.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+      # Shipped D1 migrations and Durable Object migrations must not change
+      # (scripts/check-migrations.mjs). Without a release tag, the check passes with a notice.
+      - run: node scripts/check-migrations.mjs --github
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck

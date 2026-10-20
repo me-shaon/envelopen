@@ -1,9 +1,16 @@
+import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+// The root package.json holds the Envelopen version. The Settings page shows it.
+const rootPackage = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+) as { version: string };
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: { __ENVELOPEN_VERSION__: JSON.stringify(rootPackage.version) },
   resolve: {
     alias: { "@": new URL("./src", import.meta.url).pathname },
   },

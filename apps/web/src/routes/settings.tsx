@@ -15,6 +15,7 @@ export function SettingsPage() {
       <TrackingSection />
       <ApiKeysSection />
       <AuditLogSection />
+      <footer className="text-xs text-muted-foreground">Envelopen {__ENVELOPEN_VERSION__}</footer>
     </div>
   );
 }

@@ -153,6 +153,8 @@ test.describe("password mode", () => {
 
     await page.getByRole("link", { name: "Settings" }).first().click();
     const settingsReady = page.getByText("No API keys in this workspace");
+    // The footer shows the version from the root package.json.
+    await expect(page.getByText(/^Envelopen \d+\.\d+\.\d+/)).toBeVisible();
     for (const theme of ["dark", "light"] as const) {
       await setTheme(page, theme);
       await expect(settingsReady).toBeVisible();

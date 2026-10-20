@@ -1,0 +1,281 @@
+name: Envelopen updates
+
+# Keeps a repository made with the Deploy to Cloudflare button up to date with the
+# releases of me-shaon/envelopen. See docs/guides/updating.md.
+#
+# - The workflow reads the latest release, and compares it with "version" in package.json.
+# - scripts/update/apply-release.mjs applies the release files. wrangler.jsonc keeps your
+#   resource names, IDs, routes, and vars.
+# - Mode: the repository variable ENVELOPEN_UPDATE_MODE, or the input of a manual run.
+#   sync (default): commit to the default branch. Workers Builds then deploys the update.
+#   pr: push the branch envelopen-update/vX.Y.Z, and open a pull request.
+# - If the release changes files that you changed too, the run uses pr.
+# - A push with GITHUB_TOKEN cannot change .github/workflows. To update those files too,
+#   add the secret ENVELOPEN_UPDATE_TOKEN. Without it, the workflow opens an issue.
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode for this run. 'default' uses the ENVELOPEN_UPDATE_MODE variable (or sync)."
+        type: choice
+        options: [default, sync, pr]
+        default: default
+
+permissions: {}
+
+concurrency:
+  group: envelopen-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    # The upstream repository makes the releases. It never updates itself.
+    if: github.repository != 'me-shaon/envelopen'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      UPSTREAM_REPO: me-shaon/envelopen
+      HAS_UPDATE_TOKEN: ${{ secrets.ENVELOPEN_UPDATE_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          token: ${{ secrets.ENVELOPEN_UPDATE_TOKEN || github.token }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Find the latest release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          default_branch="$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)"
+          if [ "$GITHUB_REF_NAME" != "$default_branch" ]; then
+            echo "::error::Run this workflow on the default branch ($default_branch)."
+            exit 1
+          fi
+          current="$(node scripts/update/version.mjs current)"
+
+          if ! gh api "repos/$UPSTREAM_REPO/releases/latest" > "$RUNNER_TEMP/release.json"; then
+            echo "::notice::Could not read the latest release of $UPSTREAM_REPO. It may have no release yet."
+            echo "update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tag="$(jq -r .tag_name "$RUNNER_TEMP/release.json")"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The latest release has an unexpected tag: $tag"
+            exit 1
+          fi
+          jq -r .html_url "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/release-url.txt"
+          jq -r '.body // ""' "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/notes.md"
+
+          {
+            echo "current=$current"
+            echo "tag=$tag"
+            echo "default_branch=$default_branch"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$(node scripts/update/version.mjs compare "$tag" "$current")" != "newer" ]; then
+            echo "Envelopen $current is up to date. The latest release is $tag." >> "$GITHUB_STEP_SUMMARY"
+            echo "update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get the files of the releases
+        id: trees
+        if: steps.release.outputs.update == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          CURRENT: ${{ steps.release.outputs.current }}
+        run: |
+          # The upstream repository is public. Do not send the token of this repository to it.
+          fetch_tree() {
+            git -c http.https://github.com/.extraheader= fetch --quiet --depth=1 --no-tags \
+              "https://github.com/$UPSTREAM_REPO.git" "+refs/tags/$1:refs/envelopen-upstream/$1" || return 1
+            mkdir -p "$2"
+            git archive "refs/envelopen-upstream/$1" | tar -x -C "$2"
+          }
+          fetch_tree "$TAG" "$RUNNER_TEMP/upstream"
+          if fetch_tree "v$CURRENT" "$RUNNER_TEMP/base"; then
+            echo "base=$RUNNER_TEMP/base" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The release v$CURRENT was not found. Local changes cannot be detected, so this run opens a pull request."
+          fi
+
+      - name: Apply the release
+        id: apply
+        if: steps.release.outputs.update == 'true'
+        env:
+          BASE_DIR: ${{ steps.trees.outputs.base }}
+          INPUT_MODE: ${{ inputs.mode }}
+          VAR_MODE: ${{ vars.ENVELOPEN_UPDATE_MODE }}
+        run: |
+          args=(--upstream "$RUNNER_TEMP/upstream" --current "$GITHUB_WORKSPACE" --report "$RUNNER_TEMP/report.json")
+          if [ -n "$BASE_DIR" ]; then args+=(--base "$BASE_DIR"); fi
+          if [ "$HAS_UPDATE_TOKEN" != "true" ]; then args+=(--skip-workflows); fi
+          # The script of the new release does the update, so fixes to it apply at once.
+          node "$RUNNER_TEMP/upstream/scripts/update/apply-release.mjs" "${args[@]}"
+
+          mode="sync"
+          if [ "$VAR_MODE" = "sync" ] || [ "$VAR_MODE" = "pr" ]; then
+            mode="$VAR_MODE"
+          elif [ -n "$VAR_MODE" ]; then
+            echo "::warning::ENVELOPEN_UPDATE_MODE must be sync or pr. This run uses sync."
+          fi
+          if [ "$INPUT_MODE" = "sync" ] || [ "$INPUT_MODE" = "pr" ]; then mode="$INPUT_MODE"; fi
+
+          reason=""
+          if [ "$(jq '.conflicts | length' "$RUNNER_TEMP/report.json")" != "0" ]; then
+            mode="pr"
+            reason="The release changes files that this repository changed too."
+          elif [ "$(jq .baseMissing "$RUNNER_TEMP/report.json")" = "true" ]; then
+            mode="pr"
+            reason="The current release was not found, so local changes cannot be detected."
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push
+        id: push
+        if: steps.release.outputs.update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ENVELOPEN_UPDATE_TOKEN || github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          CURRENT: ${{ steps.release.outputs.current }}
+          DEFAULT_BRANCH: ${{ steps.release.outputs.default_branch }}
+          MODE: ${{ steps.apply.outputs.mode }}
+          REASON: ${{ steps.apply.outputs.reason }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No file changed."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit --quiet -m "Update Envelopen to $TAG"
+
+          if [ "$MODE" = "sync" ]; then
+            git push origin "HEAD:refs/heads/$DEFAULT_BRANCH"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          branch="envelopen-update/$TAG"
+          git push --force origin "HEAD:refs/heads/$branch"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+          body="$RUNNER_TEMP/pr-body.md"
+          {
+            echo "This pull request updates Envelopen from $CURRENT to $TAG."
+            echo
+            echo "Release: $(cat "$RUNNER_TEMP/release-url.txt")"
+            echo
+            if [ -n "$REASON" ]; then
+              echo "The workflow opened a pull request instead of a direct update. $REASON"
+              echo
+            fi
+            if [ "$(jq '.conflicts | length' "$RUNNER_TEMP/report.json")" != "0" ]; then
+              echo "## Files that you changed"
+              echo
+              echo "The release also changed these files. This pull request uses the release version. Check the diff, and add your changes again if you need them."
+              echo
+              jq -r '.conflicts[] | "- `" + . + "`"' "$RUNNER_TEMP/report.json"
+              echo
+            fi
+            if [ "$(jq '.skippedWorkflows | length' "$RUNNER_TEMP/report.json")" != "0" ]; then
+              echo "## Workflow files not updated"
+              echo
+              echo "The workflow cannot change these files without the ENVELOPEN_UPDATE_TOKEN secret. See the issue for this release."
+              echo
+              jq -r '.skippedWorkflows[] | "- `" + . + "`"' "$RUNNER_TEMP/report.json"
+              echo
+            fi
+            echo "## Release notes"
+            echo
+            cat "$RUNNER_TEMP/notes.md"
+          } > "$body"
+
+          number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+          elif ! gh pr create --repo "$GITHUB_REPOSITORY" --base "$DEFAULT_BRANCH" --head "$branch" \
+              --title "Update Envelopen to $TAG" --body-file "$body"; then
+            echo "::error::Could not open the pull request. Turn on 'Allow GitHub Actions to create and approve pull requests' in Settings > Actions > General, or open a pull request from the branch $branch."
+            exit 1
+          fi
+
+      - name: Open an issue for the workflow files
+        if: steps.release.outputs.update == 'true' && env.HAS_UPDATE_TOKEN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if [ "$(jq '.skippedWorkflows | length' "$RUNNER_TEMP/report.json")" = "0" ]; then exit 0; fi
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .has_issues)" != "true" ]; then
+            echo "::warning::Issues are off in this repository. Update the workflow files by hand. See docs/guides/updating.md."
+            exit 0
+          fi
+          title="Update the workflow files for Envelopen $TAG"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "\"$title\" in:title" \
+            --json title --jq "map(select(.title == \"$title\")) | length")"
+          if [ "$existing" != "0" ]; then
+            echo "The issue for $TAG exists."
+            exit 0
+          fi
+          body="$RUNNER_TEMP/issue-body.md"
+          {
+            echo "Envelopen $TAG changes these workflow files. A workflow cannot change files in \`.github/workflows\` with the default GITHUB_TOKEN, so the update left them unchanged:"
+            echo
+            jq -r --arg repo "$UPSTREAM_REPO" --arg tag "$TAG" \
+              '.skippedWorkflows[] | "- [`" + . + "`](https://github.com/" + $repo + "/blob/" + $tag + "/" + . + ")"' \
+              "$RUNNER_TEMP/report.json"
+            echo
+            echo "Do one of these:"
+            echo
+            echo "1. Open each link above, copy the file, and replace the file in this repository with it."
+            echo "2. Or add the secret ENVELOPEN_UPDATE_TOKEN. Use a fine-grained personal access token for this repository with write access to Contents, Pull requests, and Workflows. Later updates then change these files too."
+            echo
+            echo "See docs/guides/updating.md in this repository."
+          } > "$body"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$body"
+
+      - name: Write the job summary
+        if: steps.release.outputs.update == 'true' && always()
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          CURRENT: ${{ steps.release.outputs.current }}
+          MODE: ${{ steps.apply.outputs.mode }}
+          PUSHED: ${{ steps.push.outputs.pushed }}
+        run: |
+          report="$RUNNER_TEMP/report.json"
+          {
+            echo "## Envelopen update"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Old version | $CURRENT |"
+            echo "| New version | ${TAG#v} |"
+            echo "| Mode | ${MODE:-not set} |"
+            echo "| Pushed | ${PUSHED:-false} |"
+            if [ -f "$RUNNER_TEMP/release-url.txt" ]; then
+              echo "| Release notes | $(cat "$RUNNER_TEMP/release-url.txt") |"
+            fi
+            if [ -f "$report" ]; then
+              echo "| Files written | $(jq '.written | length' "$report") |"
+              echo "| Files deleted | $(jq '.deleted | length' "$report") |"
+              echo "| Conflicts | $(jq '.conflicts | length' "$report") |"
+              echo "| Workflow files not updated | $(jq '.skippedWorkflows | length' "$report") |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

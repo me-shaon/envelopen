@@ -1,5 +1,6 @@
 {
   "name": "envelopen",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.7",
@@ -12,12 +13,14 @@
     "db:migrate": "wrangler d1 migrations apply DB --local",
     "dev": "turbo run build --filter=@envelopen/web && wrangler dev",
     "demo": "node scripts/demo.mjs",
-    "test": "turbo run test",
+    "test": "turbo run test && pnpm run test:scripts",
+    "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
     "test:e2e": "pnpm --filter @envelopen/web test:e2e",
     "typecheck": "turbo run typecheck",
     "lint": "biome check .",
     "cf-typegen": "wrangler types apps/worker/worker-configuration.d.ts",
-    "openapi": "pnpm --filter @envelopen/worker openapi"
+    "openapi": "pnpm --filter @envelopen/worker openapi",
+    "check:migrations": "node scripts/check-migrations.mjs"
   },
   "cloudflare": {
     "bindings": {

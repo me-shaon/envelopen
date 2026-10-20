@@ -1,5 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import rootPackage from "../../../package.json";
 
 const BASE = "https://envelopen.test";
 
@@ -7,7 +8,7 @@ describe("worker shell", () => {
   it("returns ok from /api/health", async () => {
     const res = await exports.default.fetch(`${BASE}/api/health`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "ok" });
+    expect(await res.json()).toEqual({ status: "ok", version: rootPackage.version });
   });
 
   it("routes /u/<token> to the Worker, not the SPA", async () => {

@@ -4,8 +4,10 @@ This guide shows how to run Envelopen on your computer with `wrangler dev`. The 
 
 ## Before you start
 
-- Install Node.js 22.12 or later.
-- Enable corepack one time: `corepack enable`. Envelopen runs pnpm through corepack, so you do not install pnpm yourself.
+- Install Node.js 22.12 or later. Any later version also works.
+- Install pnpm 10 or later. Use the method that you prefer, for example `npm install -g pnpm` or Homebrew. See [Install pnpm](https://pnpm.io/installation) for all methods.
+
+`package.json` sets the pnpm version for the project (`packageManager`). If your pnpm version is different, pnpm downloads and uses the project version. So every contributor uses the same pnpm version.
 - Install `openssl`, to make the secret values. macOS and most Linux systems have it.
 
 ## Steps
@@ -13,7 +15,7 @@ This guide shows how to run Envelopen on your computer with `wrangler dev`. The 
 ### 1. Install the dependencies
 
 ```sh
-corepack pnpm install
+pnpm install
 ```
 
 ### 2. Make the local secrets file
@@ -39,7 +41,7 @@ Git ignores `.dev.vars`. Do not use these values in production.
 Apply the migrations to the local D1 database:
 
 ```sh
-corepack pnpm exec wrangler d1 migrations apply DB --local
+pnpm db:migrate
 ```
 
 Do this step again after you pull changes that add a migration in `packages/db/migrations`.
@@ -47,7 +49,7 @@ Do this step again after you pull changes that add a migration in `packages/db/m
 ### 4. Start the Worker
 
 ```sh
-corepack pnpm dev
+pnpm dev
 ```
 
 This command builds the admin app, then starts `wrangler dev`. Wait for `Ready on http://localhost:8787`.
@@ -93,7 +95,7 @@ To work without a real provider, use the provider mock from the end-to-end tests
 
 1. Start the mock in a second terminal: `node apps/web/e2e/provider-mock.mjs 8788 --dmarc`.
 2. Add this line to `.dev.vars`: `OUTBOUND_MOCK_ORIGIN=http://localhost:8788`.
-3. Restart `corepack pnpm dev`.
+3. Restart `pnpm dev`.
 4. In Envelopen, add a Resend connection. Any API key works with the mock.
 5. Add the sending domain `mail.example.com`. With `--dmarc`, the mock answers with all of its DNS records, so the domain verifies.
 
@@ -103,24 +105,24 @@ The Worker accepts `OUTBOUND_MOCK_ORIGIN` only with a `localhost` or `127.0.0.1`
 
 The local data is in `.wrangler/state`. To start again with an empty database:
 
-1. Stop `corepack pnpm dev`.
+1. Stop `pnpm dev`.
 2. Delete the `.wrangler/state` folder.
 3. Do steps 3 to 5 again.
 
 ## Run the checks
 
 ```sh
-corepack pnpm test        # Vitest in the Workers runtime
-corepack pnpm test:e2e    # Playwright against local Workers and the provider mock
-corepack pnpm typecheck   # TypeScript in all packages
-corepack pnpm lint        # Biome
-corepack pnpm build       # Web build, then a Worker dry-run build
+pnpm test        # Vitest in the Workers runtime
+pnpm test:e2e    # Playwright against local Workers and the provider mock
+pnpm typecheck   # TypeScript in all packages
+pnpm lint        # Biome
+pnpm build       # Web build, then a Worker dry-run build
 ```
 
 The end-to-end tests need the Playwright browser. Install it one time:
 
 ```sh
-corepack pnpm --filter @envelopen/web exec playwright install chromium
+pnpm --filter @envelopen/web exec playwright install chromium
 ```
 
 The end-to-end tests start their own Workers with their own data. They do not change your local data in `.wrangler/state`. No test sends real email.
@@ -130,10 +132,11 @@ The end-to-end tests start their own Workers with their own data. They do not ch
 | Problem | Cause | Fix |
 |---|---|---|
 | An API request fails with a `no such table` error in the `wrangler dev` log. | The local database has no migrations. | Do step 3. |
-| The setup page does not accept the token. | The token is not the value in `.dev.vars`, or the Worker started before you changed the file. | Check the value. Restart `corepack pnpm dev`. |
+| The setup page does not accept the token. | The token is not the value in `.dev.vars`, or the Worker started before you changed the file. | Check the value. Restart `pnpm dev`. |
 | The setup page shows **Go to sign in**. | The owner exists already. | Sign in, or reset the local data. |
 | A campaign stays at **Sending** after all batches are done. | The cron did not run. | Run the cron. See step 6. |
-| `corepack pnpm` is not found. | corepack is not enabled. | Run `corepack enable`. |
+| `pnpm` is not found. | pnpm is not installed. | Install pnpm. See [Before you start](#before-you-start). |
+| `pnpm install` stops with an unsupported engine error. | The Node.js version is earlier than 22.12. | Install Node.js 22.12 or later. |
 
 ## Related guides
 

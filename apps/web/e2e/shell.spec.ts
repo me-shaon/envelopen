@@ -11,16 +11,17 @@ import { PASSKEY_PORT } from "../playwright.config";
 const SETUP_TOKEN = process.env.E2E_SETUP_TOKEN ?? "";
 const OWNER = { name: "Ada Owner", email: "owner@example.com", password: "correct horse battery" };
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const WRANGLER = fileURLToPath(
+  new URL("../../../node_modules/wrangler/bin/wrangler.js", import.meta.url),
+);
 const SCREENSHOTS = process.env.E2E_SCREENSHOT_DIR;
 
 /** Runs SQL on the local D1 database of a test Worker. */
 function seed(stateName: string, sql: string) {
   const result = spawnSync(
-    "corepack",
+    process.execPath,
     [
-      "pnpm",
-      "exec",
-      "wrangler",
+      WRANGLER,
       "d1",
       "execute",
       "DB",

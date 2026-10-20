@@ -263,7 +263,7 @@ A check without its fixture and without a skip reason fails. The failure tells y
 2. Run the kit for your adapter:
 
    ```sh
-   corepack pnpm --filter @envelopen/providers exec vitest run src/<id>/conformance.test.ts --reporter=verbose
+   pnpm --filter @envelopen/providers exec vitest run src/<id>/conformance.test.ts --reporter=verbose
    ```
 
 3. Read each failure. A failure lists each problem as one sentence.
@@ -271,9 +271,9 @@ A check without its fixture and without a skip reason fails. The failure tells y
 5. Run all checks of the repository before you open a pull request:
 
    ```sh
-   corepack pnpm lint
-   corepack pnpm typecheck
-   corepack pnpm test
+   pnpm lint
+   pnpm typecheck
+   pnpm test
    ```
 
 CI runs `pnpm test`, so the kit runs for every adapter on each push.
@@ -371,6 +371,6 @@ Add a row for the new guide to the table in `docs/guides/README.md`.
 - [ ] The fixtures have made-up ids and keys, a source URL, and a date.
 - [ ] Each skip has a reason that a reviewer can check.
 - [ ] `src/<id>/conformance.test.ts` passes.
-- [ ] `corepack pnpm lint`, `typecheck`, and `test` pass.
+- [ ] `pnpm lint`, `typecheck`, and `test` pass.
 - [ ] `docs/guides/provider-<id>.md` follows the template.
 - [ ] No file outside `packages/providers` and `docs/guides` changed.

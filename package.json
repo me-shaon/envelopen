@@ -9,6 +9,7 @@
   "scripts": {
     "build": "turbo run build && wrangler deploy --dry-run --outdir dist",
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
     "dev": "turbo run build --filter=@envelopen/web && wrangler dev",
     "test": "turbo run test",
     "test:e2e": "pnpm --filter @envelopen/web test:e2e",

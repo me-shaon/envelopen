@@ -47,9 +47,9 @@ The **Deploy to Cloudflare** button creates the D1 database. You do not need to 
 
 `wrangler.jsonc` has no `database_id`. Wrangler creates the database on the first deploy. To deploy from your computer instead:
 
-1. Install the dependencies: `corepack pnpm install`.
+1. Install the dependencies: `pnpm install`.
 2. Log in: `npx wrangler login`.
-3. Deploy: `corepack pnpm run deploy`. The script applies the migrations, then deploys the Worker.
+3. Deploy: `pnpm run deploy`. The script applies the migrations, then deploys the Worker.
 
 ## Connect to Envelopen
 

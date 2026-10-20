@@ -128,15 +128,19 @@ Envelopen records every change with the actor, the surface (UI, API, or MCP), an
 
 ## Local development
 
-You do not need a Cloudflare account to run Envelopen locally. Node.js 22.12 or later is necessary. pnpm runs through corepack.
+You do not need a Cloudflare account to run Envelopen locally. You need:
 
-1. Enable corepack one time: `corepack enable`.
-2. Install the dependencies: `corepack pnpm install`.
-3. Copy the secrets file: `cp .dev.vars.example .dev.vars`.
-4. Replace the three values in `.dev.vars`. The comments in the file show how to make each value.
-5. Make the local database: `corepack pnpm exec wrangler d1 migrations apply DB --local`.
-6. Start the Worker: `corepack pnpm dev`.
-7. Open `http://localhost:8787/setup`, and create the owner with the `SETUP_TOKEN` value.
+- Node.js 22.12 or later. Any later version also works.
+- pnpm 10 or later. Install it in the way that you prefer, for example `npm install -g pnpm`. See [Install pnpm](https://pnpm.io/installation) for other methods.
+
+`package.json` sets the pnpm version for the project. If your pnpm version is different, pnpm downloads and uses the project version.
+
+1. Install the dependencies: `pnpm install`.
+2. Copy the secrets file: `cp .dev.vars.example .dev.vars`.
+3. Replace the three values in `.dev.vars`. The comments in the file show how to make each value.
+4. Make the local database: `pnpm db:migrate`.
+5. Start the Worker: `pnpm dev`.
+6. Open `http://localhost:8787/setup`, and create the owner with the `SETUP_TOKEN` value.
 
 `wrangler dev` does not run the per-minute cron. Without the cron, scheduled campaigns do not start, and a campaign does not change to **Sent**. To run the cron one time, send `curl "http://localhost:8787/cdn-cgi/local/scheduled"`.
 
@@ -145,16 +149,17 @@ You do not need a Cloudflare account to run Envelopen locally. Node.js 22.12 or 
 Other commands:
 
 ```sh
-corepack pnpm test        # Vitest in the Workers runtime
-corepack pnpm test:e2e    # Playwright against local Workers and a mock provider
-corepack pnpm typecheck   # TypeScript in all packages
-corepack pnpm lint        # Biome
-corepack pnpm build       # Web build, then a Worker dry-run build
-corepack pnpm openapi     # Regenerate the OpenAPI document and the client types
-corepack pnpm cf-typegen  # Regenerate Worker types after a wrangler.jsonc change
+pnpm test        # Vitest in the Workers runtime
+pnpm test:e2e    # Playwright against local Workers and a mock provider
+pnpm typecheck   # TypeScript in all packages
+pnpm lint        # Biome
+pnpm build       # Web build, then a Worker dry-run build
+pnpm openapi     # Regenerate the OpenAPI document and the client types
+pnpm cf-typegen  # Regenerate Worker types after a wrangler.jsonc change
+pnpm db:migrate   # Apply new migrations to the local database
 ```
 
-The end-to-end tests need the Playwright browsers. Install them one time with `corepack pnpm --filter @envelopen/web exec playwright install chromium`. No test sends real email.
+The end-to-end tests need the Playwright browsers. Install them one time with `pnpm --filter @envelopen/web exec playwright install chromium`. No test sends real email.
 
 ## Layout
 

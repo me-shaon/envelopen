@@ -20,6 +20,10 @@ if (!port || !stateName || !iterations) {
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const state = `.wrangler/e2e/${stateName}`;
 const env = { ...process.env, CI: "1", WRANGLER_SEND_METRICS: "false" };
+// Run wrangler with this Node, so the tests do not depend on how pnpm was installed.
+const wrangler = [
+  fileURLToPath(new URL("../../../node_modules/wrangler/bin/wrangler.js", import.meta.url)),
+];
 
 const secrets = ["SETUP_TOKEN", "SIGNING_KEY", "ENCRYPTION_KEY"].map((name) => {
   const value = process.env[`E2E_${name}`];
@@ -33,18 +37,16 @@ const secrets = ["SETUP_TOKEN", "SIGNING_KEY", "ENCRYPTION_KEY"].map((name) => {
 rmSync(new URL(`../../../${state}`, import.meta.url), { recursive: true, force: true });
 
 const migrate = spawnSync(
-  "corepack",
-  ["pnpm", "exec", "wrangler", "d1", "migrations", "apply", "DB", "--local", "--persist-to", state],
+  process.execPath,
+  [...wrangler, "d1", "migrations", "apply", "DB", "--local", "--persist-to", state],
   { cwd: root, env, stdio: "inherit" },
 );
 if (migrate.status !== 0) process.exit(migrate.status ?? 1);
 
 const dev = spawn(
-  "corepack",
+  process.execPath,
   [
-    "pnpm",
-    "exec",
-    "wrangler",
+    ...wrangler,
     "dev",
     "--port",
     port,

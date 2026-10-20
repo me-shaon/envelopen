@@ -461,16 +461,19 @@ export const sesAdapter: ProviderAdapter = {
   teardownEvents,
   domainRecords,
 
+  // The token is the last path segment, not a query parameter: request logs often keep
+  // the query string. URLs of connections from before still carry `?token=`, and
+  // verifyWebhook accepts both.
   webhookUrl(baseUrl, secret) {
     const url = new URL(baseUrl);
-    url.searchParams.set("token", secret);
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/${encodeURIComponent(secret)}`;
     return url.toString();
   },
 
   async verifyWebhook(request, secret, ctx) {
     // Anyone can subscribe this URL to their own SNS topic, and SNS would sign those
     // messages too. So the URL token must match, and the topic must be ours.
-    const token = new URL(request.url).searchParams.get("token") ?? "";
+    const token = webhookToken(request.url);
     if (!secret || !timingSafeEqual(token, secret)) return { ok: false, reason: "Wrong token." };
     const message = parseSnsMessage(request.body);
     if (!message) return { ok: false, reason: "Not an SNS message." };
@@ -496,5 +499,17 @@ export const sesAdapter: ProviderAdapter = {
     ];
   },
 };
+
+/** The URL token: `?token=` on URLs from before, else the last path segment. */
+function webhookToken(requestUrl: string): string {
+  const url = new URL(requestUrl);
+  const query = url.searchParams.get("token");
+  if (query !== null) return query;
+  try {
+    return decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
+  } catch {
+    return "";
+  }
+}
 
 export { configurationSetName };

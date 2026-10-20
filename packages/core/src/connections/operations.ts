@@ -263,7 +263,12 @@ async function configureEvents(
       if (setup.mode === "auto") {
         return {
           eventsSetup: "auto",
-          secretEncrypted: await encryptWebhookSecret(ctx.services, workspaceId, setup.secret),
+          secretEncrypted: await encryptWebhookSecret(
+            ctx.services,
+            workspaceId,
+            setup.secret,
+            row.id,
+          ),
           refs: { ...withBase, ...setup.refs },
           reason: null,
         };
@@ -277,7 +282,7 @@ async function configureEvents(
     eventsSetup: "manual",
     secretEncrypted:
       adapter.manualSecret === "envelopen"
-        ? await encryptWebhookSecret(ctx.services, workspaceId, generated)
+        ? await encryptWebhookSecret(ctx.services, workspaceId, generated, row.id)
         : null,
     refs: withBase,
     reason,
@@ -393,10 +398,19 @@ export const connectionsCreate = defineOperation({
       .executeTakeFirstOrThrow();
 
     const events = await configureEvents(ctx, adapter, inserted, credentials, check.refs ?? {});
+    // The row id exists now, so the credentials are written again bound to it.
+    const bound = await encryptCredentials(
+      ctx.services,
+      principal.workspaceId,
+      credentials,
+      inserted.id,
+    );
     await db.atomic([
       db.db
         .updateTable("provider_connections")
         .set({
+          credentials_encrypted: bound.ciphertext,
+          credentials_key_version: bound.version,
           events_setup: events.eventsSetup,
           webhook_secret_encrypted: events.secretEncrypted,
           provider_refs: JSON.stringify(events.refs),
@@ -624,7 +638,12 @@ export const connectionsSetWebhookSecret = defineOperation({
     if (adapter.id === "resend" && !input.secret.startsWith("whsec_")) {
       throw new OperationError("invalid_input", "A Resend signing secret starts with whsec_.");
     }
-    const sealed = await encryptWebhookSecret(ctx.services, principal.workspaceId, input.secret);
+    const sealed = await encryptWebhookSecret(
+      ctx.services,
+      principal.workspaceId,
+      input.secret,
+      row.id,
+    );
     await db.db
       .updateTable("provider_connections")
       .set({
@@ -636,6 +655,7 @@ export const connectionsSetWebhookSecret = defineOperation({
             ctx.services,
             principal.workspaceId,
             await decryptCredentials(ctx.services, row),
+            row.id,
           )
         ).ciphertext,
         credentials_key_version: requireService(ctx.services, "credentials").version,

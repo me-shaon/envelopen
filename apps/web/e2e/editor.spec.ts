@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type FrameLocator, type Page, test } from "@playwright/test";
 import { EDITOR_MOCK_PORT, EDITOR_PORT } from "../playwright.config";
+import { watchCsp } from "./csp";
 
 // The template editor (plan U8), against its own fresh Worker. That Worker sends
 // provider requests to its own instance of the mock in e2e/provider-mock.mjs, so the
@@ -104,6 +105,7 @@ test.describe("editor", () => {
   test("creates a template from blocks, saves a block, and previews it without running scripts", async ({
     page,
   }) => {
+    const checkCsp = watchCsp(page);
     await signIn(page);
     await page.getByRole("link", { name: "Templates" }).click();
     await expect(page.getByText("No templates yet")).toBeVisible();
@@ -157,6 +159,9 @@ test.describe("editor", () => {
     await expect(preview(page).locator("body")).toHaveCSS("background-color", "rgb(20, 19, 18)");
     await expectInertPreview(page);
     await screenshot(page, "preview-dark");
+    // The preview inherits the app's policy. Its remote image and styles are allowed. The
+    // policy also blocks the hostile javascript: link that expectInertPreview clicks.
+    checkCsp(/^Running the JavaScript URL violates/);
   });
 
   test("inserts the saved block into a second template, and it renders the same", async ({

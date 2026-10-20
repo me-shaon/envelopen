@@ -117,6 +117,20 @@ describe("provider webhook routes", () => {
     expect(rows).toEqual([]);
   });
 
+  it("accepts a URL token as the last path segment", async () => {
+    const { workspaceId, connectionId, deps } = await connection(
+      "resend",
+      resendFixtures.webhookSecret,
+    );
+    const body = resendFixtures.events.bounced;
+    const headers = await svixHeaders(body, "msg_route_token");
+    const res = await post(`resend/${workspaceId}/${connectionId}/tok_123`, body, headers, deps);
+    expect(res.status).toBe(200);
+    expect(
+      (await post(`resend/${workspaceId}/${connectionId}/a/b`, body, headers, deps)).status,
+    ).toBe(404);
+  });
+
   it("verifies a toSend HMAC signature", async () => {
     const { workspaceId, connectionId, deps } = await connection("tosend", "tosend-secret");
     const body = toSendFixtures.events.complaint;
@@ -149,6 +163,33 @@ describe("provider webhook routes", () => {
       deps,
     );
     expect(response.status).toBe(413);
+  });
+
+  it("stops reading a chunked body without Content-Length at 256 KB", async () => {
+    const { workspaceId, connectionId, deps } = await connection(
+      "resend",
+      resendFixtures.webhookSecret,
+    );
+    const chunk = new TextEncoder().encode("x".repeat(16 * 1024));
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= 4 * 1024 * 1024) return controller.close();
+        pulled += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+    });
+    const app = createHookRoutes({ createServices: () => deps });
+    const ctx = createExecutionContext();
+    const response = await app.request(
+      `${ORIGIN}/resend/${workspaceId}/${connectionId}`,
+      { method: "POST", headers: { "content-type": "application/json" }, body },
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(413);
+    expect(pulled).toBeLessThan(512 * 1024);
   });
 
   it("is reachable through the Worker entry without a session", async () => {

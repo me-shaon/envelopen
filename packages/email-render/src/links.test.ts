@@ -31,4 +31,13 @@ describe("link references (KTD26)", () => {
     expect(out).toContain('href="#top"');
     expect(out).not.toContain("https://example.com/a");
   });
+
+  it("stays linear on many `<a ` without a `>`", () => {
+    // 480 KB. The earlier pattern took about 15 seconds on this input.
+    const html = `<style>${"<a ".repeat(160_000)}</style><a href="https://example.com/z">Z</a>`;
+    const start = performance.now();
+    expect(extractLinks(html)).toEqual(["https://example.com/z"]);
+    rewriteLinks(html, (index) => `https://t.example/${index}`);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
 });

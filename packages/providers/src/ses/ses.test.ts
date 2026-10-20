@@ -140,9 +140,9 @@ describe("SES adapter", () => {
     expect(setup).toMatchObject({ mode: "manual" });
   });
 
-  it("puts the secret in the webhook URL", () => {
+  it("puts the secret in the webhook URL path, not in the query string", () => {
     expect(sesAdapter.webhookUrl?.("https://envelopen.test/hooks/ses/1/2", "s3cr3t")).toBe(
-      "https://envelopen.test/hooks/ses/1/2?token=s3cr3t",
+      "https://envelopen.test/hooks/ses/1/2/s3cr3t",
     );
   });
 

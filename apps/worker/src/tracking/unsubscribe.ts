@@ -7,6 +7,7 @@ import {
   unsubscribeAll,
 } from "@envelopen/core";
 import { type Context, Hono } from "hono";
+import { readBodyLimited } from "../body";
 import { isSameOriginPost, sameToken } from "./csrf";
 import { type TrackingDeps, type TrackingDepsFactory, trackingDeps } from "./deps";
 import { type PageNotice, pageResponse } from "./preferences";
@@ -81,9 +82,22 @@ async function readForm(
 ): Promise<Record<string, string | File | (string | File)[]> | null> {
   const type = c.req.header("content-type") ?? "";
   if (!FORM_TYPES.test(type)) return null;
-  if (Number(c.req.header("content-length") ?? 0) > MAX_FORM_BYTES) return null;
+  // Counted while reading, so a chunked body without Content-Length is capped too.
+  const bytes = await readBodyLimited(c.req.raw, MAX_FORM_BYTES);
+  if (!bytes) return null;
   try {
-    return await c.req.parseBody({ all: true });
+    const form = await new Request(c.req.url, {
+      method: "POST",
+      headers: { "content-type": type },
+      body: bytes,
+    }).formData();
+    const fields: Record<string, string | File | (string | File)[]> = {};
+    for (const [name, value] of form) {
+      const previous = fields[name];
+      if (previous === undefined) fields[name] = value;
+      else fields[name] = Array.isArray(previous) ? [...previous, value] : [previous, value];
+    }
+    return fields;
   } catch {
     return null;
   }

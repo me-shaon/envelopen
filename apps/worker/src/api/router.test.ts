@@ -210,6 +210,18 @@ describe("input validation and errors", () => {
     );
   });
 
+  it("marks API responses no-store, errors included", async () => {
+    const workspaceId = await createWorkspace();
+    const { key } = await createApiKey(workspaceId, ["contacts:read", "stats:read"]);
+    const app = createTestApp();
+    const ok = await app.request("/workspace", { headers: bearer(key) });
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("cache-control")).toBe("no-store");
+    const missing = await app.request("/test/lists/999999", { headers: bearer(key) });
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("cache-control")).toBe("no-store");
+  });
+
   it("returns a JSON 404 for an unknown API route", async () => {
     const workspaceId = await createWorkspace();
     const res = await createTestApp().request("/nothing", { headers: sessionCookie(workspaceId) });
@@ -273,6 +285,66 @@ describe("idempotency keys", () => {
     expect(res.status).toBe(422);
     expect(((await res.json()) as { error: Json }).error.code).toBe("idempotency_key_reused");
     expect(await countRows("lists", workspaceId)).toBe(1);
+  });
+
+  it("rejects the same key on another resource of the same route", async () => {
+    const workspaceId = await createWorkspace();
+    const { key } = await createApiKey(workspaceId, ["lists:write", "contacts:read"]);
+    const app = createTestApp();
+    const one = (await (
+      await app.request("/test/lists", jsonPost({ name: "one" }, bearer(key)))
+    ).json()) as { id: number };
+    const two = (await (
+      await app.request("/test/lists", jsonPost({ name: "two" }, bearer(key)))
+    ).json()) as { id: number };
+    const headers = { ...bearer(key), "idempotency-key": "abc-path" };
+    const first = await app.request(
+      `/test/lists/${one.id}/rename`,
+      jsonPost({ name: "x" }, headers),
+    );
+    expect(first.status).toBe(200);
+    const other = await app.request(
+      `/test/lists/${two.id}/rename`,
+      jsonPost({ name: "x" }, headers),
+    );
+    expect(other.status).toBe(422);
+    expect(((await other.json()) as { error: Json }).error.code).toBe("idempotency_key_reused");
+    const unchanged = await app.request(`/test/lists/${two.id}`, { headers: bearer(key) });
+    expect(await unchanged.json()).toEqual({ id: two.id, name: "two" });
+  });
+
+  it("still replays a stored row from before path-bound hashes", async () => {
+    const workspaceId = await createWorkspace();
+    const { key, id } = await createApiKey(workspaceId, ["lists:write"]);
+    const body = JSON.stringify({ name: "vip" });
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
+    const hash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    await testDb()
+      .db.insertInto("idempotency_keys")
+      .values({
+        workspace_id: workspaceId,
+        principal_id: `api_key:${id}`,
+        method: "POST",
+        route: "/test/lists",
+        key: "abc-legacy",
+        request_hash: hash,
+        response_status: 201,
+        response_body: JSON.stringify({ id: 7, name: "vip" }),
+        expires_at: Date.now() + 60_000,
+      })
+      .execute();
+    const res = await createTestApp().request("/test/lists", {
+      method: "POST",
+      headers: {
+        ...bearer(key),
+        "content-type": "application/json",
+        "idempotency-key": "abc-legacy",
+      },
+      body,
+    });
+    expect(res.status).toBe(201);
+    expect(res.headers.get("idempotent-replayed")).toBe("true");
+    expect(await countRows("lists", workspaceId)).toBe(0);
   });
 
   it("does not store a failed response, so a corrected retry runs", async () => {

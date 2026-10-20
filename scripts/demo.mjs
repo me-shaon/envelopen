@@ -4,8 +4,9 @@
 //
 // - Builds the admin app, then starts `wrangler dev` with its own state in .wrangler/demo,
 //   so it never touches the `pnpm dev` data in .wrangler/state.
-// - Makes its own random secrets and keeps them in .wrangler/demo/secrets.json, so a
-//   restart keeps sessions, tracking links, and unsubscribe links valid.
+// - Makes its own random secrets and keeps them in .wrangler/demo/secrets.json (mode 600),
+//   so a restart keeps sessions, tracking links, and unsubscribe links valid. wrangler
+//   reads them from .wrangler/demo/demo.vars (mode 600), not from its command line.
 // - Sends every provider and DNS request to the local provider mock
 //   (apps/web/e2e/provider-mock.mjs). No email leaves this computer, and nothing reaches
 //   Cloudflare.
@@ -31,11 +32,14 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { loadSecrets, writeVarsFile } from "./demo/secrets.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DEMO_DIR = join(ROOT, ".wrangler", "demo");
 const STATE_DIR = join(DEMO_DIR, "state");
 const SECRETS_FILE = join(DEMO_DIR, "secrets.json");
+/** The secrets for `wrangler dev --env-file`, written before each start. */
+const VARS_FILE = join(DEMO_DIR, "demo.vars");
 const SEED_FILE = join(DEMO_DIR, "seed.json");
 const PENDING_FILE = join(DEMO_DIR, "pending-events.json");
 const LOG_FILE = join(DEMO_DIR, "wrangler.log");
@@ -104,14 +108,11 @@ if (reset && existsSync(DEMO_DIR)) {
 }
 mkdirSync(DEMO_DIR, { recursive: true });
 
-if (!existsSync(SECRETS_FILE)) {
-  writeJson(SECRETS_FILE, {
-    SETUP_TOKEN: randomBytes(32).toString("hex"),
-    SIGNING_KEY: randomBytes(32).toString("base64"),
-    ENCRYPTION_KEY: randomBytes(32).toString("base64"),
-  });
-}
-const secrets = readJson(SECRETS_FILE);
+const secrets = loadSecrets(SECRETS_FILE, () => ({
+  SETUP_TOKEN: randomBytes(32).toString("hex"),
+  SIGNING_KEY: randomBytes(32).toString("base64"),
+  ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+}));
 const seeded = existsSync(SEED_FILE);
 
 // ---------------------------------------------------------------------------------------
@@ -820,6 +821,11 @@ async function main() {
   );
   await waitFor(`${MOCK_ORIGIN}/health`, 15_000, "The provider mock");
 
+  writeVarsFile(VARS_FILE, {
+    SETUP_TOKEN: secrets.SETUP_TOKEN,
+    SIGNING_KEY: secrets.SIGNING_KEY,
+    ENCRYPTION_KEY: secrets.ENCRYPTION_KEY,
+  });
   step(`Starting wrangler dev on port ${port} (log: ${LOG_FILE})`);
   const log = createWriteStream(LOG_FILE, { flags: "a" });
   const dev = track(
@@ -835,10 +841,11 @@ async function main() {
         "--persist-to",
         STATE_DIR,
         "--show-interactive-dev-session=false",
+        // The secrets come from a private file, not argv, so no process list shows them.
+        // With --env-file, wrangler does not read the project's .dev.vars.
+        "--env-file",
+        VARS_FILE,
         "--var",
-        `SETUP_TOKEN:${secrets.SETUP_TOKEN}`,
-        `SIGNING_KEY:${secrets.SIGNING_KEY}`,
-        `ENCRYPTION_KEY:${secrets.ENCRYPTION_KEY}`,
         "PBKDF2_ITERATIONS:100000",
         // Tracking events reach D1 a second after they arrive, not 30 seconds.
         "EVENT_FLUSH_DELAY_MS:1000",

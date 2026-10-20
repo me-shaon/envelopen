@@ -19,6 +19,7 @@ export {
   ConnectionSchema,
   decryptCredentials,
   refsOf,
+  resealLegacyConnections,
 } from "./connections/model";
 export { ConnectionDetailSchema, validateCredentials } from "./connections/operations";
 export {
@@ -44,6 +45,7 @@ export {
   type CredentialKey,
   CredentialKeyError,
   createCredentialCipher,
+  isConnectionBound,
 } from "./crypto/credentials";
 export { createDohClient, DOH_ENDPOINT } from "./domains/dns-check";
 export { SendingDomainSchema } from "./domains/operations";

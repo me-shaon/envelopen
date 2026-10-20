@@ -13,6 +13,7 @@ import {
   testEnv,
 } from "../../test/auth-helpers";
 import { hashPassword, parseHash } from "../auth/pbkdf2-hasher";
+import { attemptKeys, LOGIN_EMAIL_CEILING } from "../auth/rate-limit-do";
 import { setupTokenMatches } from "./first-run";
 
 type Json = Record<string, unknown>;
@@ -335,11 +336,12 @@ describe("password reset with the setup token", () => {
   it("clears the email's failed-login count", async () => {
     await createOwner();
     for (let i = 0; i < 5; i++) await signIn(`wrong-password-${i}`);
-    expect((await signIn(OWNER.password)).status).toBe(429);
+    expect((await signIn("wrong-password-5")).status).toBe(429);
     await call("/api/setup/recover", {
       ip: freshIp(),
       body: { token: SETUP_TOKEN, password: "the-new-long-password" },
     });
+    expect((await signIn("wrong-password-6")).status).toBe(401);
     expect((await signIn("the-new-long-password")).status).toBe(200);
   });
 });
@@ -390,9 +392,35 @@ describe("login", () => {
     expect((await signIn(OWNER.password)).status).toBe(200);
   });
 
-  it("rejects the sixth failed login for one email from many IPs", async () => {
+  it("rejects the sixth failed login for one email from many IPs, but not the right password", async () => {
     await createOwner();
     for (let i = 0; i < 5; i++) expect((await signIn(`wrong-${i}`)).status).toBe(401);
+    const sixth = await signIn("wrong-5");
+    expect(sixth.status).toBe(429);
+    expect(Number(sixth.headers.get("retry-after"))).toBeGreaterThan(0);
+    // Failures from other IPs do not lock the owner out.
+    expect((await signIn(OWNER.password)).status).toBe(200);
+    // The success cleared the email's count.
+    expect((await signIn("wrong-6")).status).toBe(401);
+  });
+
+  it("answers an unknown email like the owner's email after five failures", async () => {
+    await createOwner();
+    const attempt = (password: string) =>
+      call("/api/auth/sign-in/email", {
+        ip: freshIp(),
+        body: { email: "nobody@example.com", password },
+      });
+    for (let i = 0; i < 5; i++) expect((await attempt(`wrong-${i}`)).status).toBe(401);
+    expect((await attempt("wrong-5")).status).toBe(429);
+  });
+
+  it("rejects every login for an email past the ceiling of failures from all IPs", async () => {
+    await createOwner();
+    const ceiling = env.AUTH_RATE_LIMITER.getByName(
+      await attemptKeys.email("login-ceiling", OWNER.email),
+    );
+    for (let i = 0; i < LOGIN_EMAIL_CEILING.limit; i++) await ceiling.record(LOGIN_EMAIL_CEILING);
     expect((await signIn(OWNER.password)).status).toBe(429);
   });
 

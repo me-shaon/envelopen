@@ -7,10 +7,16 @@ import {
   type TestServices,
   testServices,
 } from "../../test/fixtures";
-import { contactsGet, contactsList, contactsUpdate, contactsUpsert } from "../contacts/operations";
+import {
+  contactsDelete,
+  contactsGet,
+  contactsList,
+  contactsUpdate,
+  contactsUpsert,
+} from "../contacts/operations";
 import { runOperation } from "../executor";
 import { listsCreate } from "../lists/operations";
-import { apiKeyPrincipal, type Principal, sessionPrincipal } from "../principal";
+import { apiKeyPrincipal, type Principal, principalKey, sessionPrincipal } from "../principal";
 import type { ImportJob } from "../services";
 import { suppressionsAdd } from "../suppression/operations";
 import { csvLine } from "./csv";
@@ -411,6 +417,122 @@ describe("CSV import", () => {
       id: byEmail.get("u@example.com")?.id,
     });
     expect(raised.consentBasis).toBe("existing_customer");
+  });
+
+  it("keeps an API key from configuring or starting another principal's import with a stronger basis", async () => {
+    const { conn, principal, workspaceId } = await owner();
+    await run(conn, principal, contactsUpsert, { email: "u@example.com", consentBasis: "unknown" });
+    const key = apiKeyPrincipal({
+      workspaceId,
+      apiKeyId: 9,
+      scopes: ["contacts:read", "contacts:write"],
+      surface: "rest",
+    });
+    const upload = await run<ImportView>(conn, principal, importsCreate, {
+      filename: "owner.csv",
+      content: "email\nu@example.com\n",
+    });
+    // The key cannot attach a basis to the owner's upload.
+    await expect(
+      run(conn, key, importsPreview, {
+        id: upload.id,
+        mapping: ["email"],
+        consentBasis: "explicit_opt_in",
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    // The owner configures it. The key cannot start it.
+    await run(conn, principal, importsPreview, {
+      id: upload.id,
+      mapping: ["email"],
+      consentBasis: "explicit_opt_in",
+    });
+    await runImportJob(deps(conn), services.jobs.at(-1) as ImportJob);
+    await expect(run(conn, key, importsStart, { id: upload.id })).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    const row = await importRow(conn, workspaceId, upload.id);
+    expect(row).toMatchObject({ status: "previewed", configured_by: principalKey(principal) });
+
+    // A basis of unknown changes nothing, so the key may configure and start that.
+    await run(conn, key, importsPreview, {
+      id: upload.id,
+      mapping: ["email"],
+      consentBasis: "unknown",
+    });
+    await runImportJob(deps(conn), services.jobs.at(-1) as ImportJob);
+    await run(conn, key, importsStart, { id: upload.id });
+    await runImportJob(deps(conn), services.jobs.at(-1) as ImportJob);
+    expect(await importRow(conn, workspaceId, upload.id)).toMatchObject({
+      status: "completed",
+      configured_by: "api_key:9",
+      started_by: "api_key:9",
+    });
+  });
+
+  it("decides the upgrade and the consent actor from who configured the import, not the uploader", async () => {
+    const { conn, principal, workspaceId } = await owner();
+    await run(conn, principal, contactsUpsert, { email: "u@example.com", consentBasis: "unknown" });
+    const upload = await run<ImportView>(conn, principal, importsCreate, {
+      filename: "owner.csv",
+      content: "email\nu@example.com\nnew@example.com\n",
+    });
+    await run(conn, principal, importsPreview, {
+      id: upload.id,
+      mapping: ["email"],
+      consentBasis: "explicit_opt_in",
+    });
+    await runImportJob(deps(conn), services.jobs.at(-1) as ImportJob);
+    // A configuration stored by an API key before the checks existed: the run follows it.
+    await conn.db
+      .updateTable("imports")
+      .set({ configured_by: "api_key:9" })
+      .where("workspace_id", "=", workspaceId)
+      .where("id", "=", upload.id)
+      .execute();
+    await run(conn, principal, importsStart, { id: upload.id });
+    await runImportJob(deps(conn), services.jobs.at(-1) as ImportJob);
+    const list = await run<{ items: { email: string; consentBasis: string; id: number }[] }>(
+      conn,
+      principal,
+      contactsList,
+      {},
+    );
+    const byEmail = new Map(list.items.map((item) => [item.email, item]));
+    expect(byEmail.get("u@example.com")?.consentBasis).toBe("unknown");
+    const events = await conn.db
+      .selectFrom("consent_events")
+      .select(["actor_type", "actor_id"])
+      .where("workspace_id", "=", workspaceId)
+      .where("contact_id", "=", byEmail.get("new@example.com")?.id ?? 0)
+      .execute();
+    expect(events).toEqual([{ actor_type: "api_key", actor_id: "9" }]);
+  });
+
+  it("brings an address deleted with a basis of unknown back as unknown in an API key import", async () => {
+    const { conn, principal, workspaceId } = await owner();
+    const key = apiKeyPrincipal({
+      workspaceId,
+      apiKeyId: 9,
+      scopes: ["contacts:read", "contacts:write", "contacts:delete"],
+      surface: "rest",
+    });
+    const { contact } = await run<{ contact: { id: number } }>(conn, principal, contactsUpsert, {
+      email: "cold@example.com",
+    });
+    await run(conn, key, contactsDelete, { id: contact.id });
+    await importCsv(conn, key, "email\ncold@example.com\nwarm@example.com\n", {
+      mapping: ["email"],
+      consentBasis: "explicit_opt_in",
+    });
+    const list = await run<{ items: { email: string; consentBasis: string }[] }>(
+      conn,
+      principal,
+      contactsList,
+      {},
+    );
+    const byEmail = new Map(list.items.map((item) => [item.email, item.consentBasis]));
+    expect(byEmail.get("cold@example.com")).toBe("unknown");
+    expect(byEmail.get("warm@example.com")).toBe("explicit_opt_in");
   });
 
   it("pauses the run when D1 reports the daily limit", async () => {

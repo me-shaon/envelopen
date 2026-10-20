@@ -16,6 +16,7 @@ import { PBKDF2_MAX_ITERATIONS, timingSafeEqualBytes } from "../auth/pbkdf2-hash
 import { type AttemptLimiter, attemptKeys, clientIp, SETUP_RULE } from "../auth/rate-limit-do";
 import { defaultLimiter, tooManyAttempts } from "../auth/routes";
 import { AUTH_TABLES } from "../auth/schema-options";
+import { readBodyLimited } from "../body";
 
 // First-run screen and setup-token recovery (KTD6, R2, R3, R74). Mounted at /api/setup.
 //
@@ -224,6 +225,9 @@ function notFound(c: Context<SetupAppEnv>) {
   );
 }
 
+/** The setup forms send a few short fields. */
+const MAX_SETUP_BODY_BYTES = 16 * 1024;
+
 function fail(
   c: Context<SetupAppEnv>,
   status: ContentfulStatusCode,
@@ -272,9 +276,12 @@ export function createSetupRoutes(options: SetupRoutesOptions = {}): Hono<SetupA
     const ownerId = await readOwnerId(conn);
     if ((ownerId !== null) !== needsOwner) return { response: notFound(c) };
 
+    // Counted while reading, so a chunked body without Content-Length is capped too.
+    const bytes = await readBodyLimited(c.req.raw, MAX_SETUP_BODY_BYTES);
+    if (!bytes) return { response: fail(c, 413, "too_large", "The request body is too large.") };
     let body: Record<string, unknown>;
     try {
-      const parsed: unknown = await c.req.json();
+      const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
       if (typeof parsed !== "object" || parsed === null) throw new Error("Not an object.");
       body = parsed as Record<string, unknown>;
     } catch {
@@ -455,9 +462,18 @@ export function createSetupRoutes(options: SetupRoutesOptions = {}): Hono<SetupA
         password: hash,
       });
     }
-    // A reset ends every session, and the owner's email may log in again at once.
+    // A reset ends every session and removes every passkey, as a passkey recovery does:
+    // a passkey added from a stolen session must not outlive the recovery. The owner's
+    // email may log in again at once.
+    await context.adapter.deleteMany({
+      model: "passkey",
+      where: [{ field: "userId", value: ownerId }],
+    });
     await context.internalAdapter.deleteUserSessions(ownerId);
-    await limiterFor(c.env).reset(await attemptKeys.email("login", owner.email));
+    const limiter = limiterFor(c.env);
+    for (const action of ["login", "login-ceiling"]) {
+      await limiter.reset(await attemptKeys.email(action, owner.email));
+    }
     await audit("setup.password_reset");
     return c.json({ loginMode: settings.loginMode, passkeyEnrollment: null });
   });

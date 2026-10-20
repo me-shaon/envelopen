@@ -18,6 +18,7 @@ import { noSessionResolver, principalMiddleware, type SessionResolver } from "./
 import type { ApiEnv } from "./context";
 import { ErrorSchema, errorJson, SERVICE_ERROR_STATUS } from "./errors";
 import { IDEMPOTENCY_HEADER, idempotency } from "./idempotency";
+import { noStore } from "./no-store";
 import { type AppOriginResolver, originCheck, requestOrigin } from "./origin-check";
 import {
   apiKeyRateLimit,
@@ -107,7 +108,7 @@ export function routeFor(operation: Operation): RouteConfig {
       ...(idempotent
         ? {
             409: errorResponse("A request with the same Idempotency-Key is still running."),
-            422: errorResponse("The Idempotency-Key was used with a different body."),
+            422: errorResponse("The Idempotency-Key was used with a different path or body."),
           }
         : {}),
       429: errorResponse("Rate limit reached."),
@@ -184,6 +185,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): OpenAPIHono<Api
   // Public: registered before the auth middleware, so Hono answers it first.
   api.doc31("/openapi.json", OPENAPI_CONFIG);
 
+  api.use("*", noStore);
   api.use("*", async (c, next) => {
     c.set("db", connect(c.env));
     c.set("services", services(c.env, c.req.raw));

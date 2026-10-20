@@ -76,8 +76,19 @@ export class AuthRateLimiter extends DurableObject<Env> {
 
 // Callers -------------------------------------------------------------------------------
 
-/** KTD8: the sixth failed login from one IP or for one email in 15 minutes is rejected. */
+/**
+ * KTD8: after five failed logins from one IP in 15 minutes, every login from it is
+ * rejected. After five failed logins for one email, a further failure for it is
+ * rejected, but the right password still signs in, so failures from other IPs cannot
+ * lock the owner out.
+ */
 export const LOGIN_RULE: AttemptRule = { limit: 5, windowMs: 15 * 60 * 1000 };
+/**
+ * A high ceiling of failed logins per email from all IPs. It slows a guess from many
+ * IPs. Only that kind of attack reaches it: one IP stops at five failures. While it is
+ * reached, every login for the email is rejected before the password check.
+ */
+export const LOGIN_EMAIL_CEILING: AttemptRule = { limit: 100, windowMs: 60 * 60 * 1000 };
 /** Wrong setup tokens (first-run screen and recovery) from one IP. */
 export const SETUP_RULE: AttemptRule = { limit: 5, windowMs: 15 * 60 * 1000 };
 

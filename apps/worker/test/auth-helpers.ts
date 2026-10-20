@@ -93,11 +93,13 @@ export function cookiesFrom(response: Response): string {
 
 /**
  * Removes the owner and every auth row, so each test starts at the first-run screen.
- * Also clears the owner email's login counter. IP counters need no reset: every test
+ * Also clears the owner email's login counters. IP counters need no reset: every test
  * uses fresh IPs.
  */
 export async function resetAuthState(): Promise<void> {
-  await env.AUTH_RATE_LIMITER.getByName(await attemptKeys.email("login", OWNER.email)).reset();
+  for (const action of ["login", "login-ceiling"]) {
+    await env.AUTH_RATE_LIMITER.getByName(await attemptKeys.email(action, OWNER.email)).reset();
+  }
   await env.DB.batch([
     env.DB.prepare("DELETE FROM system_settings WHERE key = 'owner_user_id'"),
     env.DB.prepare("DELETE FROM auth_verification"),

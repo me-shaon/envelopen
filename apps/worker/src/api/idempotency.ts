@@ -6,7 +6,13 @@ import { errorJson } from "./errors";
 
 // Idempotency keys for POST requests (R58). The first response is stored per
 // workspace, principal, method, route, and key for 24 hours. A retry with the same
-// key and the same body gets the stored response, and the operation does not run again.
+// key, the same concrete path, and the same body gets the stored response, and the
+// operation does not run again. The route is a path template such as `/contacts/{id}`,
+// so the request hash covers the concrete path: the same key on `/contacts/2` is a
+// different request and gets 422.
+//
+// REST hashes carry the prefix `v2:`. A row from before that format holds a hash of the
+// body only, and such a row is compared with a hash of the body only until it expires.
 //
 // A reservation without a response holds the key only for a short lease. If the Worker
 // stops before it stores the response or releases the key, the key frees itself when the
@@ -52,7 +58,9 @@ export type IdempotencyClaim =
   | { kind: "reused"; message: string }
   | { kind: "in_progress"; message: string };
 
-const REUSED_MESSAGE = "This Idempotency-Key was used with a different request body.";
+const REUSED_MESSAGE = "This Idempotency-Key was used with a different request path or body.";
+/** The prefix of a REST request hash that covers the method, the path, and the body. */
+const HASH_V2 = "v2:";
 const IN_PROGRESS_MESSAGE = "A request with this Idempotency-Key is still running.";
 
 export function isIdempotencyKey(key: string): boolean {
@@ -61,6 +69,21 @@ export function isIdempotencyKey(key: string): boolean {
 
 export async function hashIdempotentRequest(body: string): Promise<string> {
   return sha256Hex(body);
+}
+
+/**
+ * The hashes of a REST request: `current` covers the method, the concrete path, and the
+ * body. `legacy` is the body-only hash that rows from before `v2:` store.
+ */
+export async function hashRestRequest(
+  method: string,
+  path: string,
+  body: string,
+): Promise<{ current: string; legacy: string }> {
+  return {
+    current: `${HASH_V2}${await sha256Hex(`${method.toUpperCase()} ${path}\n${body}`)}`,
+    legacy: await sha256Hex(body),
+  };
 }
 
 /**
@@ -73,6 +96,8 @@ export async function claimIdempotencyKey(
   identity: IdempotencyIdentity,
   requestHash: string,
   now = Date.now(),
+  /** The body-only hash, compared with stored rows from before the `v2:` hashes. */
+  legacyHash?: string,
 ): Promise<IdempotencyClaim> {
   const { db } = conn;
   const { workspaceId } = identity;
@@ -114,7 +139,11 @@ export async function claimIdempotencyKey(
         .execute();
       reserved = await reserve();
     } else if (existing) {
-      if (existing.request_hash !== requestHash) return { kind: "reused", message: REUSED_MESSAGE };
+      const expected =
+        legacyHash !== undefined && !existing.request_hash.startsWith(HASH_V2)
+          ? legacyHash
+          : requestHash;
+      if (existing.request_hash !== expected) return { kind: "reused", message: REUSED_MESSAGE };
       if (existing.response_status === null) {
         return { kind: "in_progress", message: IN_PROGRESS_MESSAGE };
       }
@@ -172,7 +201,7 @@ export async function claimIdempotencyKey(
  * `/contacts/{id}` shares nothing with other routes. Run it after the principal middleware.
  *
  * - A stored 2xx response is replayed with the `Idempotent-Replayed: true` header.
- * - The same key with a different body gets 422.
+ * - The same key with a different concrete path or body gets 422.
  * - The same key while the first request still runs gets 409.
  * - A response that is not 2xx is not stored, so the client can fix the problem and retry.
  * - If the response cannot be stored, the client still gets it, and the key is released.
@@ -190,6 +219,7 @@ export function idempotency(route: string): MiddlewareHandler<ApiEnv> {
       );
     }
 
+    const hashes = await hashRestRequest(c.req.method, c.req.path, await c.req.text());
     const claim = await claimIdempotencyKey(
       c.var.db,
       {
@@ -199,7 +229,9 @@ export function idempotency(route: string): MiddlewareHandler<ApiEnv> {
         route,
         key,
       },
-      await sha256Hex(await c.req.text()),
+      hashes.current,
+      Date.now(),
+      hashes.legacy,
     );
     if (claim.kind === "reused") {
       return errorJson(c, 422, "idempotency_key_reused", claim.message);

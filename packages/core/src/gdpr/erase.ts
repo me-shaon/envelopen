@@ -19,6 +19,7 @@ import { sql } from "kysely";
 // - `audit_log` metadata about the contact, or with the address in it.
 // - `idempotency_keys` with a stored response that holds the address.
 // - `test_addresses` with the same address.
+// - `consent_tombstones` with the address hash. The suppression is enough.
 //
 // Files in R2 (import uploads, error files, and contact exports) can hold the address
 // too. They expire after FILE_TTL_MS, and cleanup deletes them.
@@ -142,6 +143,12 @@ WHERE campaign_batches.workspace_id = ${workspaceId} AND campaign_batches.id = r
       .deleteFrom("idempotency_keys")
       .where("workspace_id", "=", workspaceId)
       .where(sql<boolean>`response_body LIKE ${pattern} ESCAPE '\\'`),
+    // The suppression above blocks every send, so the consent tombstone (a second
+    // hash of the address) is not needed and goes.
+    db.db
+      .deleteFrom("consent_tombstones")
+      .where("workspace_id", "=", workspaceId)
+      .where("email_hash", "=", target.emailHash),
     db.db
       .deleteFrom("test_addresses")
       .where("workspace_id", "=", workspaceId)

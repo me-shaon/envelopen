@@ -107,6 +107,31 @@ describe("one-click unsubscribe (RFC 8058)", () => {
     }
   });
 
+  it("refuses a chunked form above 16 KB without reading it all", async () => {
+    const { sent, app } = await setup();
+    const token = sent.tokens[0] as string;
+    const encoder = new TextEncoder();
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("List-Unsubscribe=One-Click&pad="));
+      },
+      pull(controller) {
+        if (pulled >= 1024 * 1024) return controller.close();
+        pulled += 4096;
+        controller.enqueue(encoder.encode("x".repeat(4096)));
+      },
+    });
+    const response = await call(app, `/u/${token}`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    expect(response.status).toBe(400);
+    expect(pulled).toBeLessThan(64 * 1024);
+    expect((await contact(sent)).status).toBe("subscribed");
+  });
+
   it("works for the URL in the List-Unsubscribe header of the sent email", async () => {
     const { sent, app } = await setup();
     const header = sent.emails[0]?.headers["List-Unsubscribe"] ?? "";

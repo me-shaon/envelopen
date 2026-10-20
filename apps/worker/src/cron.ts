@@ -6,6 +6,7 @@ import {
   type RetentionResult,
   redispatchWaiting,
   rescueSnapshots,
+  resealLegacyConnections,
   resumeAfterPlatformLimit,
   type SweepDeps,
   startDueCampaigns,
@@ -15,7 +16,7 @@ import { createDb, type DbConnection, isD1DailyLimitError, nextUtcMidnight } fro
 import { purgeExpiredIdempotencyKeys } from "./api/idempotency";
 import { type EventSink, eventSink } from "./do/events";
 import { usageMeter, usageSink } from "./do/usage";
-import { campaignStarter, sendQueue } from "./services";
+import { campaignStarter, createServices, sendQueue } from "./services";
 
 // The per-minute cron (U9, KTD19, KTD24). In order:
 //
@@ -26,7 +27,8 @@ import { campaignStarter, sendQueue } from "./services";
 // 3. The recovery sweep: restart snapshots that did not finish, expire leases (an
 //    uncertain batch, or a retry on an idempotent provider), dispatch waiting and
 //    dead-lettered batches again, and finish idle campaigns.
-// 4. The existing cleanup: idempotency keys and expired files.
+// 4. The existing cleanup: idempotency keys and expired files. Then provider secrets
+//    from before the connection-bound format are encrypted again (a few per run).
 // 5. The event pipeline (U10): provider events that no flush applied go to their
 //    EventBuffer again, and once an hour raw events past the workspace's retention
 //    period are deleted (R51). Rollups stay.
@@ -182,6 +184,10 @@ export async function runCron(
     await purgeExpiredIdempotencyKeys(db);
     // Uploads, error files, and exports that hold contact data expire after 24 hours.
     await cleanupExpiredFiles(db, env.BUCKET);
+    // Provider secrets from before v2 ciphertexts get bound to their connection id.
+    await resealLegacyConnections(db, createServices(env)).catch((error) =>
+      console.error("Cron job reseal connections failed", error),
+    );
     if (!report.limited) await runEventCron(db, eventSink(env), now);
     return report;
   } finally {

@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
-import { createPasskeyPlugin, type LoginMode, loginModeFor } from "./passkeys";
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { createPasskeyPlugin, type LoginMode, loginModeFor, requireFreshSession } from "./passkeys";
 import { createPasswordHasher, needsRehash, resolveIterations } from "./pbkdf2-hasher";
 import { authSchemaOptions } from "./schema-options";
 
@@ -114,6 +114,15 @@ export async function createAuth({ env, origin, d1 }: CreateAuthOptions) {
       database: { validateSchema: false },
     },
     hooks: {
+      // A signed-in owner adds a passkey only from a fresh session (passkeys.ts). Check
+      // it before the browser prompt too, so the owner does not touch the authenticator
+      // for nothing. A request with an enrollment token is checked by resolveUser.
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/passkey/generate-register-options") return;
+        if ((ctx.query as { context?: unknown } | undefined)?.context) return;
+        if (!(await getSessionFromCtx(ctx))) return;
+        await requireFreshSession(ctx);
+      }),
       // Rehash a password that uses old parameters, at the login that proves it (KTD7).
       after: createAuthMiddleware(async (ctx) => {
         if (ctx.path !== "/sign-in/email") return;

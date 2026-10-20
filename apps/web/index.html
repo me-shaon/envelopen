@@ -12,21 +12,7 @@
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F8F7F4" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1A1917" />
-    <script>
-      // Applies the stored theme, or the system theme, before the first paint.
-      (() => {
-        var theme = null;
-        try {
-          theme = localStorage.getItem("envelopen.theme");
-        } catch (_error) {
-          // No storage: follow the system.
-        }
-        if (theme !== "light" && theme !== "dark") {
-          theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        }
-        if (theme === "dark") document.documentElement.classList.add("dark");
-      })();
-    </script>
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>

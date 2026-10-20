@@ -1,4 +1,4 @@
-import type { DbConnection, Row } from "@envelopen/db";
+import { type DbConnection, type Row, unscoped } from "@envelopen/db";
 import {
   type AdapterContext,
   type Credentials,
@@ -127,12 +127,15 @@ export async function encryptCredentials(
   services: Partial<Services>,
   workspaceId: number,
   credentials: Credentials,
+  /** Binds the value to its connection. Leave it out only before the row exists. */
+  connectionId?: number,
 ): Promise<{ ciphertext: string; version: number }> {
   const cipher = requireService(services, "credentials");
   return {
     ciphertext: await cipher.encrypt(JSON.stringify(credentials), {
       workspaceId,
       purpose: CREDENTIALS,
+      connectionId,
     }),
     version: cipher.version,
   };
@@ -140,12 +143,16 @@ export async function encryptCredentials(
 
 export async function decryptCredentials(
   services: Partial<Services>,
-  row: Pick<ConnectionRow, "workspace_id" | "credentials_encrypted" | "credentials_key_version">,
+  row: Pick<
+    ConnectionRow,
+    "id" | "workspace_id" | "credentials_encrypted" | "credentials_key_version"
+  >,
 ): Promise<Credentials> {
   const cipher = requireService(services, "credentials");
   const text = await cipher.decrypt(row.credentials_encrypted, row.credentials_key_version, {
     workspaceId: row.workspace_id,
     purpose: CREDENTIALS,
+    connectionId: row.id,
   });
   return JSON.parse(text) as Credentials;
 }
@@ -158,23 +165,95 @@ export async function encryptWebhookSecret(
   services: Partial<Services>,
   workspaceId: number,
   secret: string,
+  connectionId: number,
 ): Promise<string> {
   return requireService(services, "credentials").encrypt(secret, {
     workspaceId,
     purpose: WEBHOOK_SECRET,
+    connectionId,
   });
 }
 
 export async function decryptWebhookSecret(
   services: Partial<Services>,
-  row: Pick<ConnectionRow, "workspace_id" | "webhook_secret_encrypted" | "credentials_key_version">,
+  row: Pick<
+    ConnectionRow,
+    "id" | "workspace_id" | "webhook_secret_encrypted" | "credentials_key_version"
+  >,
 ): Promise<string | null> {
   if (!row.webhook_secret_encrypted) return null;
   return requireService(services, "credentials").decrypt(
     row.webhook_secret_encrypted,
     row.credentials_key_version,
-    { workspaceId: row.workspace_id, purpose: WEBHOOK_SECRET },
+    { workspaceId: row.workspace_id, purpose: WEBHOOK_SECRET, connectionId: row.id },
   );
+}
+
+/**
+ * Writes connections whose credentials or webhook secret are not bound to the connection
+ * id again, in the `v2.` format with the current key version (crypto/credentials.ts).
+ * The cron runs it in every workspace, a few rows at a time. The update only applies
+ * while the row still holds the values that were read, so a concurrent change wins. A
+ * row that does not decrypt stays as it is. Returns the number of rows written.
+ */
+export async function resealLegacyConnections(
+  db: DbConnection,
+  services: Partial<Services>,
+  limit = 20,
+): Promise<number> {
+  if (!services.credentials) return 0;
+  // An installation-wide job, so it reads every workspace (KTD4).
+  const rows = await unscoped(db.db)
+    .selectFrom("provider_connections")
+    .select([
+      "id",
+      "workspace_id",
+      "credentials_encrypted",
+      "credentials_key_version",
+      "webhook_secret_encrypted",
+    ])
+    .where((eb) =>
+      eb.or([
+        eb("credentials_encrypted", "not like", "v2.%"),
+        eb.and([
+          eb("webhook_secret_encrypted", "is not", null),
+          eb("webhook_secret_encrypted", "not like", "v2.%"),
+        ]),
+      ]),
+    )
+    .orderBy("id", "asc")
+    .limit(limit)
+    .execute();
+  let written = 0;
+  for (const row of rows) {
+    let credentials: Credentials;
+    let secret: string | null;
+    try {
+      credentials = await decryptCredentials(services, row);
+      secret = await decryptWebhookSecret(services, row);
+    } catch (error) {
+      console.error(`Connection ${row.id}: the stored credentials do not decrypt`, error);
+      continue;
+    }
+    const sealed = await encryptCredentials(services, row.workspace_id, credentials, row.id);
+    const result = await db.db
+      .updateTable("provider_connections")
+      .set({
+        credentials_encrypted: sealed.ciphertext,
+        credentials_key_version: sealed.version,
+        webhook_secret_encrypted:
+          secret === null
+            ? null
+            : await encryptWebhookSecret(services, row.workspace_id, secret, row.id),
+      })
+      .where("workspace_id", "=", row.workspace_id)
+      .where("id", "=", row.id)
+      .where("credentials_encrypted", "=", row.credentials_encrypted)
+      .where("webhook_secret_encrypted", "is", row.webhook_secret_encrypted)
+      .executeTakeFirst();
+    written += Number(result.numUpdatedRows);
+  }
+  return written;
 }
 
 /** The adapter context of a connection. */

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { PASSKEY_PORT } from "../playwright.config";
+import { watchCsp } from "./csp";
 
 // The admin shell (plan U5). Each describe block runs against its own fresh Worker
 // from playwright.config.ts, and its tests run in order on one owner.
@@ -104,7 +105,21 @@ test.describe("password mode", () => {
     await expect(page.getByLabel("Password")).toBeVisible();
   });
 
+  test("the admin app sends its security headers", async ({ page }) => {
+    for (const path of ["/login", "/campaigns/1", "/theme.js"]) {
+      const response = await page.goto(path);
+      const headers = response?.headers() ?? {};
+      expect(headers["content-security-policy"], path).toContain("default-src 'self'");
+      expect(headers["content-security-policy"], path).toContain("frame-ancestors 'none'");
+      expect(headers["x-content-type-options"], path).toBe("nosniff");
+      expect(headers["referrer-policy"], path).toBe("same-origin");
+    }
+    const health = await page.request.get("/api/health");
+    expect(health.headers()["cache-control"]).toBe("no-store");
+  });
+
   test("the login page has no serious accessibility violations", async ({ page }) => {
+    const checkCsp = watchCsp(page);
     await page.goto("/login");
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
     await expectNoSeriousViolations(page);
@@ -113,9 +128,11 @@ test.describe("password mode", () => {
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
     await expectNoSeriousViolations(page);
     await screenshot(page, "login-dark");
+    checkCsp();
   });
 
   test("first-run setup creates the owner, then the owner signs in", async ({ page }) => {
+    const checkCsp = watchCsp(page);
     await runSetup(page, OWNER);
     await page.getByRole("button", { name: "Create the owner" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -139,6 +156,7 @@ test.describe("password mode", () => {
     await page.getByLabel("Password").fill(OWNER.password);
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page.getByRole("heading", { name: "Finish setting up" })).toBeVisible();
+    checkCsp();
   });
 
   test("the shell has no serious accessibility violations", async ({ page }) => {

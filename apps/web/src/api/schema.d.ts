@@ -273,7 +273,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a contact
-         * @description Deletes the contact, its tags, memberships, field values, and consent history. When the contact had unsubscribed, a suppression (reason `erased`) keeps the address from coming back through an import or an upsert. Unsubscribing keeps the contact, so use `contacts.update` with `unsubscribe` for that.
+         * @description Deletes the contact, its tags, memberships, field values, and consent history. When the contact had unsubscribed, a suppression (reason `erased`) keeps the address from coming back through an import or an upsert. Unsubscribing keeps the contact, so use `contacts.update` with `unsubscribe` for that. When the contact's consent basis was `unknown`, an API key that adds the address again gets the basis `unknown` too.
          */
         delete: operations["contacts.delete"];
         options?: never;
@@ -609,7 +609,7 @@ export interface paths {
         put?: never;
         /**
          * Configure an import and preview it
-         * @description Stores the column mapping, the consent basis (required), the tags, and the lists, and starts a preview run. Poll imports.get until the status is `previewed`. The preview counts new and updated contacts, rows skipped as unsubscribed or suppressed, invalid rows, and duplicates. Calling it again replaces the configuration and the preview.
+         * @description Stores the column mapping, the consent basis (required), the tags, and the lists, and starts a preview run. Poll imports.get until the status is `previewed`. The preview counts new and updated contacts, rows skipped as unsubscribed or suppressed, invalid rows, and duplicates. Calling it again replaces the configuration and the preview. An API key can set a basis other than `unknown` only on an import that it uploaded. Only an import that the owner configured and started raises a basis of `unknown`.
          */
         post: operations["imports.preview"];
         delete?: never;
@@ -629,7 +629,7 @@ export interface paths {
         put?: never;
         /**
          * Start an import
-         * @description Imports the previewed file with its configuration. Poll imports.get for progress. One import runs at a time in a workspace. The uploaded CSV is deleted when the import ends.
+         * @description Imports the previewed file with its configuration. Poll imports.get for progress. One import runs at a time in a workspace. The uploaded CSV is deleted when the import ends. An API key can start an import with a basis other than `unknown` only when it configured it.
          */
         post: operations["imports.start"];
         delete?: never;
@@ -2968,7 +2968,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3144,7 +3144,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3492,7 +3492,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3926,7 +3926,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4344,7 +4344,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4445,7 +4445,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4545,7 +4545,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4816,7 +4816,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4998,7 +4998,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5263,7 +5263,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5523,7 +5523,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5866,7 +5866,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6129,7 +6129,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6310,7 +6310,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6404,7 +6404,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6666,7 +6666,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7147,7 +7147,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7241,7 +7241,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7345,7 +7345,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7521,7 +7521,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7695,7 +7695,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8026,7 +8026,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8198,7 +8198,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8384,7 +8384,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8572,7 +8572,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8989,7 +8989,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9244,7 +9244,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9601,7 +9601,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10182,7 +10182,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10282,7 +10282,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10376,7 +10376,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10470,7 +10470,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10564,7 +10564,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10658,7 +10658,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10841,7 +10841,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10936,7 +10936,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -11189,7 +11189,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The Idempotency-Key was used with a different body. */
+            /** @description The Idempotency-Key was used with a different path or body. */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -308,7 +308,8 @@ describe("one-field connect with auto-webhook (KTD13)", () => {
       mock.calls.find((call) => call.body.includes("Action=Subscribe"))?.body,
     );
     const endpoint = subscribe.get("Endpoint") ?? "";
-    expect(endpoint).toMatch(new RegExp(`/hooks/ses/${setup.workspaceId}/${created.id}\\?token=`));
+    expect(endpoint).toMatch(new RegExp(`/hooks/ses/${setup.workspaceId}/${created.id}/[\\w-]+$`));
+    expect(endpoint).not.toContain("?");
 
     const confirmation = await signer.sign({
       Type: "SubscriptionConfirmation",
@@ -332,9 +333,20 @@ describe("one-field connect with auto-webhook (KTD13)", () => {
     expect(outcome).toMatchObject({ status: 200, confirmedSubscription: true });
     expect(mock.calls.some((call) => call.url === subscribeUrl)).toBe(true);
 
+    // The URL of a connection from before, with the token in the query, still works.
+    const token = endpoint.split("/").at(-1) ?? "";
+    const base = endpoint.slice(0, -token.length - 1);
+    const legacy = await receiveProviderWebhook(deps, target, {
+      url: `${base}?token=${token}`,
+      method: "POST",
+      headers: new Headers({ "x-amz-sns-message-type": "SubscriptionConfirmation" }),
+      body: JSON.stringify(confirmation),
+    });
+    expect(legacy.status).toBe(200);
+
     // The same signed message posted without the URL token is rejected.
     const noToken = await receiveProviderWebhook(deps, target, {
-      url: endpoint.replace(/\?token=.*/, ""),
+      url: base,
       method: "POST",
       headers: new Headers(),
       body: JSON.stringify(confirmation),

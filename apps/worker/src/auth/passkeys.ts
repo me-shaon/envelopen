@@ -1,12 +1,15 @@
 import { passkey } from "@better-auth/passkey";
 import type { AuthContext } from "better-auth";
-import { APIError } from "better-auth/api";
+import { APIError, getSessionFromCtx } from "better-auth/api";
 import { PBKDF2_MAX_ITERATIONS } from "./pbkdf2-hasher";
 import { passkeySchemaOptions } from "./schema-options";
 
 // Passkeys (KTD7). The Better Auth passkey plugin is always installed. Passkey mode is
 // the login method when the PBKDF2 count that fits the CPU budget is below the Workers
 // maximum: a weaker password hash is then not the only defense.
+//
+// A signed-in owner can add a passkey only from a session created in the last 10
+// minutes (requireFreshSession), so the Settings page asks the owner to sign in again.
 //
 // Without a session, a passkey can be registered only with an enrollment token. The
 // first-run screen creates one for the new owner, and setup-token recovery creates one
@@ -26,6 +29,27 @@ export function loginModeFor(iterations: number): LoginMode {
 export type EnrollmentPurpose = "setup" | "recovery";
 
 export const PASSKEY_ENROLLMENT_TTL_MS = 10 * 60 * 1000;
+/**
+ * A signed-in owner can add a passkey only from a session created this recently. A
+ * stolen session cookie then cannot add a passkey that outlives the session.
+ */
+export const PASSKEY_FRESH_SESSION_MS = 10 * 60 * 1000;
+/** The error code that tells the Settings page to ask the owner to sign in again. */
+export const SESSION_NOT_FRESH = "SESSION_NOT_FRESH";
+
+type SessionContext = Parameters<typeof getSessionFromCtx>[0];
+
+/** Throws unless the request has a session created within PASSKEY_FRESH_SESSION_MS. */
+export async function requireFreshSession(ctx: SessionContext, now = Date.now()): Promise<void> {
+  const session = await getSessionFromCtx(ctx);
+  if (!session?.session) throw new APIError("UNAUTHORIZED", { message: "Sign in first." });
+  if (now - new Date(session.session.createdAt).getTime() >= PASSKEY_FRESH_SESSION_MS) {
+    throw new APIError("FORBIDDEN", {
+      code: SESSION_NOT_FRESH,
+      message: "Sign in again to add a passkey.",
+    });
+  }
+}
 const IDENTIFIER_PREFIX = "passkey-enrollment:";
 
 interface EnrollmentValue {
@@ -117,8 +141,12 @@ export function createPasskeyPlugin(origin: string) {
         return { id: user.id, name: user.email, displayName: user.name };
       },
       async afterVerification({ ctx, context, user }) {
-        // A registration from a signed-in session has no context. Nothing to do.
-        if (!context) return;
+        // A registration from a signed-in session has no context. It needs a fresh
+        // session. This check runs before the passkey is stored.
+        if (!context) {
+          await requireFreshSession(ctx);
+          return;
+        }
         const enrollment = await consumePasskeyEnrollment(ctx.context, context);
         if (!enrollment || enrollment.userId !== user.id) {
           throw new APIError("UNAUTHORIZED", {

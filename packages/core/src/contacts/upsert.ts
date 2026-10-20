@@ -42,7 +42,8 @@ export interface UpsertContactResult {
  * - The address is trimmed and lowercased before the lookup.
  * - An unsubscribed contact stays unsubscribed, and a list membership keeps its status.
  * - A suppression is never touched.
- * - An API key cannot raise a basis of `unknown`. The upsert then succeeds with a warning.
+ * - An API key cannot raise a basis of `unknown`, also not for an address that was deleted
+ *   with that basis. The upsert then succeeds with a warning.
  * - A new contact records the source `api_key:<id>` or `ui`, and a first consent event.
  */
 export async function upsertContact(
@@ -82,6 +83,24 @@ export async function upsertContact(
   };
   const writes = [];
   if (!existing) {
+    // A contact deleted with a basis of `unknown` keeps it when an API key adds the
+    // address again (consent_tombstones). The owner may set any basis.
+    let consentBasis = input.consentBasis ?? "unknown";
+    if (consentBasis !== "unknown" && principal.actorType === "api_key") {
+      const tombstone = await db.db
+        .selectFrom("consent_tombstones")
+        .select("consent_basis")
+        .where("workspace_id", "=", workspaceId)
+        .where("email_hash", "=", emailHash)
+        .executeTakeFirst();
+      if (
+        tombstone &&
+        consentDecision(principal, tombstone.consent_basis, consentBasis) === "blocked"
+      ) {
+        consentBasis = tombstone.consent_basis;
+        warnings.push(CONSENT_UPGRADE_BLOCKED);
+      }
+    }
     writes.push(
       ...insertContacts(
         db.db,
@@ -95,7 +114,7 @@ export async function upsertContact(
           },
         ],
         {
-          consentBasis: input.consentBasis ?? "unknown",
+          consentBasis,
           consentSource: source,
           source,
           now,

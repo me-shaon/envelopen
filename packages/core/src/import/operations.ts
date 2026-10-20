@@ -17,7 +17,7 @@ import {
   toImport,
   validateMapping,
 } from "./model";
-import { IMPORT_WINDOW_BYTES } from "./process";
+import { IMPORT_WINDOW_BYTES, importConfigurer } from "./process";
 
 // CSV import (R15, R16, F1). The steps are separate calls, so the UI, a script, and
 // later an agent use the same flow:
@@ -189,7 +189,9 @@ export const importsPreview = defineOperation({
     "Stores the column mapping, the consent basis (required), the tags, and the lists, and " +
     "starts a preview run. Poll imports.get until the status is `previewed`. The preview " +
     "counts new and updated contacts, rows skipped as unsubscribed or suppressed, invalid " +
-    "rows, and duplicates. Calling it again replaces the configuration and the preview.",
+    "rows, and duplicates. Calling it again replaces the configuration and the preview. " +
+    "An API key can set a basis other than `unknown` only on an import that it uploaded. " +
+    "Only an import that the owner configured and started raises a basis of `unknown`.",
   method: "post",
   path: "/imports/{id}/preview",
   scope: "contacts:write",
@@ -214,6 +216,19 @@ export const importsPreview = defineOperation({
     if (!["uploaded", "previewing", "previewed"].includes(row.status) || !row.file_key) {
       throw new OperationError("conflict", `The import is ${row.status}. Upload the file again.`);
     }
+    // The import may raise a basis of `unknown` only when the owner configured it (R73).
+    // An API key also may not attach a basis to someone else's upload.
+    const configurer = principalKey(principal);
+    if (
+      principal.actorType === "api_key" &&
+      input.consentBasis !== "unknown" &&
+      configurer !== row.created_by
+    ) {
+      throw new OperationError(
+        "forbidden",
+        "An API key can set a consent basis other than unknown only on an import that it uploaded.",
+      );
+    }
     const headers = JSON.parse(row.headers) as string[];
     validateMapping(input.mapping, headers);
     const tags = cleanTagNames(input.tags ?? []);
@@ -224,6 +239,7 @@ export const importsPreview = defineOperation({
       .set({
         mapping: JSON.stringify(input.mapping),
         consent_basis: input.consentBasis,
+        configured_by: configurer,
         tag_names: JSON.stringify(tags),
         list_ids: JSON.stringify(listIds),
         preview_generation: generation,
@@ -262,7 +278,8 @@ export const importsStart = defineOperation({
   summary: "Start an import",
   description:
     "Imports the previewed file with its configuration. Poll imports.get for progress. " +
-    "One import runs at a time in a workspace. The uploaded CSV is deleted when the import ends.",
+    "One import runs at a time in a workspace. The uploaded CSV is deleted when the import ends. " +
+    "An API key can start an import with a basis other than `unknown` only when it configured it.",
   method: "post",
   path: "/imports/{id}/start",
   scope: "contacts:write",
@@ -282,6 +299,16 @@ export const importsStart = defineOperation({
           : `The import is ${row.status}. Run a preview first.`,
       );
     }
+    if (
+      principal.actorType === "api_key" &&
+      row.consent_basis !== "unknown" &&
+      principalKey(principal) !== importConfigurer(row)
+    ) {
+      throw new OperationError(
+        "forbidden",
+        "An API key can start an import with a consent basis other than unknown only when it configured the import.",
+      );
+    }
     const running = await db.db
       .selectFrom("imports")
       .select("id")
@@ -297,6 +324,7 @@ export const importsStart = defineOperation({
       .updateTable("imports")
       .set({
         status: "importing",
+        started_by: principalKey(principal),
         tag_ids: JSON.stringify(tags.map((tag) => tag.id)),
         counts: null,
         processed_rows: 0,

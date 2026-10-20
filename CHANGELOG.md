@@ -23,6 +23,22 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 - A contact page of 100, and adding 100 contacts to a list, stay within the D1 limit of 100 bound parameters.
 
+### Security
+
+- An import raises a consent basis of `unknown` only when the owner configured and started it. An API key cannot configure or start another principal's import with a stronger basis.
+- A contact deleted with a consent basis of `unknown` keeps that basis when an API key adds the address again.
+- An `Idempotency-Key` used on another resource of the same route gets 422 instead of the first response.
+- Failed logins from other IPs no longer lock the owner out. The right password always signs in, and a high per-email ceiling slows guessing from many IPs.
+- Adding a passkey from a signed-in session needs a session from the last 10 minutes. A password reset with the setup token removes every passkey.
+- The HTML sanitizer checks every copy of a repeated attribute, drops unterminated `url(` and quoted `data:` CSS, and drops a `<style>` with a `<` in it.
+- Link tracking no longer slows down on HTML with many unclosed `<a ` tags.
+- The admin app sends a Content-Security-Policy, `X-Content-Type-Options`, and `Referrer-Policy`. API responses send `Cache-Control: no-store`.
+- Webhook, unsubscribe, setup, and login routes cap the request body while they read it, also without `Content-Length`.
+- The CI workflow pins every action to a commit SHA and has read-only permissions.
+- Provider credentials and webhook secrets are bound to their connection. The cron encrypts existing values again in the new format.
+- New SES webhook URLs carry the token in the path, not the query string. Existing `?token=` URLs keep working.
+- `pnpm demo` keeps its secrets in files that only the owner can read, and no longer passes them on the command line.
+
 ## [0.1.0] - 2026-10-20
 
 The first release of Envelopen: self-hosted email campaigns on Cloudflare Workers.

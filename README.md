@@ -57,7 +57,7 @@ The `PBKDF2_ITERATIONS` variable in `wrangler.jsonc` sets the password hash cost
 5. Type your name, your email, your password, and the name of the first workspace.
 6. Select **Create the owner**.
 
-The setup screen closes after the owner exists. If the owner loses the password or the passkey, the same token resets it at `/recover`. The screen stays closed when `SETUP_TOKEN` is missing or shorter than 32 characters.
+The setup screen closes after the owner exists. If the owner loses the password or the passkey, the same token resets it at `/recover`. A reset ends every session and removes every passkey. The screen stays closed when `SETUP_TOKEN` is missing or shorter than 32 characters.
 
 ## Send your first campaign
 

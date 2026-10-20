@@ -8,6 +8,7 @@ import {
   createOwner,
   freshIp,
   OWNER,
+  ownerSession,
   resetAuthState,
   SETUP_TOKEN,
   testEnv,
@@ -19,6 +20,7 @@ import {
   createPasskeyPlugin,
   findPasskeyEnrollment,
   loginModeFor,
+  SESSION_NOT_FRESH,
 } from "./passkeys";
 
 // A WebAuthn ceremony needs an authenticator, which Vitest does not have. These tests
@@ -175,6 +177,64 @@ describe("enrollment tokens", () => {
     expect(await consumePasskeyEnrollment(context, token)).not.toBeNull();
     expect(await consumePasskeyEnrollment(context, token)).toBeNull();
     expect(await findPasskeyEnrollment(context, token)).toBeNull();
+  });
+});
+
+describe("passkey registration from a session", () => {
+  it("needs a session created in the last 10 minutes", async () => {
+    const owner = await createOwner();
+    const cookie = await ownerSession();
+    const path = "/api/auth/passkey/generate-register-options";
+    const fresh = await call(path, { headers: { cookie } });
+    expect(fresh.status).toBe(200);
+
+    // The same session, 11 minutes later: a stolen cookie cannot add a passkey.
+    const created = await env.DB.prepare(
+      `SELECT "createdAt" AS at FROM auth_session WHERE "userId" = ?`,
+    )
+      .bind(owner.userId)
+      .first<string | number>("at");
+    const old = Date.now() - 11 * 60 * 1000;
+    await env.DB.prepare(`UPDATE auth_session SET "createdAt" = ? WHERE "userId" = ?`)
+      .bind(typeof created === "number" ? old : new Date(old).toISOString(), owner.userId)
+      .run();
+    const stale = await call(path, { headers: { cookie } });
+    expect(stale.status).toBe(403);
+    expect(await stale.json()).toMatchObject({ code: SESSION_NOT_FRESH });
+    // A made-up enrollment token does not skip the check: the session still wins, and
+    // the stored challenge carries a context that afterVerification rejects.
+    const bogus = await call(`${path}?context=${"0".repeat(64)}`, { headers: { cookie } });
+    expect(bogus.status).toBe(200);
+    const afterVerification =
+      createPasskeyPlugin(APP_ORIGIN).options?.registration?.afterVerification;
+    if (!afterVerification) throw new Error("afterVerification is not set");
+    await expect(
+      afterVerification({
+        ctx: { context: await authContext() },
+        context: "0".repeat(64),
+        user: { id: owner.userId, name: OWNER.email },
+      } as unknown as Parameters<typeof afterVerification>[0]),
+    ).rejects.toThrow();
+  });
+});
+
+describe("setup-token recovery in password mode", () => {
+  it("removes every passkey, so one added from a stolen session does not survive", async () => {
+    const owner = await createOwner();
+    await env.DB.prepare(
+      `INSERT INTO auth_passkey (id, "publicKey", "userId", "credentialID", counter, "deviceType", "backedUp", "createdAt")
+       VALUES ('planted', 'pk', ?, 'cred-planted', 0, 'singleDevice', 0, ?)`,
+    )
+      .bind(owner.userId, new Date().toISOString())
+      .run();
+    const recover = await call("/api/setup/recover", {
+      ip: freshIp(),
+      body: { token: SETUP_TOKEN, password: "the-new-long-password" },
+    });
+    expect(recover.status).toBe(200);
+    expect(
+      await count(`SELECT count(*) AS n FROM auth_passkey WHERE "userId" = ?`, owner.userId),
+    ).toBe(0);
   });
 });
 

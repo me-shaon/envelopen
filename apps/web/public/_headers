@@ -1,0 +1,11 @@
+# Security headers for the admin app (Workers static assets). The Worker sets its own
+# headers on the routes it runs first (/api, /mcp, /t, /u, /hooks).
+#
+# - style-src needs 'unsafe-inline': Radix adds style elements, and the template preview
+#   and the click map are srcdoc iframes. A srcdoc iframe inherits this policy, and
+#   email HTML uses style elements and style attributes.
+# - img-src allows https: and data: for the remote and inline images in those previews.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: same-origin

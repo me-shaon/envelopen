@@ -48,6 +48,37 @@ describe("sanitizeHtml (KTD27)", () => {
     expect(out).toBe('<span>kept</span>text<meta name="color-scheme" content="light dark">');
   });
 
+  it("checks every copy of a repeated attribute and keeps only the first", async () => {
+    for (const html of [
+      '<meta http-equiv="Content-Type" HTTP-EQUIV="refresh" content="0;url=https://evil.io">',
+      '<meta http-equiv="content-type" http-equiv="refresh" content="0;url=https://evil.io">',
+      '<meta HTTP-EQUIV="X-UA-Compatible" Http-Equiv="Refresh" content="0;url=https://evil.io">',
+      '<meta http-equiv="content-type" http-equiv="set-cookie" content="a=b">',
+      "<meta http-equiv=content-type http-equiv=refresh content=0>",
+    ]) {
+      expect(await sanitizeHtml(html), html).toBe("");
+    }
+    expect(
+      await sanitizeHtml('<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'),
+    ).toBe('<meta http-equiv="Content-Type" content="text/html; charset=utf-8">');
+    // A second href or src cannot replace the checked first one.
+    expect(
+      await sanitizeHtml(
+        '<a href="https://x.io" HREF="javascript:alert(1)">a</a><img src="https://x.io/a.png" SRC="javascript:x">',
+      ),
+    ).toBe('<a href="https://x.io">a</a><img src="https://x.io/a.png">');
+    expect(await sanitizeHtml('<a href="javascript:x" href="https://x.io">a</a>')).toBe("<a>a</a>");
+    expect(
+      await sanitizeHtml('<p style="color:red" STYLE="background:url(javascript:x)">p</p>'),
+    ).toBe('<p style="color:red">p</p>');
+  });
+
+  it("drops a style element with a tag start in its text", async () => {
+    expect(await sanitizeHtml("<style>.a{color:red}<a href=x</style><p>p</p>")).toBe(
+      "<style></style><p>p</p>",
+    );
+  });
+
   it("removes comments, including conditional comments", async () => {
     expect(
       await sanitizeHtml("<p>a<!-- x --><!--[if mso]><script>x</script><![endif]-->b</p>"),
@@ -105,5 +136,13 @@ describe("URL and CSS checks", () => {
     expect(unsafeCss("x: java/**/script:")).toBe(true);
     expect(unsafeCss("@\\69mport url(https://x.io/a.css)")).toBe(true);
     expect(unsafeCss("color: #fff; background: url('https://x.io/a.png')")).toBe(false);
+  });
+
+  it("catches an unterminated url( and quoted data: strings", () => {
+    expect(unsafeCss("background: url(https://x.io/a.png")).toBe(true);
+    expect(unsafeCss("background: url(https://x.io/a.png); b: url(")).toBe(true);
+    expect(unsafeCss("background-image: image-set('data:image/png;base64,AAAA' 1x)")).toBe(true);
+    expect(unsafeCss('background-image: image-set("  data:image/svg+xml,x" 1x)')).toBe(true);
+    expect(unsafeCss("background-image: image-set(url('https://x.io/a.png') 1x)")).toBe(false);
   });
 });

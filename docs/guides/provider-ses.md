@@ -194,10 +194,12 @@ Use these steps if the IAM user does not have the `AutoWebhook` permissions. The
 The webhook URL has this shape:
 
 ```
-https://<your Envelopen address>/hooks/ses/<workspace id>/<connection id>?token=<webhook secret>
+https://<your Envelopen address>/hooks/ses/<workspace id>/<connection id>/<webhook secret>
 ```
 
-The token is the webhook secret. Envelopen rejects a request if the token is wrong, if the topic is not the topic of the connection, or if the SNS signature is not valid.
+The last path segment is the webhook secret. Envelopen rejects a request if the secret is wrong, if the topic is not the topic of the connection, or if the SNS signature is not valid.
+
+Connections created with Envelopen 0.1.0 use the shape `.../<connection id>?token=<webhook secret>`. Envelopen still accepts that URL, so existing subscriptions keep working. Request logs, such as Workers Logs, often record the query string. To keep the secret out of the query string, subscribe the new URL from the **Set up the webhook** dialog, then delete the old subscription in SNS.
 
 ## Troubleshooting
 

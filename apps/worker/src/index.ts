@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { createFileRoutes } from "./api/files";
+import { noStore } from "./api/no-store";
 import { createFixedWindowLimiter, DEFAULT_API_KEY_RATE_LIMIT } from "./api/rate-limit";
 import { createApiRouter } from "./api/router";
 import { AUTH_BASE_PATH } from "./auth/better-auth";
@@ -22,6 +23,9 @@ export { CampaignWorkflow } from "./workflows/campaign-workflow";
 export { ImportWorkflow } from "./workflows/import-workflow";
 
 const app = new Hono<{ Bindings: Env }>();
+
+// No cache may keep an API response. A route that sets its own policy keeps it.
+app.use("/api/*", noStore);
 
 app.get("/api/health", (c) => c.json({ status: "ok", version: ENVELOPEN_VERSION }));
 

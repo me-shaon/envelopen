@@ -23,8 +23,11 @@ import { decodeEntities } from "./merge-tags";
 //   `jav&#x61;script:` and `java\tscript:` are caught. A merge tag may not start a
 //   URL, except the unsubscribe and preference placeholders, so contact data cannot set
 //   a link's scheme.
-// - CSS with `expression(`, `javascript:`, `behavior`, `-moz-binding`, `@import`, or a
-//   non-http `url(`, after decoding CSS escapes and removing comments.
+// - CSS with `expression(`, `javascript:`, `behavior`, `-moz-binding`, `@import`, a
+//   non-http or unterminated `url(`, or a quoted `data:` string, after decoding CSS
+//   escapes and removing comments. A `<style>` element with a `<` in its text.
+// - A second attribute with the same name. Browsers keep the first one, and so does
+//   the sanitizer, after it checked every value.
 // - Comments, including Outlook conditional comments (their content is never checked).
 //
 // Every kept element is written again with double-quoted attributes, so links.ts can
@@ -99,8 +102,16 @@ export function unsafeCss(css: string): boolean {
   ) {
     return true;
   }
-  for (const match of plain.matchAll(/url\s*\(\s*(['"]?)([^)]*?)\1\s*\)/g)) {
-    if (!/^https?:\/\//.test((match[2] as string).trim())) return true;
+  // A quoted data: URL loads without url(), for example in image-set('data:...').
+  if (/['"]\s*data:/.test(plain)) return true;
+  // Every url( must be a complete url(...) with an http or https URL. An unterminated
+  // url( runs to the end of the declaration in a browser, so it is unsafe too.
+  const opener = /url\s*\(/g;
+  const full = /url\s*\(\s*(['"]?)([^)]*?)\1\s*\)/y;
+  for (const open of plain.matchAll(opener)) {
+    full.lastIndex = open.index;
+    const match = full.exec(plain);
+    if (!match || !/^https?:\/\//.test((match[2] as string).trim())) return true;
   }
   return false;
 }
@@ -121,15 +132,9 @@ class ElementFilter implements HTMLRewriterElementContentHandlers {
       element.removeAndKeepContent();
       return;
     }
-    if (tag === "meta") {
-      const equiv = element.getAttribute("http-equiv");
-      if (equiv !== null && !META_HTTP_EQUIV.has(equiv.trim().toLowerCase())) {
-        element.remove();
-        return;
-      }
-    }
     const allowed = ELEMENT_ATTRIBUTES[tag];
     const kept: [string, string][] = [];
+    const seen = new Set<string>();
     for (const [rawName = "", rawValue = ""] of [...element.attributes]) {
       const name = rawName.toLowerCase();
       element.removeAttribute(rawName);
@@ -138,6 +143,16 @@ class ElementFilter implements HTMLRewriterElementContentHandlers {
       }
       // `attributes` gives raw source text, so decode it once before the checks.
       let value: string | null = decodeEntities(rawValue);
+      // Every copy of a repeated attribute is checked: a client may read any of them.
+      if (name === "http-equiv" && !META_HTTP_EQUIV.has(value.trim().toLowerCase())) {
+        // A refresh or another header that a mail client may act on: drop the element.
+        element.remove();
+        return;
+      }
+      // A browser keeps the first of two attributes with the same name, so only the
+      // first is written back. A second `href` can never replace the checked one.
+      if (seen.has(name)) continue;
+      seen.add(name);
       if (name === "href") value = safeUrl(value, LINK_SCHEMES);
       else if (name === "src") value = safeUrl(value, IMAGE_SCHEMES);
       else if (name === "style" && unsafeCss(value)) value = null;
@@ -156,7 +171,11 @@ class StyleFilter implements HTMLRewriterElementContentHandlers {
     this.css += chunk.text;
     chunk.remove();
     if (chunk.lastInTextNode) {
-      if (!unsafeCss(this.css)) chunk.replace(this.css, { html: true });
+      // CSS needs no `<`. Without it, no markup can hide in the style text, and the
+      // link pattern of links.ts never meets a tag start inside it.
+      if (!this.css.includes("<") && !unsafeCss(this.css)) {
+        chunk.replace(this.css, { html: true });
+      }
       this.css = "";
     }
   }

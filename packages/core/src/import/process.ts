@@ -295,11 +295,32 @@ async function runChunk(
       );
     }
     const source = importSource(job.importId);
-    const [actorType = "user", actorId = ""] = splitActor(row.created_by);
+    // The consent events name who configured the import. The basis of `unknown` may be
+    // raised only when the owner both configured and started it (R73).
+    const [actorType = "user", actorId = ""] = splitActor(importConfigurer(row));
+    const ownerRun = importActors(row).every((key) => splitActor(key)[0] === "user");
     const accepted = [...created, ...updated].map((item) => item.email);
+    // A contact that was deleted with a basis of `unknown` comes back with that basis,
+    // unless the owner runs the import (consent_tombstones).
+    const keepUnknown =
+      ownerRun || config.consentBasis === "unknown"
+        ? new Set<string>()
+        : await tombstonedUnknown(
+            db,
+            workspaceId,
+            created.map((item) => item.emailHash),
+          );
+    const restored = created.filter((item) => keepUnknown.has(item.emailHash));
+    const fresh = created.filter((item) => !keepUnknown.has(item.emailHash));
     writes.push(
-      ...insertContacts(db.db, workspaceId, created, {
+      ...insertContacts(db.db, workspaceId, fresh, {
         consentBasis: config.consentBasis,
+        consentSource: source,
+        source,
+        now,
+      }),
+      ...insertContacts(db.db, workspaceId, restored, {
+        consentBasis: "unknown",
         consentSource: source,
         source,
         now,
@@ -318,7 +339,7 @@ async function runChunk(
       ),
     );
     // The owner may raise a basis of unknown with an import. An API key may not (R73).
-    if (actorType === "user" && config.consentBasis !== "unknown") {
+    if (ownerRun && config.consentBasis !== "unknown") {
       const unknownIds = updated.flatMap((item) => {
         const contact = existing.get(item.email);
         return contact?.consent_basis === "unknown" ? [contact.id] : [];
@@ -378,6 +399,40 @@ async function runChunk(
     .where("cursor_offset", "=", offset);
   await db.atomic([...writes, progress]);
   return result(db.meter.rowsWritten - writtenBefore);
+}
+
+/**
+ * Who stored the import configuration. Imports from before migration 0013 have no
+ * `configured_by`, so the uploader counts.
+ */
+export function importConfigurer(row: Pick<Row<"imports">, "configured_by" | "created_by">) {
+  return row.configured_by ?? row.created_by;
+}
+
+/** Every principal that decided about the run: who configured it and who started it. */
+function importActors(row: Row<"imports">): string[] {
+  const configurer = importConfigurer(row);
+  return [configurer, row.started_by ?? configurer];
+}
+
+/** The hashes among `hashes` with a consent tombstone of basis `unknown`. */
+async function tombstonedUnknown(
+  db: DbConnection,
+  workspaceId: number,
+  hashes: readonly string[],
+): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (const part of chunk(hashes, EMAILS_PER_QUERY)) {
+    const rows = await db.db
+      .selectFrom("consent_tombstones")
+      .select("email_hash")
+      .where("workspace_id", "=", workspaceId)
+      .where("consent_basis", "=", "unknown")
+      .where("email_hash", "in", part)
+      .execute();
+    for (const row of rows) found.add(row.email_hash);
+  }
+  return found;
 }
 
 function splitActor(createdBy: string): [string, string] {

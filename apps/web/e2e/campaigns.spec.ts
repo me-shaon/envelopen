@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { CAMPAIGNS_MOCK_PORT, CAMPAIGNS_PORT } from "../playwright.config";
+import { watchCsp } from "./csp";
 
 // The campaign engine (plan U9), against its own fresh Worker with a local D1, Queue,
 // Workflow, and Durable Objects. The Worker sends provider and DNS requests to its own
@@ -288,6 +289,7 @@ test.describe("campaigns", () => {
   test("shows the open, the scanner click, and the unsubscribes in the stats, the overview, and the usage view", async ({
     page,
   }) => {
+    const checkCsp = watchCsp(page);
     await signIn(page);
     await page.getByRole("link", { name: "Campaigns", exact: true }).first().click();
     await page.getByRole("link", { name: "Course launch, test run" }).click();
@@ -328,6 +330,7 @@ test.describe("campaigns", () => {
     await expect(email.getByText("Hello Ada")).toBeVisible();
     await expectNoSeriousViolations(page);
     await screenshot(page, "campaign-stats");
+    checkCsp();
 
     // The overview shows the same numbers for the latest campaign.
     await page.getByRole("link", { name: "Overview" }).first().click();

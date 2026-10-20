@@ -15,7 +15,9 @@ import { decodeEntities } from "./merge-tags";
 //
 // The sanitizer writes every href in double quotes, so one pattern finds them all.
 
-const ANCHOR_HREF = /(<a\b[^>]*?\shref=")([^"]*)(")/gi;
+// `[^<>]` stops each try at the next tag start, so the scan stays linear on input with
+// many `<a ` and no `>`. The sanitizer escapes `<` in every attribute it writes.
+const ANCHOR_HREF = /(<a\b[^<>]*?\shref=")([^"]*)(")/gi;
 
 /** Whether click tracking rewrites this href (as written in the HTML, escaped). */
 export function isTrackableHref(href: string): boolean {

@@ -287,7 +287,8 @@ export const contactsDelete = defineOperation({
     "Deletes the contact, its tags, memberships, field values, and consent history. When " +
     "the contact had unsubscribed, a suppression (reason `erased`) keeps the address from " +
     "coming back through an import or an upsert. Unsubscribing keeps the contact, so use " +
-    "`contacts.update` with `unsubscribe` for that.",
+    "`contacts.update` with `unsubscribe` for that. When the contact's consent basis was " +
+    "`unknown`, an API key that adds the address again gets the basis `unknown` too.",
   method: "delete",
   path: "/contacts/{id}",
   scope: "contacts:delete",
@@ -303,9 +304,35 @@ export const contactsDelete = defineOperation({
       contact.unsubscribedAt !== null ||
       contact.lists.some((membership) => membership.status === "unsubscribed");
     const keepSuppressed = unsubscribed && contact.status !== "suppressed";
+    const emailHash = await requireService(ctx.services, "hashEmail")(contact.email);
     const writes = [];
+    // An API key cannot raise a basis of `unknown` (R73), so it must not be able to delete
+    // the contact and add it again with a stronger basis. The tombstone keeps the basis.
+    if (contact.consentBasis === "unknown") {
+      writes.push(
+        db.db
+          .insertInto("consent_tombstones")
+          .values({
+            workspace_id: workspaceId,
+            email_hash: emailHash,
+            consent_basis: contact.consentBasis,
+            created_at: now,
+          })
+          .onConflict((conflict) =>
+            conflict
+              .columns(["workspace_id", "email_hash"])
+              .doUpdateSet({ consent_basis: contact.consentBasis, created_at: now }),
+          ),
+      );
+    } else {
+      writes.push(
+        db.db
+          .deleteFrom("consent_tombstones")
+          .where("workspace_id", "=", workspaceId)
+          .where("email_hash", "=", emailHash),
+      );
+    }
     if (keepSuppressed) {
-      const emailHash = await requireService(ctx.services, "hashEmail")(contact.email);
       writes.push(
         db.db
           .insertInto("suppressions")

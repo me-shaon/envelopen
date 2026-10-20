@@ -1,10 +1,12 @@
 import { receiveProviderWebhook, type Services } from "@envelopen/core";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { Hono } from "hono";
+import { readBodyLimited } from "../body";
 import { type EventSink, eventSink } from "../do/events";
 import { createServices } from "../services";
 
-// Provider webhooks (R43): POST /hooks/<provider>/<workspace id>/<connection id>.
+// Provider webhooks (R43): POST /hooks/<provider>/<workspace id>/<connection id>, with an
+// optional last segment for a URL token (SES; older SES URLs carry `?token=`).
 // No session and no API key: each adapter verifies the provider's signature, or the
 // secret in the URL or the Basic auth (see packages/providers). Verified events land in
 // `provider_events` (packages/core/src/connections/webhooks.ts), where hard bounces and
@@ -26,7 +28,8 @@ export interface HookRoutesOptions {
 
 export function createHookRoutes(options: HookRoutesOptions = {}) {
   const app = new Hono<{ Bindings: Env }>();
-  app.post("/:provider/:workspaceId/:connectionId", async (c) => {
+  // The last segment, when present, is a URL token (SES). The adapter reads it from the URL.
+  app.post("/:provider/:workspaceId/:connectionId/:token?", async (c) => {
     const provider = c.req.param("provider");
     const workspaceId = Number(c.req.param("workspaceId"));
     const connectionId = Number(c.req.param("connectionId"));
@@ -37,10 +40,9 @@ export function createHookRoutes(options: HookRoutesOptions = {}) {
     ) {
       return c.json({ error: "not_found" }, 404);
     }
-    const declared = Number(c.req.header("content-length") ?? 0);
-    if (declared > MAX_BODY_BYTES) return c.json({ error: "too_large" }, 413);
-    const bytes = await c.req.arrayBuffer();
-    if (bytes.byteLength > MAX_BODY_BYTES) return c.json({ error: "too_large" }, 413);
+    // Counted while reading, so a chunked body without Content-Length is capped too.
+    const bytes = await readBodyLimited(c.req.raw, MAX_BODY_BYTES);
+    if (!bytes) return c.json({ error: "too_large" }, 413);
 
     const db = (options.createDb ?? ((env: Env) => createDb(env)))(c.env);
     const services = (options.createServices ?? createServices)(c.env, c.req.raw);

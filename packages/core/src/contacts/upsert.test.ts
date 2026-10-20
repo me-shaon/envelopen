@@ -14,6 +14,7 @@ import { consentList, consentRecord } from "../consent/operations";
 import { CONSENT_UPGRADE_BLOCKED } from "../consent/rules";
 import { OperationError } from "../errors";
 import { runOperation } from "../executor";
+import { contactsErase } from "../gdpr/operations";
 import {
   listsAddContacts,
   listsCreate,
@@ -470,6 +471,64 @@ describe("contact state", () => {
       id: plain.contact.id,
       suppressed: false,
     });
+  });
+});
+
+describe("consent tombstones", () => {
+  it("keeps an API key from deleting an unknown contact and adding it back with a stronger basis", async () => {
+    const { conn, principal, workspaceId } = await owner();
+    const key = keyPrincipal(workspaceId, ["contacts:read", "contacts:write", "contacts:delete"]);
+    const { contact } = await run<Upserted>(conn, principal, contactsUpsert, {
+      email: "cold@example.com",
+      consentBasis: "unknown",
+    });
+    await run(conn, key, contactsDelete, { id: contact.id });
+    const back = await run<Upserted>(conn, key, contactsUpsert, {
+      email: "cold@example.com",
+      consentBasis: "explicit_opt_in",
+    });
+    expect(back.contact.consentBasis).toBe("unknown");
+    expect(back.warnings).toContain(CONSENT_UPGRADE_BLOCKED);
+
+    // The owner is not restricted.
+    await run(conn, key, contactsDelete, { id: back.contact.id });
+    const raised = await run<Upserted>(conn, principal, contactsUpsert, {
+      email: "cold@example.com",
+      consentBasis: "explicit_opt_in",
+    });
+    expect(raised.contact.consentBasis).toBe("explicit_opt_in");
+
+    // A contact deleted with a stronger basis leaves no tombstone.
+    await run(conn, key, contactsDelete, { id: raised.contact.id });
+    const again = await run<Upserted>(conn, key, contactsUpsert, {
+      email: "cold@example.com",
+      consentBasis: "existing_customer",
+    });
+    expect(again.contact.consentBasis).toBe("existing_customer");
+    expect(again.warnings).toEqual([]);
+  });
+
+  it("removes the tombstone on erase, which keeps a suppression instead", async () => {
+    const { conn, principal, workspaceId } = await owner();
+    const { contact } = await run<Upserted>(conn, principal, contactsUpsert, {
+      email: "erase-me@example.com",
+    });
+    await run(conn, principal, contactsDelete, { id: contact.id });
+    const tombstones = () =>
+      conn.db
+        .selectFrom("consent_tombstones")
+        .select("consent_basis")
+        .where("workspace_id", "=", workspaceId)
+        .execute();
+    expect(await tombstones()).toEqual([{ consent_basis: "unknown" }]);
+    const back = await run<Upserted>(conn, principal, contactsUpsert, {
+      email: "erase-me@example.com",
+    });
+    await run(conn, principal, contactsErase, {
+      id: back.contact.id,
+      confirm: "erase-me@example.com",
+    });
+    expect(await tombstones()).toEqual([]);
   });
 });
 

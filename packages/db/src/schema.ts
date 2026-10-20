@@ -294,6 +294,18 @@ export interface ConsentEventsTable {
   created_at: Generated<number>;
 }
 
+/**
+ * The consent basis of a deleted contact, keyed on the suppression hash (0013). An API key
+ * that adds the address again cannot set a stronger basis than this one.
+ */
+export interface ConsentTombstonesTable {
+  workspace_id: Immutable<number>;
+  /** HMAC of the normalized address, as in `suppressions.email_hash`. */
+  email_hash: string;
+  consent_basis: ConsentBasis;
+  created_at: Generated<number>;
+}
+
 export interface SuppressionsTable {
   id: Generated<number>;
   workspace_id: Immutable<number>;
@@ -346,6 +358,10 @@ export interface ImportsTable {
   error_file_key: string | null;
   failure: string | null;
   created_by: string;
+  /** `principalKey()` of who stored the configuration. NULL before 0013: use created_by. */
+  configured_by: Defaulted<string | null>;
+  /** `principalKey()` of who started the import run. */
+  started_by: Defaulted<string | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
   started_at: number | null;
@@ -672,6 +688,7 @@ export interface Database {
   contact_tags: ContactTagsTable;
   consent_events: ConsentEventsTable;
   suppressions: SuppressionsTable;
+  consent_tombstones: ConsentTombstonesTable;
   imports: ImportsTable;
   exports: ExportsTable;
   templates: TemplatesTable;
@@ -721,6 +738,7 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   contact_tags: "tenant",
   consent_events: "tenant",
   suppressions: "tenant",
+  consent_tombstones: "tenant",
   imports: "tenant",
   exports: "tenant",
   templates: "tenant",

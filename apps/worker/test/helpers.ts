@@ -70,6 +70,30 @@ export const getList = defineOperation({
   },
 });
 
+export const renameList = defineOperation({
+  id: "test_lists.rename",
+  summary: "Rename a list (test only)",
+  method: "post",
+  path: "/test/lists/{id}/rename",
+  scope: "lists:write",
+  risk: "write",
+  mcp: { class: "never", reason: "Test operation." },
+  input: z.object({ id: z.coerce.number().int(), name: z.string().min(1) }),
+  output: ListSchema,
+  async handler(input, { principal, db }) {
+    const row = await db.db
+      .updateTable("lists")
+      .set({ name: input.name })
+      .where("workspace_id", "=", principal.workspaceId)
+      .where("id", "=", input.id)
+      .returning(["id", "name"])
+      .executeTakeFirst();
+    if (!row) throw new OperationError("not_found", "No such list.");
+    return row;
+  },
+  auditTarget: (_input, output) => ({ targetType: "list", targetId: output.id }),
+});
+
 export const listContacts = defineOperation({
   id: "test_contacts.list",
   summary: "List contacts (test only)",
@@ -102,6 +126,7 @@ export const testRegistry = createRegistry([
   auditList,
   createList,
   getList,
+  renameList,
   listContacts,
 ]);
 

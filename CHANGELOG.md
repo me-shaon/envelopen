@@ -12,6 +12,17 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+### Changed
+
+- Faster contact pages, list and tag counts, and audit log on large workspaces.
+- Deleting a contact or a draft campaign no longer reads every event and recipient.
+- The hourly event retention job reads only the expired events.
+- Event flushes look up campaign recipients by id instead of reading the workspace.
+
+### Fixed
+
+- A contact page of 100, and adding 100 contacts to a list, stay within the D1 limit of 100 bound parameters.
+
 ## [0.1.0] - 2026-10-20
 
 The first release of Envelopen: self-hosted email campaigns on Cloudflare Workers.

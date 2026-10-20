@@ -1,4 +1,6 @@
-import type { DbConnection } from "@envelopen/db";
+import { env } from "cloudflare:workers";
+import { createDb, D1_MAX_BOUND_PARAMETERS, type DbConnection } from "@envelopen/db";
+import { type KyselyPlugin, SqliteQueryCompiler, sql } from "kysely";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   createOwnedWorkspace,
@@ -12,7 +14,13 @@ import { consentList, consentRecord } from "../consent/operations";
 import { CONSENT_UPGRADE_BLOCKED } from "../consent/rules";
 import { OperationError } from "../errors";
 import { runOperation } from "../executor";
-import { listsAddContacts, listsCreate, listsRemoveContact } from "../lists/operations";
+import {
+  listsAddContacts,
+  listsCreate,
+  listsList,
+  listsRemoveContact,
+  tagsList,
+} from "../lists/operations";
 import { apiKeyPrincipal, type Principal, sessionPrincipal } from "../principal";
 import type { ApiKeyScope } from "../scopes";
 import { suppressionsAdd, suppressionsList } from "../suppression/operations";
@@ -36,6 +44,44 @@ async function owner(name = "Contacts") {
   const userId = await createUser(conn);
   const workspaceId = await createOwnedWorkspace(conn, userId, name);
   return { conn, workspaceId, principal: sessionPrincipal({ workspaceId, userId }) };
+}
+
+/**
+ * A connection that records the most bound parameters of one query. Local D1 accepts
+ * more than 100, so the tests check D1's production limit here.
+ */
+function parameterCountingDb(): { conn: DbConnection; maxParameters: () => number } {
+  const compiler = new SqliteQueryCompiler();
+  let max = 0;
+  const counter: KyselyPlugin = {
+    transformQuery(args) {
+      const { parameters } = compiler.compileQuery(args.node, args.queryId);
+      max = Math.max(max, parameters.length);
+      return args.node;
+    },
+    async transformResult(args) {
+      return args.result;
+    },
+  };
+  const conn = createDb(env, { enforceWorkspaceScope: true, plugins: [counter] });
+  return { conn, maxParameters: () => max };
+}
+
+/** Inserts `count` contacts in one statement. Returns their ids, oldest first. */
+async function insertContacts(conn: DbConnection, workspaceId: number, count: number) {
+  const prefix = crypto.randomUUID().slice(0, 8);
+  await sql`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${count})
+INSERT INTO contacts (workspace_id, email, consent_basis, consent_source, consent_at, source)
+SELECT ${workspaceId}, ${prefix} || '-' || i || '@example.com', 'explicit_opt_in', 'test', 0, 'test' FROM n`.execute(
+    conn.db,
+  );
+  const rows = await conn.db
+    .selectFrom("contacts")
+    .select("id")
+    .where("workspace_id", "=", workspaceId)
+    .orderBy("id")
+    .execute();
+  return rows.map((row) => row.id);
 }
 
 function keyPrincipal(
@@ -310,6 +356,95 @@ describe("contact state", () => {
       { limit: 2, cursor: first.nextCursor },
     );
     expect(second.items.map((item) => item.email)).toEqual(["p3@example.com", "p2@example.com"]);
+  });
+
+  it("counts without filters, with the matching count equal to the total", async () => {
+    const { conn, principal } = await owner();
+    await run(conn, principal, contactsUpsert, { email: "one@example.com" });
+    const two = await run<Upserted>(conn, principal, contactsUpsert, { email: "two@example.com" });
+    await run(conn, principal, contactsUpdate, { id: two.contact.id, unsubscribe: true });
+    await run(conn, principal, contactsUpsert, { email: "three@example.com" });
+    await run(conn, principal, suppressionsAdd, { emails: ["three@example.com"] });
+    const expected = { matching: 3, total: 3, subscribed: 1, unsubscribed: 1, suppressed: 1 };
+    expect(await run(conn, principal, contactsCount, {})).toEqual(expected);
+    // A blank search filters nothing.
+    expect(await run(conn, principal, contactsCount, { search: "  " })).toEqual(expected);
+    expect(await run(conn, principal, contactsCount, { search: "two" })).toEqual({
+      ...expected,
+      matching: 1,
+    });
+  });
+
+  it("loads a page of 100 contacts within D1's bound parameter limit", async () => {
+    const { conn: setup, principal } = await owner();
+    const ids = await insertContacts(setup, principal.workspaceId, 101);
+    const list = await run<{ id: number }>(setup, principal, listsCreate, { name: "All" });
+    const newest = ids.at(-1) as number;
+    await run(setup, principal, contactsAddTags, { id: newest, tags: ["VIP"] });
+    await run(setup, principal, contactsUpdate, { id: newest, fields: { plan: "pro" } });
+
+    const { conn, maxParameters } = parameterCountingDb();
+    const added = await run<{ added: number }>(conn, principal, listsAddContacts, {
+      id: list.id,
+      contactIds: ids.slice(-100),
+    });
+    expect(added.added).toBe(100);
+    const page = await run<{
+      items: { id: number; tags: { name: string }[]; lists: { listId: number }[] }[];
+      nextCursor: string | null;
+    }>(conn, principal, contactsList, { limit: 100 });
+    expect(page.items.map((item) => item.id)).toEqual(ids.slice(-100).reverse());
+    expect(page.nextCursor).not.toBeNull();
+    expect(page.items[0]).toMatchObject({
+      tags: [{ name: "VIP" }],
+      lists: [{ listId: list.id }],
+      fields: { plan: "pro" },
+    });
+    expect(page.items.every((item) => item.lists.length === 1)).toBe(true);
+    expect(maxParameters()).toBeLessThanOrEqual(D1_MAX_BOUND_PARAMETERS);
+  });
+
+  it("counts list members and tagged contacts in the workspace only", async () => {
+    const { conn, principal } = await owner();
+    const list = await run<{ id: number }>(conn, principal, listsCreate, { name: "News" });
+    const a = await run<Upserted>(conn, principal, contactsUpsert, {
+      email: "a@example.com",
+      listIds: [list.id],
+      tags: ["VIP"],
+    });
+    await run(conn, principal, contactsUpsert, {
+      email: "b@example.com",
+      listIds: [list.id],
+      tags: ["VIP"],
+    });
+    await run(conn, principal, contactsUpsert, { email: "c@example.com", tags: ["Lead"] });
+    await run(conn, principal, contactsUpdate, { id: a.contact.id, unsubscribe: true });
+    // Another workspace with the same names changes nothing here.
+    const other = await owner("Other");
+    await run(other.conn, other.principal, contactsUpsert, {
+      email: "a@example.com",
+      tags: ["VIP"],
+    });
+
+    const lists = await run<{ items: { id: number; subscribed: number; unsubscribed: number }[] }>(
+      conn,
+      principal,
+      listsList,
+      {},
+    );
+    expect(lists.items).toEqual([
+      expect.objectContaining({ id: list.id, subscribed: 1, unsubscribed: 1 }),
+    ]);
+    const tags = await run<{ items: { name: string; contacts: number }[] }>(
+      conn,
+      principal,
+      tagsList,
+      {},
+    );
+    expect(tags.items.map(({ name, contacts }) => ({ name, contacts }))).toEqual([
+      { name: "VIP", contacts: 2 },
+      { name: "Lead", contacts: 1 },
+    ]);
   });
 
   it("keeps an unsubscribed address suppressed after the contact is deleted", async () => {

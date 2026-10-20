@@ -1,7 +1,7 @@
 import type { Database } from "@envelopen/db";
 import type { Kysely } from "kysely";
 import { z } from "zod";
-import { actorSource } from "../contacts/model";
+import { actorSource, inIdList } from "../contacts/model";
 import { chunk, cleanTagNames, TAG_NAME_MAX } from "../contacts/writes";
 import { OperationError } from "../errors";
 import { pageInputShape, pageOf, pageParams, toPage } from "../pagination";
@@ -214,7 +214,7 @@ export const listsAddContacts = defineOperation({
       .selectFrom("contacts")
       .select("id")
       .where("workspace_id", "=", workspaceId)
-      .where("id", "in", ids)
+      .where(inIdList("id", ids))
       .execute();
     if (found.length !== ids.length) {
       throw new OperationError("not_found", "A contact does not exist in this workspace.");
@@ -224,7 +224,7 @@ export const listsAddContacts = defineOperation({
       .select((eb) => eb.fn.countAll<number>().as("count"))
       .where("workspace_id", "=", workspaceId)
       .where("list_id", "=", input.id)
-      .where("contact_id", "in", ids)
+      .where(inIdList("contact_id", ids))
       .where("status", "=", "unsubscribed")
       .executeTakeFirstOrThrow();
     const source = actorSource(principal);
@@ -289,24 +289,32 @@ export const listsRemoveContact = defineOperation({
 
 // Tags -----------------------------------------------------------------------------------
 
+// A count per tag, not a join with GROUP BY: the join sorted every tagged contact,
+// and D1 counts the sorted rows as rows read. The subquery reads the tag index only.
 function tagsWithCounts(db: Kysely<Database>, workspaceId: number) {
   return db
     .selectFrom("tags as t")
-    .leftJoin("contact_tags as ct", (join) =>
-      join.onRef("ct.tag_id", "=", "t.id").on("ct.workspace_id", "=", workspaceId),
-    )
     .select((eb) => [
       "t.id",
       "t.name",
       "t.created_at",
-      eb.fn.count<number>("ct.contact_id").as("contacts"),
+      eb
+        .selectFrom("contact_tags as ct")
+        .select((sub) => sub.fn.countAll<number>().as("count"))
+        .where("ct.workspace_id", "=", workspaceId)
+        .whereRef("ct.tag_id", "=", "t.id")
+        .as("contacts"),
     ])
-    .where("t.workspace_id", "=", workspaceId)
-    .groupBy("t.id");
+    .where("t.workspace_id", "=", workspaceId);
 }
 
-function toTag(row: { id: number; name: string; created_at: number; contacts: number }) {
-  return { id: row.id, name: row.name, contacts: Number(row.contacts), createdAt: row.created_at };
+function toTag(row: { id: number; name: string; created_at: number; contacts: number | null }) {
+  return {
+    id: row.id,
+    name: row.name,
+    contacts: Number(row.contacts ?? 0),
+    createdAt: row.created_at,
+  };
 }
 
 async function getTag(db: Kysely<Database>, workspaceId: number, id: number) {

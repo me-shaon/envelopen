@@ -5,7 +5,7 @@ import { defineOperation, type OperationContext } from "../registry/operation";
 import { requireService } from "../services";
 import { normalizeEmail } from "./email";
 import { actorSource, ConsentBasisSchema, ContactSchema, loadContacts } from "./model";
-import { contactFilterShape, filteredContacts } from "./query";
+import { contactFilterShape, filteredContacts, hasContactFilters } from "./query";
 import { upsertContact } from "./upsert";
 import { checkTags, ensureFields, ensureTags, setFieldValues, tagContacts } from "./writes";
 
@@ -85,10 +85,15 @@ export const contactsCount = defineOperation({
     .meta({ id: "ContactCounts" }),
   async handler(input, ctx) {
     const workspaceId = ctx.principal.workspaceId;
+    // Each count reads every contact of the workspace. Without a filter the matching
+    // count equals the total, so one query gives both.
+    const filtered = hasContactFilters(input);
     const [matching, totals] = await Promise.all([
-      filteredContacts(ctx.db.db, workspaceId, input)
-        .select((eb) => eb.fn.countAll<number>().as("count"))
-        .executeTakeFirstOrThrow(),
+      filtered
+        ? filteredContacts(ctx.db.db, workspaceId, input)
+            .select((eb) => eb.fn.countAll<number>().as("count"))
+            .executeTakeFirstOrThrow()
+        : null,
       filteredContacts(ctx.db.db, workspaceId, {})
         .select((eb) => [
           eb.fn.countAll<number>().as("total"),
@@ -110,7 +115,7 @@ export const contactsCount = defineOperation({
     const suppressed = Number(totals.suppressed);
     const unsubscribed = Number(totals.unsubscribed ?? 0);
     return {
-      matching: Number(matching.count),
+      matching: matching === null ? total : Number(matching.count),
       total,
       suppressed,
       unsubscribed,

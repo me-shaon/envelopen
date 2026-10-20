@@ -36,17 +36,20 @@ export async function purgeExpiredEvents(
   limit = RETENTION_BATCH,
 ): Promise<RetentionResult> {
   const any = unscoped(db.db);
-  // The fixed bound lets the occurred_at index find the candidates. The join then
-  // applies each workspace's own period.
+  // Each workspace reads only its own expired rows, through the (workspace_id,
+  // occurred_at) indexes: CROSS JOIN keeps workspaces as the outer loop, and one upper
+  // bound per workspace makes the index range end at the cutoff. A scan of occurred_at
+  // alone read every row older than the floor each run, expired or not.
   const floor = now - MIN_RETENTION_DAYS * DAY_MS;
   const events = await sql`DELETE FROM email_events WHERE id IN (
-  SELECT e.id FROM email_events e JOIN workspaces w ON w.id = e.workspace_id
-  WHERE e.occurred_at < ${floor} AND e.occurred_at < ${now} - w.event_retention_days * ${DAY_MS}
+  SELECT e.id FROM workspaces w CROSS JOIN email_events e
+  WHERE e.workspace_id = w.id
+    AND e.occurred_at < MIN(${floor}, ${now} - w.event_retention_days * ${DAY_MS})
   LIMIT ${limit})`.execute(any);
   const provider = await sql`DELETE FROM provider_events WHERE id IN (
-  SELECT p.id FROM provider_events p JOIN workspaces w ON w.id = p.workspace_id
-  WHERE p.occurred_at < ${floor} AND p.processed_at IS NOT NULL
-    AND p.occurred_at < ${now} - MAX(w.event_retention_days, ${MIN_RETENTION_DAYS}) * ${DAY_MS}
+  SELECT p.id FROM workspaces w CROSS JOIN provider_events p
+  WHERE p.workspace_id = w.id AND p.processed_at IS NOT NULL
+    AND p.occurred_at < MIN(${floor}, ${now} - MAX(w.event_retention_days, ${MIN_RETENTION_DAYS}) * ${DAY_MS})
   LIMIT ${limit})`.execute(any);
   const flushes = await sql`DELETE FROM event_flushes WHERE rowid IN (
   SELECT rowid FROM event_flushes WHERE created_at < ${now - FLUSH_ID_RETENTION_MS}

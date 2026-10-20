@@ -28,6 +28,16 @@ export interface ContactFilters {
   status?: ContactStatus | undefined;
 }
 
+/** True when a filter narrows the contacts. An empty or blank search narrows nothing. */
+export function hasContactFilters(filters: ContactFilters): boolean {
+  return (
+    Boolean(filters.search?.trim()) ||
+    filters.listId !== undefined ||
+    filters.tagId !== undefined ||
+    filters.status !== undefined
+  );
+}
+
 type ContactQueryDb = Database & { c: Database["contacts"]; s: Database["suppressions"] };
 
 function likePattern(text: string): string {

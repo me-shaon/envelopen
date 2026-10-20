@@ -1,5 +1,5 @@
 import type { ConsentBasis, Database } from "@envelopen/db";
-import type { Kysely } from "kysely";
+import { type Kysely, sql } from "kysely";
 import { z } from "zod";
 import type { Principal } from "../principal";
 
@@ -85,6 +85,14 @@ export function contactBase(db: Kysely<Database>, workspaceId: number) {
     .where("c.workspace_id", "=", workspaceId);
 }
 
+/**
+ * `column IN (ids)`, with the ids as one JSON parameter. A list of 100 ids would pass
+ * D1's limit of 100 bound parameters as soon as the query binds anything else.
+ */
+export function inIdList(column: string, ids: readonly number[]) {
+  return sql<boolean>`${sql.ref(column)} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`;
+}
+
 const BASE_COLUMNS = [
   "c.id",
   "c.email",
@@ -106,6 +114,11 @@ const BASE_COLUMNS = [
 /**
  * Loads contacts with their tags, list memberships, and custom fields, in the order of
  * `ids`. Missing ids are left out. Four queries, whatever the page size.
+ *
+ * The ids travel as one JSON parameter, so a page of 100 stays within D1's 100 bound
+ * parameters. The contact query starts from the ids with CROSS JOIN, which makes SQLite
+ * look the contacts up by primary key. Otherwise it reads the whole workspace through
+ * an index that starts with workspace_id.
  */
 export async function loadContacts(
   db: Kysely<Database>,
@@ -113,15 +126,24 @@ export async function loadContacts(
   ids: readonly number[],
 ): Promise<Contact[]> {
   if (ids.length === 0) return [];
-  const idList = [...ids];
+  const idJson = JSON.stringify(ids);
   const [rows, tags, lists, fields] = await Promise.all([
-    contactBase(db, workspaceId).select(BASE_COLUMNS).where("c.id", "in", idList).execute(),
+    db
+      .selectFrom(sql<{ value: number }>`json_each(${idJson})`.as("j"))
+      .crossJoin("contacts as c")
+      .leftJoin("suppressions as s", (join) =>
+        join.onRef("s.email_hash", "=", "c.email_hash").on("s.workspace_id", "=", workspaceId),
+      )
+      .select(BASE_COLUMNS)
+      .whereRef("c.id", "=", "j.value")
+      .where("c.workspace_id", "=", workspaceId)
+      .execute(),
     db
       .selectFrom("contact_tags as ct")
       .innerJoin("tags as t", "t.id", "ct.tag_id")
       .select(["ct.contact_id", "t.id", "t.name"])
       .where("ct.workspace_id", "=", workspaceId)
-      .where("ct.contact_id", "in", idList)
+      .where(inIdList("ct.contact_id", ids))
       .orderBy("t.name")
       .execute(),
     db
@@ -137,7 +159,7 @@ export async function loadContacts(
         "m.status_campaign_id",
       ])
       .where("m.workspace_id", "=", workspaceId)
-      .where("m.contact_id", "in", idList)
+      .where(inIdList("m.contact_id", ids))
       .orderBy("l.name")
       .execute(),
     db
@@ -145,7 +167,7 @@ export async function loadContacts(
       .innerJoin("contact_fields as f", "f.id", "v.field_id")
       .select(["v.contact_id", "f.key", "v.value"])
       .where("v.workspace_id", "=", workspaceId)
-      .where("v.contact_id", "in", idList)
+      .where(inIdList("v.contact_id", ids))
       .execute(),
   ]);
 

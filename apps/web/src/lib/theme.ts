@@ -20,14 +20,16 @@ export function currentTheme(): Theme {
 }
 
 function apply(theme: Theme) {
-  // Switch every color at once. Without this, colors with a transition fade over and
-  // show mixed states for a moment.
+  // Switch every color at once. Without this, every element with a color transition
+  // fades on its own clock, and the page shows mixed light and dark states for a moment.
+  // The pause stays until after the next style flush, so no transition starts from the
+  // old colors.
   const pause = document.createElement("style");
   pause.textContent = "*,*::before,*::after{transition:none!important}";
   document.head.append(pause);
   document.documentElement.classList.toggle("dark", theme === "dark");
   window.getComputedStyle(document.body).color;
-  pause.remove();
+  requestAnimationFrame(() => requestAnimationFrame(() => pause.remove()));
   for (const listener of listeners) listener();
 }
 

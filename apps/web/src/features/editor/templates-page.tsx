@@ -10,15 +10,24 @@ import { ConfirmDialog } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
 import { Pill, type Tone } from "@/components/ui/pill";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, PageTop } from "@/features/contacts/shared";
 import { formatDate } from "@/lib/format";
+import { presenceClass, usePresence } from "@/lib/motion";
 
 // Templates and saved blocks of the workspace (R28). The editor opens at
 // /templates/$templateId, and /templates/new starts a template from the starter blocks.
 
 type Format = Schemas["TemplateFormat"];
+type TemplateItem = Schemas["TemplateSummary"];
+type BlockItem = Schemas["SavedBlockList"]["items"][number];
+
+const NO_TEMPLATES: TemplateItem[] = [];
+const NO_BLOCKS: BlockItem[] = [];
+const byId = (item: { id: number }) => item.id;
 
 const FORMATS: Record<Format, { label: string; tone: Tone }> = {
   blocks: { label: "Blocks", tone: "lavender" },
@@ -47,7 +56,10 @@ export function TemplatesPage() {
   const duplicate = useMutation({
     mutationFn: (id: number) =>
       unwrap(api.POST("/templates/{id}/duplicate", { params: { path: { id } }, body: {} })),
-    onSuccess: refresh,
+    onSuccess: async (copy) => {
+      await refresh();
+      toast(`Template duplicated as ${copy.name}.`);
+    },
   });
   const remove = useMutation({
     mutationFn: (item: { id: number; kind: "template" | "block" }): Promise<unknown> =>
@@ -60,8 +72,9 @@ export function TemplatesPage() {
     },
   });
 
-  const items = templates.data?.items ?? [];
-  const saved = blocks.data?.items ?? [];
+  // New rows fade in, deleted rows fade out.
+  const items = usePresence(templates.data?.items ?? NO_TEMPLATES, byId, templates.isSuccess);
+  const saved = usePresence(blocks.data?.items ?? NO_BLOCKS, byId, blocks.isSuccess);
 
   return (
     <div className="flex flex-col gap-12">
@@ -82,7 +95,7 @@ export function TemplatesPage() {
       <FormError message={errorText(duplicate.error) ?? errorText(remove.error)} />
 
       {templates.isPending ? (
-        <div className="h-32 rounded-xl border border-border bg-muted" />
+        <TableSkeleton label="Loading the templates" rows={4} columns={5} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={FileTextIcon}
@@ -112,8 +125,12 @@ export function TemplatesPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map((template) => (
-              <TableRow key={template.id} data-testid="template-row">
+            {items.map(({ key, item: template, state }) => (
+              <TableRow
+                key={key}
+                data-testid={state === "exit" ? undefined : "template-row"}
+                className={presenceClass(state)}
+              >
                 <TableCell className="font-medium">
                   <Link
                     to="/templates/$templateId"
@@ -136,6 +153,7 @@ export function TemplatesPage() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    pending={duplicate.isPending && duplicate.variables === template.id}
                     disabled={duplicate.isPending}
                     onClick={() => duplicate.mutate(template.id)}
                   >
@@ -180,8 +198,12 @@ export function TemplatesPage() {
               </tr>
             </thead>
             <tbody>
-              {saved.map((block) => (
-                <TableRow key={block.id} data-testid="saved-block-row">
+              {saved.map(({ key, item: block, state }) => (
+                <TableRow
+                  key={key}
+                  data-testid={state === "exit" ? undefined : "saved-block-row"}
+                  className={presenceClass(state)}
+                >
                   <TableCell className="font-medium">{block.name}</TableCell>
                   <TableCell className="figure text-muted-foreground">
                     {formatDate(block.updatedAt)}

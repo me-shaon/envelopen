@@ -6,6 +6,7 @@ import { campaignsQuery } from "@/api/queries";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, Figure, PageTop } from "@/features/contacts/shared";
@@ -34,7 +35,7 @@ export function CampaignsPage() {
       />
       <FormError message={errorText(campaigns.error)} />
       {campaigns.isPending ? (
-        <div className="h-32 rounded-xl border border-border bg-muted" />
+        <TableSkeleton label="Loading the campaigns" columns={5} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={SendIcon}

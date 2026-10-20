@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { CopyValue } from "@/features/providers/shared";
 import { formatDate } from "@/lib/format";
@@ -171,7 +172,7 @@ function CreateKeyDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={create.isPending || !presets.data}>
+            <Button type="submit" pending={create.isPending} disabled={!presets.data}>
               Create key
             </Button>
           </DialogFooter>
@@ -337,7 +338,7 @@ export function ApiKeysSection() {
           The keys did not load. Reload the page to try again.
         </p>
       ) : keys.isPending ? (
-        <div className="h-24 rounded-xl border border-border bg-muted" />
+        <ListSkeleton label="Loading the API keys" rows={2} />
       ) : items.length === 0 ? (
         <EmptyState icon={KeyRoundIcon} title="No API keys in this workspace">
           Create a key to sync contacts or to connect an agent.

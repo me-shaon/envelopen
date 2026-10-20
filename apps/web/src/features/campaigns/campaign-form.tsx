@@ -415,9 +415,10 @@ export function CampaignForm({
           <Button
             type="submit"
             variant={campaign ? "outline" : "default"}
-            disabled={save.isPending || !draft.name.trim()}
+            pending={save.isPending}
+            disabled={!draft.name.trim()}
           >
-            {save.isPending ? "Saving..." : campaign ? "Save changes" : "Create draft"}
+            {campaign ? "Save changes" : "Create draft"}
           </Button>
         )}
         {aside && !changed ? aside : null}

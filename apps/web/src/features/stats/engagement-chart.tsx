@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useFirstReveal, useSeen } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { formatCount, plural } from "./format";
 
@@ -60,8 +61,26 @@ function barHeight(value: number, max: number): number {
   return value === 0 ? 0 : Math.max(2, (value / max) * (HEIGHT - 4));
 }
 
-export function EngagementChart({ hours: all }: { hours: HourPoint[] }) {
+export function EngagementChart({
+  hours: all,
+  revealKey,
+}: {
+  hours: HourPoint[];
+  /** The bars grow from the baseline on the first view of this key in the session. */
+  revealKey?: string;
+}) {
   const [full, setFull] = useState(false);
+  const plot = useRef<HTMLDivElement>(null);
+  const first = useFirstReveal(revealKey ?? null);
+  const seen = useSeen(plot, first);
+  // The growth runs once. After it, new hours from a poll and the 48-hour toggle draw
+  // their bars at once.
+  const [growing, setGrowing] = useState(first);
+  useEffect(() => {
+    if (!growing || !seen) return;
+    const timer = setTimeout(() => setGrowing(false), 900);
+    return () => clearTimeout(timer);
+  }, [growing, seen]);
   const fitted = fitWindow(all);
   const view = full ? FULL : fitted;
   const span = view.hours;
@@ -111,7 +130,7 @@ export function EngagementChart({ hours: all }: { hours: HourPoint[] }) {
         ) : null}
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2">
-        <div className="relative h-[140px]">
+        <div ref={plot} className="relative h-[140px]">
           <svg
             aria-hidden="true"
             viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -150,6 +169,13 @@ export function EngagementChart({ hours: all }: { hours: HourPoint[] }) {
               const left = index * slot + (slot - 2 * bar) / 2;
               const open = barHeight(hour.opens, max);
               const click = barHeight(hour.clicks, max);
+              // A short left-to-right stagger, 240 ms at most over the whole chart.
+              const grow = growing
+                ? {
+                    className: seen ? "motion-grow-y" : "scale-y-0",
+                    style: { animationDelay: `${Math.round((index / hours.length) * 240)}ms` },
+                  }
+                : { className: "", style: undefined };
               return (
                 <g key={hour.hour}>
                   <rect
@@ -157,14 +183,16 @@ export function EngagementChart({ hours: all }: { hours: HourPoint[] }) {
                     y={HEIGHT - open}
                     width={bar}
                     height={open}
-                    className="fill-chart-1"
+                    className={cn("fill-chart-1", grow.className)}
+                    style={grow.style}
                   />
                   <rect
                     x={left + bar}
                     y={HEIGHT - click}
                     width={bar}
                     height={click}
-                    className="fill-chart-3"
+                    className={cn("fill-chart-3", grow.className)}
+                    style={grow.style}
                   />
                   <rect x={index * slot} y={0} width={slot} height={HEIGHT} fill="transparent">
                     <title>{`Hour ${index + 1}: ${plural(hour.opens, "open", "opens")}, ${plural(hour.clicks, "click", "clicks")}, ${plural(hour.machineOpens, "machine open", "machine opens")}`}</title>

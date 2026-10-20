@@ -10,6 +10,8 @@ import {
 import type { ContactFilters } from "./api/queries";
 import { sessionQuery } from "./api/queries";
 import { AppShell } from "./components/app-shell";
+import { RouteProgress } from "./components/route-progress";
+import { Toaster } from "./components/ui/toast";
 import { AuditLogPage } from "./features/audit/audit-log-page";
 import { CampaignPage, NewCampaignPage } from "./features/campaigns/campaign-page";
 import { CampaignsPage } from "./features/campaigns/campaigns-page";
@@ -36,7 +38,15 @@ interface RouterContext {
 }
 
 const rootRoute = createRootRouteWithContext<RouterContext>()({
-  component: Outlet,
+  component: function Root() {
+    return (
+      <>
+        <RouteProgress />
+        <Outlet />
+        <Toaster />
+      </>
+    );
+  },
 });
 
 const loginRoute = createRoute({

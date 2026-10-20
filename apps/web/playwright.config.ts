@@ -37,6 +37,9 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PASSWORD_PORT}`,
     trace: "retain-on-failure",
+    // Most specs run with reduced motion, so the app settles at once and the steps do
+    // not wait for fades. The motion test in contacts.spec.ts turns motion back on.
+    reducedMotion: "reduce",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [

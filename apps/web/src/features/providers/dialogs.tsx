@@ -108,8 +108,8 @@ export function ConnectDialog({
                 </a>
               </Button>
             ) : null}
-            <Button type="submit" disabled={connect.isPending}>
-              {connect.isPending ? "Checking..." : "Connect"}
+            <Button type="submit" pending={connect.isPending}>
+              Connect
             </Button>
           </DialogFooter>
         </form>
@@ -233,7 +233,8 @@ export function WebhookDialog({
                 <Button
                   type="submit"
                   variant="outline"
-                  disabled={saveSecret.isPending || !secret.trim()}
+                  pending={saveSecret.isPending}
+                  disabled={!secret.trim()}
                 >
                   Save secret
                 </Button>
@@ -252,10 +253,10 @@ export function WebhookDialog({
           {data && data.eventsSetup === "manual" && data.webhook.secretSource !== "none" ? (
             <Button
               variant="outline"
-              disabled={retry.isPending}
+              pending={retry.isPending}
               onClick={() => retry.mutate(data.id)}
             >
-              {retry.isPending ? "Trying..." : "Try automatic setup again"}
+              Try automatic setup again
             </Button>
           ) : null}
           <Button onClick={() => onOpenChange(false)}>Done</Button>
@@ -333,7 +334,8 @@ export function PolicyDialog({
           </Button>
           <Button
             variant="destructive"
-            disabled={!understood || accept.isPending}
+            pending={accept.isPending}
+            disabled={!understood}
             onClick={() => connection && accept.mutate(connection.id)}
           >
             Accept the warning

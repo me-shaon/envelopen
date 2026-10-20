@@ -67,6 +67,19 @@
 
   --shadow-raised: 0 1px 2px rgb(26 25 23 / 0.06), 0 0 0 1px rgb(26 25 23 / 0.05);
   --shadow-popover: 0 8px 24px rgb(26 25 23 / 0.08), 0 0 0 1px rgb(26 25 23 / 0.06);
+
+  /* Skeleton blocks: one step deeper than the muted surface, so they read on white. The
+     light band crosses them while they wait. */
+  --skeleton: #efece6;
+  --skeleton-shine: rgb(255 255 255 / 0.7);
+
+  /* Motion: short, ease-out, small distances. Exits are faster than entrances. */
+  --ease-calm: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-calm-in: cubic-bezier(0.4, 0, 1, 1);
+  --duration-press: 120ms;
+  --duration-enter: 180ms;
+  --duration-exit: 120ms;
+  --duration-reveal: 240ms;
 }
 
 .dark {
@@ -124,6 +137,9 @@
 
   --shadow-raised: 0 0 0 1px rgb(255 255 255 / 0.07);
   --shadow-popover: 0 8px 24px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.08);
+
+  --skeleton: #252420;
+  --skeleton-shine: rgb(255 255 255 / 0.045);
 }
 
 @theme inline {
@@ -184,6 +200,8 @@
 
   --shadow-raised: var(--shadow-raised);
   --shadow-popover: var(--shadow-popover);
+
+  --ease-calm: var(--ease-calm);
 }
 
 @layer base {
@@ -232,6 +250,246 @@
   }
 }
 
+/* Motion (purposeful only). Each effect explains a state change: an overlay opens or
+   closes, a row arrives or leaves, data is on its way, or a number settles. Radix waits
+   for the exit animation before it unmounts an overlay, so exits play in full. */
+
+@keyframes enter-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+@keyframes exit-pop {
+  to {
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+}
+
+@keyframes enter-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes exit-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes enter-sheet {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+@keyframes exit-sheet {
+  to {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+@keyframes enter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes enter-toast {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@keyframes exit-toast {
+  to {
+    opacity: 0;
+    transform: translateX(var(--radix-toast-swipe-end-x, 0)) scale(0.98);
+  }
+}
+
+@keyframes collapsible-open {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes collapsible-close {
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The route bar creeps toward 85% and waits there until the page is ready. */
+@keyframes route-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.85);
+  }
+}
+
+@layer components {
+  /* Dialogs, menus, and other floating panels: a fade with a 4 px rise and a 0.98 scale. */
+  .motion-pop[data-state="open"] {
+    animation: enter-pop var(--duration-enter) var(--ease-calm);
+  }
+
+  .motion-pop[data-state="closed"] {
+    animation: exit-pop var(--duration-exit) var(--ease-calm-in) forwards;
+  }
+
+  /* Menus grow from the trigger. Radix sets the origin for each side. */
+  .motion-menu {
+    transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  }
+
+  .motion-overlay[data-state="open"] {
+    animation: enter-fade var(--duration-enter) var(--ease-calm);
+  }
+
+  .motion-overlay[data-state="closed"] {
+    animation: exit-fade var(--duration-exit) var(--ease-calm-in) forwards;
+  }
+
+  .motion-sheet[data-state="open"] {
+    animation: enter-sheet var(--duration-reveal) var(--ease-calm);
+  }
+
+  .motion-sheet[data-state="closed"] {
+    animation: exit-sheet var(--duration-exit) var(--ease-calm-in) forwards;
+  }
+
+  /* Disclosures: the height follows the content, so nothing below jumps. */
+  .motion-collapsible {
+    overflow: hidden;
+  }
+
+  .motion-collapsible[data-state="open"] {
+    animation: collapsible-open var(--duration-reveal) var(--ease-calm);
+  }
+
+  .motion-collapsible[data-state="closed"] {
+    animation: collapsible-close var(--duration-enter) var(--ease-calm-in);
+  }
+
+  /* A row, a pill, or a banner that just arrived. */
+  .motion-enter {
+    animation: enter-rise var(--duration-enter) var(--ease-calm);
+  }
+
+  /* A row or a pill on its way out. The element stays until the fade ends. */
+  .motion-exit {
+    pointer-events: none;
+    animation: exit-fade var(--duration-exit) var(--ease-calm-in) forwards;
+  }
+
+  /* Data bars grow from the start of their track, once. */
+  .motion-grow-x {
+    transform-origin: left center;
+    animation: grow-x 600ms var(--ease-calm) both;
+  }
+
+  .motion-grow-y {
+    transform-box: fill-box;
+    transform-origin: bottom;
+    animation: grow-y 520ms var(--ease-calm) both;
+  }
+
+  /* Placeholder blocks in the shape of the content. They appear only after 150 ms, so a
+     fast load shows no flash, and they keep the space, so the content does not shift. */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    background: var(--skeleton);
+    animation: enter-fade var(--duration-enter) var(--ease-calm) 150ms both;
+  }
+
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+    animation: shimmer 1.6s ease-in-out 400ms infinite;
+  }
+
+  .spinner {
+    animation: spin 700ms linear infinite;
+  }
+
+  .route-progress {
+    transform-origin: left center;
+    animation: route-progress 8s cubic-bezier(0.1, 0.6, 0.2, 1) forwards;
+  }
+
+  .toast[data-state="open"] {
+    animation: enter-toast var(--duration-enter) var(--ease-calm);
+  }
+
+  .toast[data-state="closed"] {
+    animation: exit-toast var(--duration-exit) var(--ease-calm-in) forwards;
+  }
+
+  .toast[data-swipe="move"] {
+    transform: translateX(var(--radix-toast-swipe-move-x));
+  }
+
+  .toast[data-swipe="cancel"] {
+    transform: translateX(0);
+    transition: transform var(--duration-enter) var(--ease-calm);
+  }
+
+  .toast[data-swipe="end"] {
+    animation: exit-toast var(--duration-exit) var(--ease-calm-in) forwards;
+  }
+}
+
+/* Reduced motion: no movement. Animations end at once and run one time, so a loop such
+   as the shimmer or the spinner stays still. Fades and color changes stay instant. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -239,7 +497,15 @@
     /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every utility. */
     animation-duration: 0.01ms !important;
     /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every utility. */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every utility. */
     transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every utility. */
+    scroll-behavior: auto !important;
+  }
+
+  .skeleton::after {
+    display: none;
   }
 }
 

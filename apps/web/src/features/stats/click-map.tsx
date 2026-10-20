@@ -1,13 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { FileXIcon, MousePointerClickIcon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { clickMapQuery } from "@/api/queries";
 import { EmptyState } from "@/components/empty-state";
 import { SectionHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
+import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
+import { useFirstReveal, useSeen } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 import { barWidth, formatCount, formatRate } from "./format";
 
 // The click map (R47): the email with each tracked link's human clicks next to it, and
@@ -22,6 +25,9 @@ export function ClickMap({ campaignId }: { campaignId: number }) {
   const map = useQuery(clickMapQuery(current.id, campaignId));
   const data = map.data;
   const [showEmail, setShowEmail] = useState(false);
+  const list = useRef<HTMLUListElement>(null);
+  const first = useFirstReveal(data ? `click-map-${campaignId}` : null);
+  const seen = useSeen(list, first);
   return (
     <section aria-labelledby="click-map-title" className="flex flex-col gap-4">
       <SectionHeader
@@ -32,10 +38,21 @@ export function ClickMap({ campaignId }: { campaignId: number }) {
       {map.isError ? (
         <FormError message={errorText(map.error)} />
       ) : !data ? (
-        <div className="flex flex-wrap gap-6" aria-hidden="true">
-          <div className="h-40 flex-[1_1_260px] animate-pulse rounded-xl border border-border bg-muted" />
-          <div className="h-80 flex-[2_1_380px] animate-pulse rounded-xl border border-border bg-muted" />
-        </div>
+        <LoadingRegion label="Loading the clicks per link" className="flex flex-wrap gap-6">
+          <div className="flex flex-[1_1_260px] flex-col self-start overflow-hidden rounded-xl border border-border">
+            {["w-[70%]", "w-[52%]", "w-[61%]"].map((width) => (
+              <div
+                key={width}
+                className="flex flex-col gap-2.5 border-b border-hairline px-4 py-3.5 last:border-b-0"
+              >
+                <Skeleton className={cn("h-3 rounded-sm", width)} />
+                <div className="h-[3px] rounded-full bg-track" />
+                <Skeleton className="h-2.5 w-20 rounded-sm" />
+              </div>
+            ))}
+          </div>
+          <Skeleton className="h-80 flex-[2_1_380px] rounded-xl" />
+        </LoadingRegion>
       ) : !data.trackClicks ? (
         <EmptyState icon={MousePointerClickIcon} title="Click tracking was off">
           Links in this campaign went straight to their pages, so Envelopen has no clicks to show.
@@ -48,6 +65,7 @@ export function ClickMap({ campaignId }: { campaignId: number }) {
       ) : (
         <div className="flex flex-wrap gap-6">
           <ul
+            ref={list}
             aria-label="Links"
             className="m-0 flex min-w-0 flex-[1_1_260px] list-none flex-col gap-0 self-start overflow-hidden rounded-xl border border-border p-0"
           >
@@ -65,7 +83,10 @@ export function ClickMap({ campaignId }: { campaignId: number }) {
                 </div>
                 <div className="h-[3px] overflow-hidden rounded-full bg-track" aria-hidden="true">
                   <div
-                    className="h-[3px] rounded-full bg-chart-1"
+                    className={cn(
+                      "h-[3px] rounded-full bg-chart-1 transition-[width] duration-500 ease-(--ease-calm)",
+                      first && (seen ? "motion-grow-x" : "scale-x-0"),
+                    )}
                     style={{ width: `${barWidth(link.share)}%` }}
                   />
                 </div>

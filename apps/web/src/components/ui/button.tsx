@@ -1,7 +1,8 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
-import type { ComponentProps } from "react";
+import { Children, type ComponentProps, isValidElement, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { Spinner } from "./spinner";
 
 // Calm buttons: black primary, hairline outline, and quiet ghost. No gradients and no
 // heavy shadows. Triggers of destructive actions (erase, remove, revoke, delete, archive,
@@ -9,9 +10,12 @@ import { cn } from "@/lib/utils";
 // before the confirmation opens. The filled destructive variant is for the confirmation
 // itself. The brand (clay) variant is for the confirm-send button only.
 // Below the sm breakpoint every size is at least 44 px tall for touch.
+// Hover and press answer in 120 ms: the fill changes, and a press sinks the button by
+// a fraction. `pending` shows a spinner while a mutation runs. The label stays and the
+// width does not change.
 
 export const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] font-medium transition-[color,background-color,border-color,opacity,scale] duration-(--duration-press) ease-out active:scale-[0.98] disabled:pointer-events-none [&:disabled:not([data-pending])]:opacity-50 data-[pending]:opacity-80 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -40,15 +44,64 @@ export const buttonVariants = cva(
 export interface ButtonProps extends ComponentProps<"button">, VariantProps<typeof buttonVariants> {
   /** Renders the child element, for example a link, with the button styles. */
   asChild?: boolean;
+  /** A mutation runs: the button is disabled and shows a spinner. */
+  pending?: boolean;
 }
 
-export function Button({ className, variant, size, asChild = false, ...props }: ButtonProps) {
-  const Component = asChild ? Slot.Root : "button";
+/**
+ * The pending content. A leading icon gives its place to the spinner, so the label
+ * stays visible. A button without an icon keeps its label for screen readers and its
+ * width, and shows the spinner in the middle.
+ */
+function pendingContent(children: ReactNode): ReactNode {
+  const items = Children.toArray(children);
+  const [first, ...rest] = items;
+  if (isValidElement(first) && typeof first.type !== "string") {
+    return (
+      <>
+        <Spinner />
+        {rest}
+      </>
+    );
+  }
   return (
-    <Component
+    <>
+      <span className="inline-flex items-center gap-1.5 opacity-0">{children}</span>
+      <span className="absolute inset-0 flex items-center justify-center">
+        <Spinner />
+      </span>
+    </>
+  );
+}
+
+export function Button({
+  className,
+  variant,
+  size,
+  asChild = false,
+  pending = false,
+  disabled,
+  children,
+  ...props
+}: ButtonProps) {
+  const classes = cn(buttonVariants({ variant, size }), className);
+  if (asChild) {
+    return (
+      <Slot.Root data-slot="button" className={classes} {...props}>
+        {children}
+      </Slot.Root>
+    );
+  }
+  return (
+    <button
       data-slot="button"
-      className={cn(buttonVariants({ variant, size }), className)}
+      data-pending={pending ? "" : undefined}
+      aria-busy={pending || undefined}
+      disabled={disabled || pending}
+      className={classes}
       {...props}
-    />
+    >
+      {pending ? pendingContent(children) : children}
+    </button>
   );
 }

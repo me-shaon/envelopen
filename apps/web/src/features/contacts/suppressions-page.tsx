@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Pill, type Tone } from "@/components/ui/pill";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentWorkspace } from "@/components/workspace-context";
@@ -68,7 +69,7 @@ function AddForm() {
         />
       </Field>
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={add.isPending || emails.length === 0}>
+        <Button type="submit" pending={add.isPending} disabled={emails.length === 0}>
           <span>
             Suppress <Figure value={emails.length} />{" "}
             {emails.length === 1 ? "address" : "addresses"}
@@ -143,7 +144,7 @@ export function SuppressionsPage() {
               {errorText(suppressions.error)}
             </p>
           ) : suppressions.isPending ? (
-            <div className="h-32 rounded-xl border border-border bg-muted" />
+            <TableSkeleton label="Loading the suppression list" rows={4} columns={4} />
           ) : items.length === 0 ? (
             <EmptyState
               icon={ShieldOffIcon}
@@ -210,7 +211,7 @@ export function SuppressionsPage() {
               <Button
                 variant="outline"
                 onClick={() => void suppressions.fetchNextPage()}
-                disabled={suppressions.isFetchingNextPage}
+                pending={suppressions.isFetchingNextPage}
               >
                 Load more
               </Button>

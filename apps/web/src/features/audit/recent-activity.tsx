@@ -2,6 +2,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { Schemas } from "@/api/client";
 import { auditLogQuery, campaignsQuery } from "@/api/queries";
+import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime } from "@/features/contacts/shared";
 import { notableLabel } from "./actions";
 
@@ -65,6 +66,22 @@ export function RecentActivity({ workspaceId }: { workspaceId: number }) {
     (campaigns.data?.items ?? []).map((campaign) => [String(campaign.id), campaign.name]),
   );
   const items = group(log.data?.pages[0]?.items ?? [], names);
+
+  if (log.isPending) {
+    return (
+      <LoadingRegion label="Loading the activity" className="flex flex-col gap-3">
+        {["w-[88%]", "w-[72%]", "w-[80%]", "w-[64%]"].map((width) => (
+          <div key={width} className="grid grid-cols-[16px_minmax(0,1fr)] gap-3">
+            <span className="mt-[5px] size-2 rounded-full bg-track" />
+            <div className="flex flex-col gap-1.5 pt-0.5">
+              <Skeleton className={`h-3 rounded-sm ${width}`} />
+              <Skeleton className="h-2.5 w-24 rounded-sm" />
+            </div>
+          </div>
+        ))}
+      </LoadingRegion>
+    );
+  }
 
   if (items.length === 0) {
     return (

@@ -6,6 +6,7 @@ import { campaignStatsQuery } from "@/api/queries";
 import { SectionHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
+import { KpiSkeleton, LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
 import { ClickMap } from "./click-map";
@@ -23,7 +24,13 @@ export function CampaignResults({ campaignId }: { campaignId: number }) {
   const data = stats.data;
   if (!data) {
     return stats.isPending ? (
-      <div className="h-[132px] animate-pulse rounded-xl border border-border bg-muted" />
+      <section aria-labelledby="results-title" className="flex flex-col gap-4">
+        <h2 id="results-title" className="m-0 text-[15px] font-semibold tracking-[-0.01em]">
+          Results
+        </h2>
+        <KpiSkeleton label="Loading the results" />
+        <Skeleton className="h-[62px] rounded-xl" />
+      </section>
     ) : (
       <FormError message={errorText(stats.error)} />
     );
@@ -35,8 +42,17 @@ export function CampaignResults({ campaignId }: { campaignId: number }) {
         title="Results"
         aside={`${plural(data.sent, "email", "emails")} sent`}
       />
-      <KpiStrip label="Headline results" items={headlineKpis(data)} />
-      <KpiStrip label="Detail results" items={detailKpis(data)} compact />
+      <KpiStrip
+        label="Headline results"
+        items={headlineKpis(data)}
+        revealKey={`results-${campaignId}`}
+      />
+      <KpiStrip
+        label="Detail results"
+        items={detailKpis(data)}
+        compact
+        revealKey={`details-${campaignId}`}
+      />
       <ResultsNote stats={data} />
       <FollowUp stats={data} campaignId={campaignId} />
     </section>
@@ -47,7 +63,20 @@ export function CampaignResults({ campaignId }: { campaignId: number }) {
 export function CampaignEngagement({ campaignId }: { campaignId: number }) {
   const { current } = useCurrentWorkspace();
   const stats = useQuery(campaignStatsQuery(current.id, campaignId));
-  if (!stats.data) return null;
+  if (!stats.data) {
+    if (!stats.isPending) return null;
+    return (
+      <section aria-labelledby="engagement-title" className="flex flex-col gap-4">
+        <h2 id="engagement-title" className="m-0 text-[15px] font-semibold tracking-[-0.01em]">
+          First 48 hours
+        </h2>
+        <LoadingRegion label="Loading the chart" className="flex flex-col gap-3">
+          <Skeleton className="h-4 w-56 rounded-sm" />
+          <Skeleton className="h-[164px] rounded-xl" />
+        </LoadingRegion>
+      </section>
+    );
+  }
   return (
     <>
       <section aria-labelledby="engagement-title" className="flex flex-col gap-4">
@@ -56,7 +85,7 @@ export function CampaignEngagement({ campaignId }: { campaignId: number }) {
           title="First 48 hours"
           aside="By the hour, from the start of the send"
         />
-        <EngagementChart hours={stats.data.window.hours} />
+        <EngagementChart hours={stats.data.window.hours} revealKey={`chart-${campaignId}`} />
       </section>
       <ClickMap campaignId={campaignId} />
     </>
@@ -104,7 +133,8 @@ function FollowUp({ stats, campaignId }: { stats: CampaignStats; campaignId: num
       <Button
         variant="outline"
         size="sm"
-        disabled={!available || create.isPending}
+        disabled={!available}
+        pending={create.isPending}
         onClick={() => create.mutate()}
       >
         <ReplyIcon className="size-3.5" aria-hidden="true" />

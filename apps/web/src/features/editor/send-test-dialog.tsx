@@ -139,10 +139,11 @@ export function SendTestDialog({
             </Button>
             <Button
               type="submit"
-              disabled={send.isPending || recipients.length === 0 || !fromValue}
+              pending={send.isPending}
+              disabled={recipients.length === 0 || !fromValue}
             >
               <SendIcon className="size-3.5" aria-hidden="true" />
-              {send.isPending ? "Sending..." : "Send test"}
+              Send test
             </Button>
           </DialogFooter>
         </form>

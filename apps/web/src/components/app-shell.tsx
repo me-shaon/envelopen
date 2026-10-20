@@ -22,6 +22,7 @@ import { guideUrl } from "@/lib/guides";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "./ui/button";
+import { LoadingRegion, Skeleton } from "./ui/skeleton";
 import { UserMenu } from "./user-menu";
 import { WorkspaceContext, type WorkspaceContextValue } from "./workspace-context";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -42,7 +43,7 @@ const MAIN_NAV: NavItem[] = [
 const WORKSPACE_NAV: NavItem[] = [{ to: "/connections", label: "Connections", icon: PlugIcon }];
 
 const navClass =
-  "flex min-h-8 max-md:min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-sidebar-muted transition-colors hover:text-sidebar-foreground";
+  "flex min-h-8 max-md:min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-sidebar-muted transition-[color,background-color,box-shadow] duration-(--duration-press) ease-out hover:text-sidebar-foreground [&:not([aria-current=page])]:hover:bg-sidebar-accent/60";
 const activeClass = "bg-sidebar-accent font-medium text-sidebar-foreground shadow-raised";
 
 function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
@@ -113,6 +114,52 @@ function SidebarContent({
 }
 
 /**
+ * The first load: the frame of the shell with placeholder blocks where the workspace,
+ * the navigation, and the page will be. The sidebar and the header keep their sizes, so
+ * nothing moves when the real shell replaces it.
+ */
+function ShellSkeleton() {
+  return (
+    <LoadingRegion label="Loading Envelopen" className="flex min-h-screen bg-background">
+      <div className="hidden w-[232px] shrink-0 border-r border-sidebar-border bg-sidebar md:block">
+        <div className="flex h-screen flex-col gap-6 px-3 py-5">
+          <div className="px-2">
+            <Logo />
+          </div>
+          <Skeleton className="h-10 rounded-[10px]" />
+          <div className="flex flex-col gap-3 px-2.5 pt-1">
+            {["w-20", "w-24", "w-[70px]", "w-[76px]"].map((width) => (
+              <div key={width} className="flex h-5 items-center gap-2.5">
+                <Skeleton className="size-4 rounded-[5px]" />
+                <Skeleton className={`h-3 rounded-sm ${width}`} />
+              </div>
+            ))}
+          </div>
+          <div className="mt-auto flex flex-col gap-3">
+            <Skeleton className="h-[92px] rounded-[10px]" />
+            <Skeleton className="h-10 rounded-lg" />
+          </div>
+        </div>
+      </div>
+      <div className="min-w-0 flex-1 px-4 pb-16 sm:px-10">
+        <div className="mx-auto flex h-[73px] max-w-[1120px] items-center justify-end gap-2 border-b border-hairline">
+          <Skeleton className="size-9 rounded-[9px]" />
+          <Skeleton className="h-9 w-[132px] rounded-[9px]" />
+        </div>
+        <div className="mx-auto flex max-w-[1120px] flex-col gap-12 pt-10">
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-[34px] w-[260px]" />
+            <Skeleton className="h-4 w-[340px] max-w-full rounded-sm" />
+          </div>
+          <Skeleton className="h-[132px] rounded-xl" />
+          <Skeleton className="h-[220px] rounded-xl" />
+        </div>
+      </div>
+    </LoadingRegion>
+  );
+}
+
+/**
  * The frame of every signed-in page: the sidebar, the header, and the content in a
  * 1,120 px container. It resolves the current workspace before the page loads data.
  */
@@ -143,21 +190,15 @@ export function AppShell() {
         </p>
         <Button
           variant="outline"
-          disabled={workspaces.isFetching}
+          pending={workspaces.isFetching}
           onClick={() => void workspaces.refetch()}
         >
-          {workspaces.isFetching ? "Trying again..." : "Try again"}
+          Try again
         </Button>
       </div>
     );
   }
-  if (!user || !current || current.id !== storedId) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
-        <span className="sr-only">Loading</span>
-      </div>
-    );
-  }
+  if (!user || !current || current.id !== storedId) return <ShellSkeleton />;
 
   const workspace: WorkspaceContextValue = { current, workspaces: items };
 
@@ -183,10 +224,10 @@ export function AppShell() {
                   </Button>
                 </DialogPrimitive.Trigger>
                 <DialogPrimitive.Portal>
-                  <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-[rgb(26_25_23/0.28)] md:hidden dark:bg-black/60" />
+                  <DialogPrimitive.Overlay className="motion-overlay fixed inset-0 z-40 bg-[rgb(26_25_23/0.28)] md:hidden dark:bg-black/60" />
                   <DialogPrimitive.Content
                     aria-label="Menu"
-                    className="fixed inset-y-0 left-0 z-50 w-[260px] border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:hidden"
+                    className="motion-sheet fixed inset-y-0 left-0 z-50 w-[260px] border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:hidden"
                   >
                     <DialogPrimitive.Title className="sr-only">Menu</DialogPrimitive.Title>
                     <DialogPrimitive.Description className="sr-only">

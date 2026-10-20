@@ -1,9 +1,14 @@
+import { useRef } from "react";
+import { CountUp } from "@/components/count-up";
+import { useFirstReveal, useSeen } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import { barWidth, type CampaignStats, formatRate, plural } from "./format";
+import { barWidth, type CampaignStats, formatCount, formatRate, plural } from "./format";
 
 // The KPI strip of the Calm direction: large mono figures over hairline bars in the
 // pastel data colors. The overview shows the four headline numbers of the latest
 // campaign. The campaign view adds a compact second row with the detail numbers (R46).
+// On the first view in a session, the figures count up and the bars grow from zero. A
+// poll or a refetch shows new numbers in place, without a second count.
 
 export interface Kpi {
   key: string;
@@ -17,20 +22,29 @@ export interface Kpi {
   color: string;
   /** The figure is a word or a dash, not a number, for example "Not reported". */
   muted?: boolean;
+  /** The number behind `value` and its format, so the figure can count up to it. */
+  count?: { value: number; format: (value: number) => string };
 }
 
 export function KpiStrip({
   items,
   label,
   compact = false,
+  revealKey,
 }: {
   items: Kpi[];
   label: string;
   /** A quieter row for the secondary numbers: smaller figures and no bars. */
   compact?: boolean;
+  /** Counts up on the first view of this key in the session. */
+  revealKey?: string;
 }) {
+  const ref = useRef<HTMLUListElement>(null);
+  const first = useFirstReveal(revealKey ?? null);
+  const seen = useSeen(ref, first);
   return (
     <ul
+      ref={ref}
       aria-label={label}
       // The 1 px gaps show the border color between the cells, so the lines stay whole
       // when the four cells wrap into two rows.
@@ -60,12 +74,20 @@ export function KpiStrip({
                     : "text-[30px]",
             )}
           >
-            {kpi.value}
+            {kpi.count && !kpi.muted ? (
+              <CountUp value={kpi.count.value} format={kpi.count.format} armed={first} go={seen} />
+            ) : (
+              kpi.value
+            )}
           </span>
           {compact ? null : (
             <div className="h-[3px] overflow-hidden rounded-full bg-track" aria-hidden="true">
               <div
-                className={cn("h-[3px] rounded-full", kpi.color)}
+                className={cn(
+                  "h-[3px] rounded-full transition-[width] duration-500 ease-(--ease-calm)",
+                  kpi.color,
+                  first && (seen ? "motion-grow-x" : "scale-x-0"),
+                )}
                 style={{ width: `${barWidth(kpi.share)}%` }}
               />
             </div>
@@ -75,6 +97,15 @@ export function KpiStrip({
       ))}
     </ul>
   );
+}
+
+/** A rate that can count up, or nothing when the rate has no base. */
+function rate(value: number | null | undefined): Kpi["count"] {
+  return value == null ? undefined : { value, format: formatRate };
+}
+
+function roundCount(value: number): string {
+  return formatCount(Math.round(value));
 }
 
 /** Delivered, opened by people, clicked, and unsubscribed: the headline numbers. */
@@ -94,6 +125,7 @@ export function headlineKpis(stats: CampaignStats): Kpi[] {
           key: "delivered",
           label: "Delivered",
           value: formatRate(stats.rates.delivered),
+          count: rate(stats.rates.delivered),
           share: stats.rates.delivered,
           detail: plural(stats.delivered, "inbox", "inboxes"),
           color: "bg-chart-2",
@@ -105,6 +137,7 @@ export function headlineKpis(stats: CampaignStats): Kpi[] {
           key: "opened",
           label: "Opened by people",
           value: formatRate(stats.rates.open),
+          count: rate(stats.rates.open),
           share: stats.rates.open,
           detail: plural(stats.uniqueOpens, "contact", "contacts"),
           color: "bg-chart-1",
@@ -123,6 +156,7 @@ export function headlineKpis(stats: CampaignStats): Kpi[] {
           key: "clicked",
           label: "Clicked",
           value: formatRate(stats.rates.click),
+          count: rate(stats.rates.click),
           share: stats.rates.click,
           detail: plural(stats.uniqueClicks, "contact", "contacts"),
           color: "bg-chart-3",
@@ -140,6 +174,7 @@ export function headlineKpis(stats: CampaignStats): Kpi[] {
       key: "unsubscribed",
       label: "Unsubscribed",
       value: formatRate(stats.rates.unsubscribe),
+      count: rate(stats.rates.unsubscribe),
       share: stats.rates.unsubscribe,
       detail: plural(stats.unsubscribes, "contact", "contacts"),
       color: "bg-chart-4",
@@ -154,6 +189,7 @@ export function detailKpis(stats: CampaignStats): Kpi[] {
       key: "click-to-open",
       label: "Click-to-open",
       value: formatRate(stats.rates.clickToOpen),
+      count: rate(stats.rates.clickToOpen),
       share: stats.rates.clickToOpen,
       detail: "Clickers among people who opened",
       color: "bg-chart-3",
@@ -162,6 +198,7 @@ export function detailKpis(stats: CampaignStats): Kpi[] {
       key: "machine-opens",
       label: "Machine opens",
       value: stats.tracking.opens ? String(stats.machineOpens.toLocaleString()) : "-",
+      ...(stats.tracking.opens ? { count: { value: stats.machineOpens, format: roundCount } } : {}),
       share: stats.sent > 0 ? Math.min(1, stats.machineOpens / stats.sent) : null,
       detail: "Loaded by mail privacy tools, not people",
       color: "bg-chart-4",
@@ -170,6 +207,7 @@ export function detailKpis(stats: CampaignStats): Kpi[] {
       key: "bounced",
       label: "Bounced",
       value: formatRate(stats.rates.bounce),
+      count: rate(stats.rates.bounce),
       share: stats.rates.bounce,
       detail: `${stats.bouncesHard.toLocaleString()} hard, ${stats.bouncesSoft.toLocaleString()} soft`,
       color: "bg-chart-1",
@@ -178,6 +216,7 @@ export function detailKpis(stats: CampaignStats): Kpi[] {
       key: "complaints",
       label: "Complaints",
       value: formatRate(stats.rates.complaint),
+      count: rate(stats.rates.complaint),
       share: stats.rates.complaint,
       detail: plural(stats.complaints, "spam report", "spam reports"),
       color: "bg-chart-2",

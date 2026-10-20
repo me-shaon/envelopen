@@ -14,6 +14,8 @@ import { SectionHeader } from "@/components/page-header";
 import { ConfirmDialog } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
+import { ListSkeleton, LoadingRegion, Skeleton } from "@/components/ui/skeleton";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, formatDateTime, PageTop } from "@/features/contacts/shared";
 import { ConnectDialog, PolicyDialog, PolicyPill, WebhookDialog } from "./dialogs";
@@ -52,7 +54,10 @@ function ConnectionCard({
   const select = useMutation({
     mutationFn: () =>
       unwrap(api.POST("/connections/{id}/select", { params: { path: { id: connection.id } } })),
-    onSuccess: invalidate,
+    onSuccess: async () => {
+      await invalidate();
+      toast(`${connection.name} now sends your email.`);
+    },
   });
   const status = CONNECTION_STATUS[connection.status];
   const needsAcceptance =
@@ -86,7 +91,7 @@ function ConnectionCard({
             <Button
               variant="outline"
               size="sm"
-              disabled={select.isPending}
+              pending={select.isPending}
               onClick={() => select.mutate()}
             >
               Use for sending
@@ -95,11 +100,11 @@ function ConnectionCard({
           <Button
             variant="outline"
             size="sm"
-            disabled={check.isPending}
+            pending={check.isPending}
             onClick={() => check.mutate()}
           >
             <RefreshCwIcon className="size-3" aria-hidden="true" />
-            {check.isPending ? "Checking..." : "Check"}
+            Check
           </Button>
           <Button variant="destructive-ghost" size="sm" onClick={() => onRemove(connection)}>
             Remove<span className="sr-only"> {connection.name}</span>
@@ -235,7 +240,7 @@ export function ConnectionsPage() {
               {errorText(connections.error)}
             </p>
           ) : connections.isPending ? (
-            <div className="h-40 rounded-xl border border-border bg-muted" />
+            <ListSkeleton label="Loading the connections" rows={1} className="[&>div]:py-6" />
           ) : items.length === 0 ? (
             <EmptyState icon={PlugIcon} title="No provider connected">
               Pick a provider below and paste its API key. Envelopen checks the key and sets up
@@ -269,6 +274,26 @@ export function ConnectionsPage() {
             <p role="alert" className="m-0 text-[13px] text-muted-foreground">
               {errorText(providers.error)}
             </p>
+          ) : providers.isPending ? (
+            <LoadingRegion
+              label="Loading the providers"
+              className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3"
+            >
+              {["ses", "resend", "postmark", "smtp", "other"].map((key) => (
+                <div
+                  key={key}
+                  className="flex h-[150px] flex-col gap-3 rounded-xl border border-border p-4"
+                >
+                  <Skeleton className="h-4 w-28 rounded-sm" />
+                  <Skeleton className="h-3 w-[90%] rounded-sm" />
+                  <Skeleton className="h-3 w-[70%] rounded-sm" />
+                  <div className="mt-auto flex items-center justify-between">
+                    <Skeleton className="h-3 w-24 rounded-sm" />
+                    <Skeleton className="h-[30px] w-[72px]" />
+                  </div>
+                </div>
+              ))}
+            </LoadingRegion>
           ) : (
             <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3 p-0">
               {(providers.data?.providers ?? []).map((provider) => (

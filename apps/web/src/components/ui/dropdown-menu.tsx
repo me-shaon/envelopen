@@ -16,7 +16,7 @@ export function DropdownMenuContent({
       <MenuPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-[220px] rounded-xl bg-popover p-1 text-popover-foreground shadow-popover",
+          "motion-pop motion-menu z-50 min-w-[220px] rounded-xl bg-popover p-1 text-popover-foreground shadow-popover",
           className,
         )}
         {...props}
@@ -26,7 +26,7 @@ export function DropdownMenuContent({
 }
 
 const itemClass =
-  "relative flex min-h-8 max-sm:min-h-11 cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[13px] outline-none data-[highlighted]:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0";
+  "relative flex min-h-8 max-sm:min-h-11 cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[13px] outline-none transition-colors duration-(--duration-press) data-[highlighted]:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0";
 
 export function DropdownMenuItem({
   className,

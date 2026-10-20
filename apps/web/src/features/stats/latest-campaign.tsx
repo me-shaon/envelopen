@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
 import { latestStatsQuery } from "@/api/queries";
 import { SectionHeader } from "@/components/page-header";
+import { KpiSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { formatWhen } from "@/features/campaigns/shared";
 import { formatCount, plural } from "./format";
@@ -25,14 +26,25 @@ export function LatestCampaign() {
   const campaign = latest.data?.campaign ?? null;
   const stats = latest.data?.stats ?? null;
 
+  if (latest.isPending) {
+    return (
+      <section aria-labelledby="results-title" className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h2 id="results-title" className="m-0 text-[15px] font-semibold tracking-[-0.01em]">
+            Latest campaign
+          </h2>
+          <Skeleton className="h-3.5 w-56 rounded-sm" />
+        </div>
+        <KpiSkeleton label="Loading the latest campaign results" />
+        <Skeleton className="h-3 w-[60%] rounded-sm" />
+      </section>
+    );
+  }
+
   if (!campaign || !stats) {
     return (
       <section aria-labelledby="results-title" className="flex flex-col gap-4">
-        <SectionHeader
-          id="results-title"
-          title="Latest campaign"
-          aside={latest.isPending ? null : "No campaign sent yet"}
-        />
+        <SectionHeader id="results-title" title="Latest campaign" aside="No campaign sent yet" />
         <KpiStrip label="Latest campaign results" items={EMPTY} />
         <span className="text-xs text-muted-foreground">
           Rates appear here after the first campaign is sent. Machine opens are counted apart from
@@ -70,7 +82,11 @@ export function LatestCampaign() {
           <ChevronRightIcon className="size-3" strokeWidth={2.2} aria-hidden="true" />
         </Link>
       </div>
-      <KpiStrip label="Latest campaign results" items={headlineKpis(stats)} />
+      <KpiStrip
+        label="Latest campaign results"
+        items={headlineKpis(stats)}
+        revealKey={`latest-${campaign.id}`}
+      />
       <span className="text-xs text-muted-foreground">
         {stats.tracking.opens
           ? `${formatCount(stats.machineOpens)} machine ${stats.machineOpens === 1 ? "open is" : "opens are"} counted apart from human opens.`

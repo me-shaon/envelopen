@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowUpRightIcon, CheckIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { Collapsible } from "radix-ui";
+import { type ReactNode, useEffect, useState } from "react";
 import type { Schemas } from "@/api/client";
 import { onboardingQuery } from "@/api/queries";
 import { SectionHeader } from "@/components/page-header";
 import { Pill, type Tone } from "@/components/ui/pill";
+import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { guideUrl } from "@/lib/guides";
 import { cn } from "@/lib/utils";
@@ -13,6 +15,7 @@ import { cn } from "@/lib/utils";
 // The onboarding checklist (U5): connect a provider, verify a domain, import contacts,
 // and send a test. The onboarding.status operation derives each state. When every step
 // is done, the checklist folds into one quiet line, and the owner can open it again.
+// The steps then unfold under the line, and the height follows them.
 
 type Step = Schemas["OnboardingStep"];
 type StepId = Step["id"];
@@ -178,50 +181,101 @@ export function useOnboarding() {
   return useQuery(onboardingQuery(current.id));
 }
 
-/** The folded checklist: one line once every step is done. */
-function SetupComplete({ total, onShow }: { total: number; onShow: () => void }) {
+function StepGrid({ steps }: { steps: Step[] }) {
   return (
-    <section
-      aria-label="Setup"
-      data-testid="onboarding-complete"
-      className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-muted-foreground"
-    >
-      <span
-        className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-tone-teal text-tone-teal-foreground"
-        aria-hidden="true"
-      >
-        <CheckIcon className="size-2.5" strokeWidth={3} />
-      </span>
-      <span>
-        <span className="font-medium text-foreground">Setup complete.</span>{" "}
-        <span className="figure">{total}</span> of <span className="figure">{total}</span> steps
-        done.
-      </span>
-      <button
-        type="button"
-        onClick={onShow}
-        className="inline-flex min-h-[30px] max-sm:min-h-11 items-center text-[12.5px] font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-      >
-        Show the steps
-      </button>
-    </section>
+    <ol className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3 p-0">
+      {steps.map((step, index) => (
+        <StepCard key={step.id} step={step} index={index} />
+      ))}
+    </ol>
   );
 }
 
+/** The folded checklist: one line once every step is done, with the steps under it. */
+function SetupComplete({ steps, total }: { steps: Step[]; total: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible.Root open={open} onOpenChange={setOpen} asChild>
+      <section aria-label="Setup" className="flex flex-col">
+        <div
+          data-testid="onboarding-complete"
+          className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-muted-foreground"
+        >
+          <span
+            className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-tone-teal text-tone-teal-foreground"
+            aria-hidden="true"
+          >
+            <CheckIcon className="size-2.5" strokeWidth={3} />
+          </span>
+          <span>
+            <span className="font-medium text-foreground">Setup complete.</span>{" "}
+            <span className="figure">{total}</span> of <span className="figure">{total}</span> steps
+            done.
+          </span>
+          <Collapsible.Trigger className="inline-flex min-h-[30px] cursor-pointer items-center text-[12.5px] font-medium text-muted-foreground underline-offset-4 transition-colors duration-(--duration-press) hover:text-foreground hover:underline max-sm:min-h-11">
+            {open ? "Hide the steps" : "Show the steps"}
+          </Collapsible.Trigger>
+        </div>
+        <Collapsible.Content className="motion-collapsible">
+          {/* Padding instead of a gap, so the space folds with the steps. */}
+          <div className="pt-4">
+            <StepGrid steps={steps} />
+          </div>
+        </Collapsible.Content>
+      </section>
+    </Collapsible.Root>
+  );
+}
+
+// Remembers that setup was complete, so the loading state can take the shape of the
+// one-line summary instead of four cards. A hint only: the query always decides.
+const COMPLETE_KEY = "envelopen.setup-complete";
+
+function readCompleteHint(workspaceId: number): boolean {
+  try {
+    return localStorage.getItem(`${COMPLETE_KEY}.${workspaceId}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeCompleteHint(workspaceId: number, complete: boolean) {
+  try {
+    if (complete) localStorage.setItem(`${COMPLETE_KEY}.${workspaceId}`, "1");
+    else localStorage.removeItem(`${COMPLETE_KEY}.${workspaceId}`);
+  } catch {
+    // No storage: the loading state shows the cards.
+  }
+}
+
 export function OnboardingChecklist() {
+  const { current } = useCurrentWorkspace();
   const onboarding = useOnboarding();
   const data = onboarding.data;
-  const [expanded, setExpanded] = useState(false);
+  const complete = data ? data.completed >= data.total : undefined;
 
-  if (data && data.completed >= data.total && !expanded) {
-    return <SetupComplete total={data.total} onShow={() => setExpanded(true)} />;
+  useEffect(() => {
+    if (complete !== undefined) writeCompleteHint(current.id, complete);
+  }, [complete, current.id]);
+
+  if (data && complete) {
+    return <SetupComplete steps={data.steps} total={data.total} />;
+  }
+
+  if (!data && !onboarding.isError && readCompleteHint(current.id)) {
+    return (
+      <LoadingRegion label="Loading the setup status" className="flex items-center gap-2.5">
+        <Skeleton className="size-[18px] rounded-full" />
+        <Skeleton className="h-3.5 w-56 rounded-sm" />
+      </LoadingRegion>
+    );
   }
 
   return (
     <section aria-labelledby="onboarding-title" className="flex flex-col gap-4">
       <SectionHeader
         id="onboarding-title"
-        title={data && data.completed >= data.total ? "Setup steps" : "Finish setting up"}
+        title="Finish setting up"
         aside={
           data ? (
             <span data-testid="onboarding-progress">
@@ -235,14 +289,28 @@ export function OnboardingChecklist() {
         <p role="alert" className="m-0 text-[13px] text-muted-foreground">
           The checklist did not load. Reload the page to try again.
         </p>
+      ) : data ? (
+        <StepGrid steps={data.steps} />
       ) : (
-        <ol className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3 p-0">
-          {data
-            ? data.steps.map((step, index) => <StepCard key={step.id} step={step} index={index} />)
-            : [0, 1, 2, 3].map((key) => (
-                <li key={key} className="h-[260px] rounded-xl border border-border bg-muted" />
-              ))}
-        </ol>
+        <LoadingRegion
+          label="Loading the setup steps"
+          className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3"
+        >
+          {[0, 1, 2, 3].map((key) => (
+            <div
+              key={key}
+              className="flex h-[260px] flex-col overflow-hidden rounded-xl border border-border"
+            >
+              <Skeleton className="h-[112px] rounded-none" />
+              <div className="flex flex-col gap-2.5 p-4">
+                <Skeleton className="h-3.5 w-[60%] rounded-sm" />
+                <Skeleton className="h-4 w-14 rounded-full" />
+                <Skeleton className="h-3 w-[90%] rounded-sm" />
+                <Skeleton className="h-3 w-[70%] rounded-sm" />
+              </div>
+            </div>
+          ))}
+        </LoadingRegion>
       )}
     </section>
   );

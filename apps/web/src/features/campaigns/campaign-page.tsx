@@ -10,6 +10,8 @@ import { ConfirmDialog } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
+import { Reveal } from "@/components/ui/reveal";
+import { KpiSkeleton, LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, Figure } from "@/features/contacts/shared";
 import { CampaignEngagement, CampaignResults } from "@/features/stats/campaign-stats";
@@ -102,7 +104,7 @@ export function CampaignPage({ campaignId }: { campaignId: number }) {
 
   let page: ReactNode;
   if (campaign.isPending) {
-    page = <div className="h-40 rounded-xl border border-border bg-muted" />;
+    page = <CampaignSkeleton />;
   } else if (!campaign.data) {
     page = (
       <div className="flex flex-col gap-8">
@@ -129,6 +131,28 @@ export function CampaignPage({ campaignId }: { campaignId: number }) {
       </div>
       {page}
     </>
+  );
+}
+
+/** The campaign page while it loads: the header, then the progress strip. */
+function CampaignSkeleton() {
+  return (
+    <LoadingRegion label="Loading the campaign" className="flex flex-col gap-12">
+      <div className="flex flex-col gap-3">
+        <BackLink />
+        <div className="flex flex-col gap-2.5">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-[34px] w-[300px] max-w-[70%]" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-[360px] max-w-full rounded-sm" />
+        </div>
+      </div>
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-4 w-24 rounded-sm" />
+        <KpiSkeleton label="Loading the progress" />
+      </div>
+    </LoadingRegion>
   );
 }
 
@@ -227,9 +251,13 @@ function EstimatePanel({ campaign }: { campaign: Detail }) {
       <h2 id="estimate-title" className="m-0 text-[13px] font-semibold">
         Recipients
       </h2>
-      <span className="figure text-[26px] leading-[1.1]" data-testid="draft-estimate">
-        {data ? data.recipients.toLocaleString() : "-"}
-      </span>
+      {data || !estimate.isPending ? (
+        <span className="figure text-[26px] leading-[1.1]" data-testid="draft-estimate">
+          {data ? data.recipients.toLocaleString() : "-"}
+        </span>
+      ) : (
+        <Skeleton className="h-[29px] w-24" />
+      )}
       <span className="text-xs text-muted-foreground">
         An estimate from the saved audience. The final list is taken when the send starts.
       </span>
@@ -289,8 +317,9 @@ function Kpis({ campaign }: { campaign: Detail }) {
             <span className="text-xs text-muted-foreground">{item.label}</span>
             <Figure value={item.value} className="text-[26px] leading-[1.1]" />
             <div className="h-[3px] overflow-hidden rounded-full bg-track">
+              {/* The bar eases to each new count while the campaign sends. */}
               <div
-                className={`h-[3px] rounded-full ${KPI_COLORS[item.key]}`}
+                className={`h-[3px] rounded-full transition-[width] duration-700 ease-(--ease-calm) ${KPI_COLORS[item.key]}`}
                 style={{ width: `${total > 0 ? Math.min(100, (item.value / total) * 100) : 0}%` }}
               />
             </div>
@@ -301,7 +330,37 @@ function Kpis({ campaign }: { campaign: Detail }) {
   );
 }
 
+/**
+ * A state banner. It is in place on page load, and it slides in or folds away when the
+ * status changes while the page is open.
+ */
 function Banner({
+  show,
+  tone,
+  title,
+  children,
+  action,
+}: {
+  show: boolean;
+  tone: "salmon" | "lavender" | "danger";
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    // The negative margin cancels the page gap while the banner is folded, and the
+    // padding restores it inside the fold, so the gap opens and closes with the banner.
+    <Reveal show={show} appear={false} className="-mt-12">
+      <div className="pt-12">
+        <BannerBody tone={tone} title={title} action={action}>
+          {children}
+        </BannerBody>
+      </div>
+    </Reveal>
+  );
+}
+
+function BannerBody({
   tone,
   title,
   children,
@@ -382,6 +441,7 @@ function CampaignView({
             {status === "sending" ? (
               <Button
                 variant="outline"
+                pending={action.isPending && action.variables === "pause"}
                 disabled={action.isPending}
                 onClick={() => action.mutate("pause")}
               >
@@ -392,6 +452,7 @@ function CampaignView({
             {status === "scheduled" ? (
               <Button
                 variant="outline"
+                pending={action.isPending && action.variables === "unschedule"}
                 disabled={action.isPending}
                 onClick={() => action.mutate("unschedule")}
               >
@@ -408,37 +469,50 @@ function CampaignView({
       />
       <FormError message={errorText(action.error)} />
 
-      {notice ? <SendBanner notice={notice} onDismiss={onDismissNotice} /> : null}
-      {status === "paused" && reason ? (
-        <Banner
-          tone="salmon"
-          title={PAUSE_REASONS[reason]}
-          action={
-            reason === "platform_limit" ? null : (
-              <Button size="sm" disabled={action.isPending} onClick={() => action.mutate("resume")}>
-                <PlayIcon className="size-3.5" aria-hidden="true" />
-                Resume
-              </Button>
-            )
-          }
-        >
-          {reason === "platform_limit"
-            ? `Sending resumes on its own after ${campaign.resumeAt ? formatUtc(campaign.resumeAt) : "00:00 UTC"}. Workers Paid has no daily limit.`
-            : (campaign.pauseDetail ??
-              `Paused ${formatWhen(campaign.pausedAt)}. Queued batches wait until you resume.`)}
-        </Banner>
-      ) : null}
-      {status === "scheduled" && notice === null ? (
-        <Banner tone="lavender" title={`Scheduled for ${formatWhen(campaign.scheduledAt)}`}>
-          Envelopen takes the recipient list and starts sending at that time. Unschedule to edit the
-          campaign.
-        </Banner>
-      ) : null}
-      {status === "needs_decision" ? (
-        <Banner tone="danger" title="Some batches need your decision">
-          The provider did not confirm every send. Decide below whether to retry or skip each batch.
-        </Banner>
-      ) : null}
+      {/* The send banner slides in after the confirm and folds away on dismiss. */}
+      <Reveal show={notice !== null} className="-mt-12">
+        <div className="pt-12">
+          {notice ? <SendBanner notice={notice} onDismiss={onDismissNotice} /> : null}
+        </div>
+      </Reveal>
+      <Banner
+        show={status === "paused" && reason !== null}
+        tone="salmon"
+        title={reason ? PAUSE_REASONS[reason] : ""}
+        action={
+          reason === "platform_limit" ? null : (
+            <Button
+              size="sm"
+              pending={action.isPending && action.variables === "resume"}
+              disabled={action.isPending}
+              onClick={() => action.mutate("resume")}
+            >
+              <PlayIcon className="size-3.5" aria-hidden="true" />
+              Resume
+            </Button>
+          )
+        }
+      >
+        {reason === "platform_limit"
+          ? `Sending resumes on its own after ${campaign.resumeAt ? formatUtc(campaign.resumeAt) : "00:00 UTC"}. Workers Paid has no daily limit.`
+          : (campaign.pauseDetail ??
+            `Paused ${formatWhen(campaign.pausedAt)}. Queued batches wait until you resume.`)}
+      </Banner>
+      <Banner
+        show={status === "scheduled" && notice === null}
+        tone="lavender"
+        title={`Scheduled for ${formatWhen(campaign.scheduledAt)}`}
+      >
+        Envelopen takes the recipient list and starts sending at that time. Unschedule to edit the
+        campaign.
+      </Banner>
+      <Banner
+        show={status === "needs_decision"}
+        tone="danger"
+        title="Some batches need your decision"
+      >
+        The provider did not confirm every send. Decide below whether to retry or skip each batch.
+      </Banner>
 
       {campaign.startedAt !== null ? <CampaignResults campaignId={campaign.id} /> : null}
       <Kpis campaign={campaign} />
@@ -560,6 +634,11 @@ function UncertainBatches({ campaign }: { campaign: Detail }) {
                 <Button
                   size="sm"
                   variant="outline"
+                  pending={
+                    decide.isPending &&
+                    decide.variables?.batch.id === batch.id &&
+                    decide.variables.decision === "skip"
+                  }
                   disabled={decide.isPending}
                   onClick={() => decide.mutate({ batch, decision: "skip" })}
                 >

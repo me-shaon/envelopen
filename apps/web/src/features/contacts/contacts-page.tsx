@@ -17,9 +17,12 @@ import { FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Pill } from "@/components/ui/pill";
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { Refreshing } from "@/components/ui/spinner";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   CONSENT,
   ContactsNav,
@@ -49,7 +52,7 @@ function StatStrip() {
         <div className="flex flex-col gap-2 bg-background p-[18px]">
           <span className="text-xs text-muted-foreground">Contacts</span>
           <span className="text-[26px] leading-[1.1]" data-testid="contacts-total">
-            {data ? <Figure value={data.total} /> : <span className="figure">-</span>}
+            {data ? <Figure value={data.total} /> : <Skeleton className="h-[29px] w-16" />}
           </span>
           <div className="h-[3px] rounded-full bg-track" />
           <span className="text-xs text-muted-foreground">In {current.name}</span>
@@ -61,11 +64,11 @@ function StatStrip() {
             <div key={stat.key} className="flex flex-col gap-2 bg-background p-[18px]">
               <span className="text-xs text-muted-foreground">{stat.label}</span>
               <span className="text-[26px] leading-[1.1]">
-                {data ? <Figure value={value} /> : <span className="figure">-</span>}
+                {data ? <Figure value={value} /> : <Skeleton className="h-[29px] w-14" />}
               </span>
               <div className="h-[3px] overflow-hidden rounded-full bg-track">
                 <div
-                  className={`h-[3px] rounded-full ${stat.color}`}
+                  className={`h-[3px] rounded-full transition-[width] duration-500 ease-(--ease-calm) ${stat.color}`}
                   style={{ width: `${share}%` }}
                 />
               </div>
@@ -314,8 +317,8 @@ function ExportDialog({
               </a>
             </Button>
           ) : (
-            <Button onClick={() => create.mutate()} disabled={create.isPending}>
-              {create.isPending ? "Exporting" : "Create export"}
+            <Button onClick={() => create.mutate()} pending={create.isPending}>
+              Create export
             </Button>
           )}
         </DialogFooter>
@@ -385,54 +388,65 @@ export function ContactsPage({
         ) : (
           <>
             <Filters filters={filters} onChange={onFiltersChange} />
-            <div className="text-xs text-muted-foreground" aria-live="polite">
-              {matching.data ? (
-                <>
-                  <Figure value={matching.data.matching} />{" "}
-                  {matching.data.matching === 1 ? "contact" : "contacts"}
-                  {filtered ? " match the filters" : ""}
-                </>
-              ) : (
-                " "
-              )}
+            <div className="flex min-h-[18px] items-center gap-3">
+              <div className="text-xs text-muted-foreground" aria-live="polite">
+                {matching.data ? (
+                  <>
+                    <Figure value={matching.data.matching} />{" "}
+                    {matching.data.matching === 1 ? "contact" : "contacts"}
+                    {filtered ? " match the filters" : ""}
+                  </>
+                ) : (
+                  " "
+                )}
+              </div>
+              {/* The old rows stay while new filters load. This note says they are updating. */}
+              <Refreshing active={contacts.isPlaceholderData && contacts.isFetching} />
             </div>
             {contacts.isError ? (
               <p role="alert" className="m-0 text-[13px] text-muted-foreground">
                 The contacts did not load. {errorText(contacts.error)}
               </p>
             ) : contacts.isPending ? (
-              <div className="h-48 rounded-xl border border-border bg-muted" />
+              <TableSkeleton label="Loading the contacts" rows={6} columns={6} />
             ) : items.length === 0 ? (
               <EmptyState icon={SearchIcon} title="No contacts match">
                 Change or clear the filters.
               </EmptyState>
             ) : (
-              <Table aria-label="Contacts">
-                <thead>
-                  <tr>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Consent</TableHead>
-                    <TableHead>Tags</TableHead>
-                    <TableHead>Lists</TableHead>
-                    <TableHead>Added</TableHead>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((contact) => (
-                    <ContactRow key={contact.id} contact={contact} />
-                  ))}
-                </tbody>
-              </Table>
+              <div
+                className={cn(
+                  "transition-opacity duration-(--duration-enter)",
+                  contacts.isPlaceholderData && contacts.isFetching && "opacity-60",
+                )}
+              >
+                <Table aria-label="Contacts">
+                  <thead>
+                    <tr>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Consent</TableHead>
+                      <TableHead>Tags</TableHead>
+                      <TableHead>Lists</TableHead>
+                      <TableHead>Added</TableHead>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((contact) => (
+                      <ContactRow key={contact.id} contact={contact} />
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
             )}
             {contacts.hasNextPage ? (
               <div>
                 <Button
                   variant="outline"
                   onClick={() => void contacts.fetchNextPage()}
-                  disabled={contacts.isFetchingNextPage}
+                  pending={contacts.isFetchingNextPage}
                 >
-                  {contacts.isFetchingNextPage ? "Loading" : "Load more"}
+                  Load more
                 </Button>
               </div>
             ) : null}

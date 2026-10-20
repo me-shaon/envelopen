@@ -4,6 +4,7 @@ import { type ReactNode, useState } from "react";
 import type { Schemas } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import type { Tone } from "@/components/ui/pill";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 // Pieces that the provider and domain pages share.
@@ -54,7 +55,7 @@ export function ConnectionsNav() {
           key={tab.to}
           to={tab.to}
           activeOptions={{ exact: tab.to === "/connections", includeSearch: false }}
-          className="-mb-px border-b-2 px-2.5 pt-1 pb-2.5 text-[13px] hover:text-foreground"
+          className="-mb-px border-b-2 px-2.5 pt-1 pb-2.5 text-[13px] transition-colors duration-(--duration-press) hover:text-foreground"
           // The colors go in the state props: in one class list, the later utility in the
           // stylesheet wins, so an active tab would keep the transparent border.
           activeProps={{
@@ -87,6 +88,7 @@ export function CopyValue({
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
+      toast(`${label} copied.`);
       setTimeout(() => setCopied(false), 1500);
     } catch {
       setCopied(false);

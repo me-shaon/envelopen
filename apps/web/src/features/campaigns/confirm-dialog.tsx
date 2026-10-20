@@ -239,8 +239,8 @@ export function ConfirmSendDialog({
             Cancel
           </Button>
           {!prepared ? (
-            <Button type="button" disabled={prepare.isPending} onClick={() => prepare.mutate()}>
-              {prepare.isPending ? "Checking..." : "Check and continue"}
+            <Button type="button" pending={prepare.isPending} onClick={() => prepare.mutate()}>
+              Check and continue
             </Button>
           ) : stale || expired || prepared.blocked ? (
             <Button type="button" onClick={reset}>
@@ -251,15 +251,14 @@ export function ConfirmSendDialog({
             <Button
               type="button"
               variant="brand"
-              disabled={confirm.isPending || !prepared.token}
+              pending={confirm.isPending}
+              disabled={!prepared.token}
               onClick={() => prepared.token && confirm.mutate(prepared.token)}
             >
               <SendIcon className="size-3.5" aria-hidden="true" />
-              {confirm.isPending
-                ? "Confirming..."
-                : prepared.mode === "schedule"
-                  ? `Schedule for ${formatWhen(prepared.scheduledAt)}`
-                  : `Send to about ${prepared.estimate.recipients.toLocaleString()} people`}
+              {prepared.mode === "schedule"
+                ? `Schedule for ${formatWhen(prepared.scheduledAt)}`
+                : `Send to about ${prepared.estimate.recipients.toLocaleString()} people`}
             </Button>
           )}
         </DialogFooter>

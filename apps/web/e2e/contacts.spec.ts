@@ -182,4 +182,34 @@ test.describe("contacts", () => {
     await expect(page.getByTestId("suppression-row")).toContainText("ben@example.com");
     await expectNoSeriousViolations(page);
   });
+
+  // Motion on: the loading skeleton, its replacement by content, and a toast.
+  test.describe("with motion", () => {
+    test.use({ reducedMotion: "no-preference" });
+
+    test("shows a skeleton while the contacts load, then the rows", async ({ page }) => {
+      await signIn(page);
+      // Hold the contact list for a moment, so the skeleton has time to show.
+      const contactList = (url: URL) => url.pathname === "/api/contacts";
+      await page.route(contactList, async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        await route.continue();
+      });
+      await page.getByRole("link", { name: "Contacts" }).first().click();
+      const skeleton = page.getByRole("status", { name: "Loading the contacts" });
+      await expect(skeleton).toBeVisible();
+      await expect(skeleton).toHaveAttribute("aria-busy", "true");
+      await expect(page.getByTestId("contact-row").first()).toBeVisible();
+      await expect(skeleton).toHaveCount(0);
+      await page.unroute(contactList);
+
+      // A tag added on a contact fades in and a toast confirms it.
+      await page.getByRole("link", { name: /ana\.silva@example\.com/ }).click();
+      await page.getByLabel("New tag").fill("Alumni");
+      await page.getByRole("button", { name: "Add", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Remove tag Alumni" })).toBeVisible();
+      await expect(page.getByTestId("toast")).toContainText('Tag "Alumni" added.');
+      await expectNoSeriousViolations(page);
+    });
+  });
 });

@@ -1,7 +1,12 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeftIcon, ScrollTextIcon } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeftIcon, ChevronRightIcon, ScrollTextIcon } from "lucide-react";
+import { Fragment, useState } from "react";
 import type { Schemas } from "@/api/client";
 import {
   type AuditFilters,
@@ -21,19 +26,72 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Pill, type Tone } from "@/components/ui/pill";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { Refreshing } from "@/components/ui/spinner";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, formatDateTime } from "@/features/contacts/shared";
-import { actionSentence } from "./actions";
+import { cn } from "@/lib/utils";
+import { actionRunSentence, actionSentence } from "./actions";
 
 // The audit log (R8): who changed what, from which surface. Every write through the
 // UI, the REST API, or MCP adds a row (KTD10). Newest first, with cursor pagination.
 // Each row reads as a sentence, with the raw action key under it for power users. A
 // target links to its record when the app has a page for it and the record still
 // exists. Names come from the lists that the app loads anyway.
+// A run of the same action by the same actor from the same surface, for example the 240
+// contact upserts of one import, shows as one row that opens to list each entry. Runs
+// form over every loaded page, so "Load more" extends a run instead of starting a new
+// one, and a group keeps its key (its newest entry) and its open state.
 
 type Entry = Schemas["AuditEntry"];
 type Surface = Entry["surface"];
+
+/** A run of this many entries or more shows as one group row. */
+const MIN_RUN = 3;
+
+type AuditRow = { kind: "entry"; entry: Entry } | { kind: "group"; key: number; entries: Entry[] };
+
+function sameRun(a: Entry, b: Entry): boolean {
+  return (
+    a.action === b.action &&
+    a.actorType === b.actorType &&
+    a.actorId === b.actorId &&
+    a.apiKeyId === b.apiKeyId &&
+    a.surface === b.surface
+  );
+}
+
+/** Groups runs of the same action by the same actor. The order stays newest first. */
+function groupRuns(entries: Entry[]): AuditRow[] {
+  const rows: AuditRow[] = [];
+  let run: Entry[] = [];
+  const flush = () => {
+    const [first] = run;
+    if (first && run.length >= MIN_RUN) rows.push({ kind: "group", key: first.id, entries: run });
+    else for (const entry of run) rows.push({ kind: "entry", entry });
+    run = [];
+  };
+  for (const entry of entries) {
+    const last = run[run.length - 1];
+    if (last && !sameRun(last, entry)) flush();
+    run.push(entry);
+  }
+  flush();
+  return rows;
+}
+
+/** "contact" reads "contacts", "campaign batch" reads "campaign batches". */
+function pluralKind(kind: string, count: number): string {
+  const word = kind.toLowerCase();
+  if (count === 1) return `1 ${word}`;
+  const many = /(s|x|ch|sh)$/.test(word)
+    ? `${word}es`
+    : /[^aeiou]y$/.test(word)
+      ? `${word.slice(0, -1)}ies`
+      : `${word}s`;
+  return `${count.toLocaleString()} ${many}`;
+}
 
 const SURFACES: Record<Surface, { label: string; tone: Tone }> = {
   ui: { label: "UI", tone: "neutral" },
@@ -182,12 +240,25 @@ function Target({ entry, names }: { entry: Entry; names: TargetNames }) {
 export function AuditLogPage() {
   const { current } = useCurrentWorkspace();
   const [filters, setFilters] = useState<AuditFilters>({});
-  const log = useInfiniteQuery(auditLogQuery(current.id, filters));
+  // The rows stay while a new filter loads, with a quiet "Updating" note.
+  const log = useInfiniteQuery({
+    ...auditLogQuery(current.id, filters),
+    placeholderData: keepPreviousData,
+  });
+  const [openGroups, setOpenGroups] = useState<Set<number>>(() => new Set());
   const actions = useQuery(auditActionsQuery(current.id));
   const session = useQuery(sessionQuery);
   const ownerName = session.data?.user.name || undefined;
   const names = useTargetNames();
   const items = log.data?.pages.flatMap((page) => page.items) ?? [];
+  const rows = groupRuns(items);
+  const toggle = (key: number) =>
+    setOpenGroups((value) => {
+      const next = new Set(value);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const filtered = filters.surface !== undefined || filters.action !== undefined;
 
   return (
@@ -253,6 +324,9 @@ export function AuditLogPage() {
             Clear filters
           </Button>
         ) : null}
+        <div className="flex min-h-9 items-center">
+          <Refreshing active={log.isPlaceholderData && log.isFetching} />
+        </div>
       </form>
 
       {log.isError ? (
@@ -260,7 +334,7 @@ export function AuditLogPage() {
           {errorText(log.error)}
         </p>
       ) : log.isPending ? (
-        <div className="h-48 rounded-xl border border-border bg-muted" />
+        <TableSkeleton label="Loading the audit log" rows={8} columns={5} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={ScrollTextIcon}
@@ -280,30 +354,25 @@ export function AuditLogPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map((entry) => (
-              <TableRow key={entry.id} data-testid="audit-row">
-                <TableCell className="figure whitespace-nowrap text-muted-foreground">
-                  {formatDateTime(entry.createdAt)}
-                </TableCell>
-                <TableCell>
-                  <span className="flex flex-col gap-0.5">
-                    <span className="font-medium">{actionSentence(entry.action)}</span>
-                    <code className="font-mono text-[11.5px] text-muted-foreground">
-                      {entry.action}
-                    </code>
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <Target entry={entry} names={names} />
-                </TableCell>
-                <TableCell>
-                  <Actor entry={entry} ownerName={ownerName} />
-                </TableCell>
-                <TableCell>
-                  <Pill tone={SURFACES[entry.surface].tone}>{SURFACES[entry.surface].label}</Pill>
-                </TableCell>
-              </TableRow>
-            ))}
+            {rows.map((row) =>
+              row.kind === "entry" ? (
+                <EntryRow
+                  key={row.entry.id}
+                  entry={row.entry}
+                  names={names}
+                  ownerName={ownerName}
+                />
+              ) : (
+                <GroupRows
+                  key={`group-${row.key}`}
+                  entries={row.entries}
+                  open={openGroups.has(row.key)}
+                  onToggle={() => toggle(row.key)}
+                  names={names}
+                  ownerName={ownerName}
+                />
+              ),
+            )}
           </tbody>
         </Table>
       )}
@@ -312,13 +381,128 @@ export function AuditLogPage() {
           <Button
             variant="outline"
             onClick={() => void log.fetchNextPage()}
-            disabled={log.isFetchingNextPage}
+            pending={log.isFetchingNextPage}
           >
             Load more
           </Button>
         </div>
       ) : null}
     </div>
+  );
+}
+
+function EntryRow({
+  entry,
+  names,
+  ownerName,
+  member = false,
+}: {
+  entry: Entry;
+  names: TargetNames;
+  ownerName: string | undefined;
+  /** A row inside an open group: indented, and without the actor and surface again. */
+  member?: boolean;
+}) {
+  return (
+    <TableRow
+      data-testid={member ? "audit-member-row" : "audit-row"}
+      className={cn(member && "motion-enter bg-muted/40")}
+    >
+      <TableCell className="figure whitespace-nowrap text-muted-foreground">
+        {formatDateTime(entry.createdAt)}
+      </TableCell>
+      <TableCell>
+        <span className={cn("flex flex-col gap-0.5", member && "border-l border-border pl-3")}>
+          <span className="font-medium">{actionSentence(entry.action)}</span>
+          {member ? null : (
+            <code className="font-mono text-[11.5px] text-muted-foreground">{entry.action}</code>
+          )}
+        </span>
+      </TableCell>
+      <TableCell>
+        <Target entry={entry} names={names} />
+      </TableCell>
+      <TableCell>{member ? null : <Actor entry={entry} ownerName={ownerName} />}</TableCell>
+      <TableCell>
+        {member ? null : (
+          <Pill tone={SURFACES[entry.surface].tone}>{SURFACES[entry.surface].label}</Pill>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/** One row for a run of entries, and the entries under it when it is open. */
+function GroupRows({
+  entries,
+  open,
+  onToggle,
+  names,
+  ownerName,
+}: {
+  entries: Entry[];
+  open: boolean;
+  onToggle: () => void;
+  names: TargetNames;
+  ownerName: string | undefined;
+}) {
+  const first = entries[0];
+  const last = entries[entries.length - 1];
+  if (!first || !last) return null;
+  const kind = first.targetType
+    ? (KINDS[first.targetType] ?? first.targetType.replaceAll("_", " "))
+    : null;
+  const sentence = actionRunSentence(first.action, entries.length);
+  return (
+    <Fragment>
+      <TableRow data-testid="audit-row" data-group-size={entries.length}>
+        <TableCell className="figure whitespace-nowrap text-muted-foreground">
+          <span className="flex flex-col gap-0.5">
+            <span>{formatDateTime(first.createdAt)}</span>
+            {formatDateTime(last.createdAt) !== formatDateTime(first.createdAt) ? (
+              <span className="text-[11.5px]">from {formatDateTime(last.createdAt)}</span>
+            ) : null}
+          </span>
+        </TableCell>
+        <TableCell>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={onToggle}
+            className="-mx-1.5 -my-1 flex cursor-pointer items-start gap-1.5 rounded-md px-1.5 py-1 text-left transition-colors duration-(--duration-press) hover:bg-accent max-sm:min-h-11"
+          >
+            <ChevronRightIcon
+              className={cn(
+                "mt-[3px] size-3.5 shrink-0 text-muted-foreground transition-transform duration-[180ms] ease-(--ease-calm)",
+                open && "rotate-90",
+              )}
+              aria-hidden="true"
+            />
+            <span className="flex flex-col gap-0.5">
+              <span className="font-medium">{sentence}</span>
+              <code className="font-mono text-[11.5px] text-muted-foreground">
+                {first.action}
+                <span className="font-sans"> · {open ? "Hide" : "Show"} each entry</span>
+              </code>
+            </span>
+          </button>
+        </TableCell>
+        <TableCell className="text-muted-foreground">
+          {kind ? pluralKind(kind, entries.length) : "None"}
+        </TableCell>
+        <TableCell>
+          <Actor entry={first} ownerName={ownerName} />
+        </TableCell>
+        <TableCell>
+          <Pill tone={SURFACES[first.surface].tone}>{SURFACES[first.surface].label}</Pill>
+        </TableCell>
+      </TableRow>
+      {open
+        ? entries.map((entry) => (
+            <EntryRow key={entry.id} entry={entry} names={names} ownerName={ownerName} member />
+          ))
+        : null}
+    </Fragment>
   );
 }
 

@@ -3,6 +3,7 @@ import { usageQuery } from "@/api/queries";
 import { PageHeader, SectionHeader } from "@/components/page-header";
 import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
+import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { formatUtc } from "@/features/campaigns/shared";
 import { errorText } from "@/features/contacts/shared";
@@ -36,7 +37,9 @@ export function UsagePage() {
       />
       {!data ? (
         usage.isPending ? (
-          <div className="h-[180px] animate-pulse rounded-xl border border-border bg-muted" />
+          <LoadingRegion label="Loading the usage">
+            <Skeleton className="h-[180px] rounded-xl" />
+          </LoadingRegion>
         ) : (
           <FormError message={errorText(usage.error)} />
         )

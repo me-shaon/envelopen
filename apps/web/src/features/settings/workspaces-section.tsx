@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@/components/
 import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { WorkspaceMark } from "@/components/workspace-switcher";
 import { formatDate } from "@/lib/format";
@@ -36,9 +37,10 @@ function RenameDialog({
           body: { name: input.name },
         }),
       ),
-    onSuccess: async () => {
+    onSuccess: async (_data, input) => {
       await queryClient.invalidateQueries({ queryKey: workspacesQuery.queryKey });
       onOpenChange(false);
+      toast(`Workspace renamed to ${input.name}.`);
     },
   });
 
@@ -74,7 +76,7 @@ function RenameDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={rename.isPending}>
+            <Button type="submit" pending={rename.isPending}>
               Save
             </Button>
           </DialogFooter>
@@ -93,9 +95,10 @@ export function WorkspacesSection() {
 
   const create = useMutation({
     mutationFn: (value: string) => unwrap(api.POST("/workspaces", { body: { name: value } })),
-    onSuccess: async () => {
+    onSuccess: async (_data, value) => {
       setName("");
       await queryClient.invalidateQueries({ queryKey: workspacesQuery.queryKey });
+      toast(`Workspace ${value} created. Switch to it from the sidebar.`);
     },
   });
 
@@ -179,7 +182,8 @@ export function WorkspacesSection() {
         <Button
           type="submit"
           variant="outline"
-          disabled={create.isPending || name.trim().length === 0}
+          pending={create.isPending}
+          disabled={name.trim().length === 0}
         >
           Create workspace
         </Button>

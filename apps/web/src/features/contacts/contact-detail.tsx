@@ -13,9 +13,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
+import { presenceClass, usePresence } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 import {
   CONSENT,
   type ConsentBasis,
@@ -71,6 +75,8 @@ function StateBanner({ contact }: { contact: Contact }) {
   return null;
 }
 
+const tagKey = (tag: Contact["tags"][number]) => tag.id;
+
 function TagsSection({ contact }: { contact: Contact }) {
   const invalidate = useInvalidateContacts();
   const [name, setName] = useState("");
@@ -82,9 +88,10 @@ function TagsSection({ contact }: { contact: Contact }) {
           body: { tags: [tag] },
         }),
       ),
-    onSuccess: async () => {
+    onSuccess: async (_data, tag) => {
       setName("");
       await invalidate();
+      toast(`Tag "${tag}" added.`);
     },
   });
   const remove = useMutation({
@@ -94,6 +101,8 @@ function TagsSection({ contact }: { contact: Contact }) {
       ),
     onSuccess: invalidate,
   });
+  // A new tag fades in. A removed tag fades out before it leaves the row.
+  const tags = usePresence(contact.tags, tagKey);
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -104,17 +113,20 @@ function TagsSection({ contact }: { contact: Contact }) {
     <section aria-labelledby="tags-title" className="flex flex-col gap-3">
       <SectionHeader id="tags-title" title="Tags" />
       <FormError message={errorText(add.error ?? remove.error)} />
-      <div className="flex flex-wrap gap-1.5">
-        {contact.tags.length === 0 ? (
+      {/* Wider gaps below sm, so the 44 px hit areas of the x buttons do not overlap. */}
+      <div className="flex flex-wrap gap-1.5 max-sm:gap-3">
+        {tags.length === 0 ? (
           <span className="text-[13px] text-muted-foreground">No tags.</span>
         ) : (
-          contact.tags.map((tag) => (
-            <Pill key={tag.id} tone="lavender" className="pr-1">
+          tags.map(({ key, item: tag, state }) => (
+            <Pill key={key} tone="lavender" className={cn("pr-1", presenceClass(state))}>
               {tag.name}
+              {/* The x stays 16 px. Below sm, a 44 px hit area centers on it for touch. */}
               <button
                 type="button"
-                className="inline-flex size-4 cursor-pointer items-center justify-center rounded-full hover:bg-black/10"
+                className="relative inline-flex size-4 cursor-pointer items-center justify-center rounded-full transition-colors duration-(--duration-press) before:absolute before:top-1/2 before:left-1/2 before:size-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] hover:bg-black/10 disabled:cursor-default sm:before:hidden dark:hover:bg-white/10"
                 aria-label={`Remove tag ${tag.name}`}
+                disabled={state === "exit" || (remove.isPending && remove.variables === tag.id)}
                 onClick={() => remove.mutate(tag.id)}
               >
                 <XIcon className="size-3" aria-hidden="true" />
@@ -131,7 +143,7 @@ function TagsSection({ contact }: { contact: Contact }) {
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
-        <Button type="submit" variant="outline" disabled={add.isPending || !name.trim()}>
+        <Button type="submit" variant="outline" pending={add.isPending} disabled={!name.trim()}>
           <PlusIcon className="size-3.5" aria-hidden="true" />
           Add
         </Button>
@@ -162,6 +174,7 @@ function ConsentDialog({
     onSuccess: async () => {
       await invalidate();
       onOpenChange(false);
+      toast("Consent recorded.");
     },
   });
 
@@ -209,7 +222,11 @@ function ConsentDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={record.isPending || basis === contact.consentBasis}>
+            <Button
+              type="submit"
+              pending={record.isPending}
+              disabled={basis === contact.consentBasis}
+            >
               Record
             </Button>
           </DialogFooter>
@@ -238,6 +255,18 @@ function ConsentHistory({ contact }: { contact: Contact }) {
         <p role="alert" className="m-0 text-[13px] text-muted-foreground">
           The history did not load.
         </p>
+      ) : history.isPending ? (
+        <LoadingRegion label="Loading the consent history" className="flex flex-col gap-4">
+          {["w-28", "w-24"].map((width) => (
+            <div key={width} className="grid grid-cols-[16px_minmax(0,1fr)] gap-3">
+              <span className="mt-[5px] size-2 rounded-full bg-track" />
+              <div className="flex flex-col gap-1.5">
+                <Skeleton className={`h-3.5 rounded-sm ${width}`} />
+                <Skeleton className="h-3 w-40 rounded-sm" />
+              </div>
+            </div>
+          ))}
+        </LoadingRegion>
       ) : (
         <ol className="m-0 flex list-none flex-col gap-4 p-0" aria-label="Consent events">
           {(history.data?.items ?? []).map((event, index) => (
@@ -359,7 +388,12 @@ function EraseDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="destructive" disabled={!matches || erase.isPending}>
+            <Button
+              type="submit"
+              variant="destructive"
+              pending={erase.isPending}
+              disabled={!matches}
+            >
               Erase contact
             </Button>
           </DialogFooter>
@@ -387,12 +421,16 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
     onSuccess: async () => {
       setConfirm(null);
       await invalidate();
+      toast("Contact unsubscribed from all lists.");
     },
   });
   const exportData = useMutation({
     mutationFn: () =>
       unwrap(api.POST("/contacts/{id}/export", { params: { path: { id: contactId } } })),
-    onSuccess: (data) => downloadJson(`contact-${contactId}.json`, data),
+    onSuccess: (data) => {
+      downloadJson(`contact-${contactId}.json`, data);
+      toast("The contact data is downloading as JSON.");
+    },
   });
 
   const back = (
@@ -418,10 +456,37 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
   const data = contact.data;
   if (!data) {
     return (
-      <div className="flex flex-col gap-6">
-        {back}
-        <div className="h-48 rounded-xl border border-border bg-muted" />
-      </div>
+      <LoadingRegion label="Loading the contact" className="flex flex-col gap-10">
+        <div className="flex flex-col gap-4">
+          {back}
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-[30px] w-[280px] max-w-[70%]" />
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </div>
+            <Skeleton className="h-4 w-32 rounded-sm" />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-12">
+          <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-2">
+            <Skeleton className="h-4 w-16 rounded-sm" />
+            {["w-[46%]", "w-[30%]", "w-[38%]", "w-[34%]"].map((width) => (
+              <div
+                key={width}
+                className="grid grid-cols-[140px_minmax(0,1fr)] gap-3 border-b border-hairline py-3 last:border-b-0"
+              >
+                <Skeleton className="h-3 w-20 rounded-sm" />
+                <Skeleton className={`h-3 rounded-sm ${width}`} />
+              </div>
+            ))}
+          </div>
+          <div className="flex max-w-[320px] flex-[1_1_260px] flex-col gap-4 pt-1">
+            <Skeleton className="h-4 w-28 rounded-sm" />
+            <Skeleton className="h-10 rounded-lg" />
+            <Skeleton className="h-10 rounded-lg" />
+          </div>
+        </div>
+      </LoadingRegion>
     );
   }
 
@@ -451,7 +516,7 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
             <Button
               variant="outline"
               onClick={() => exportData.mutate()}
-              disabled={exportData.isPending}
+              pending={exportData.isPending}
             >
               <DownloadIcon className="size-3.5" aria-hidden="true" />
               Export data

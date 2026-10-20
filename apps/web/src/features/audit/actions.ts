@@ -170,3 +170,12 @@ export function actionSentence(action: string, name?: string): string {
   if (!text) return humanizeAction(action);
   return text.label(1, name).replace(/\.$/, "");
 }
+
+/** The sentence of a run of one action, such as "240 contacts added or updated". */
+export function actionRunSentence(action: string, count: number): string {
+  const text = ACTIONS[action];
+  const many = text?.label(count, undefined).replace(/\.$/, "");
+  const one = text?.label(1, undefined).replace(/\.$/, "");
+  if (many && many !== one) return many;
+  return `${one ?? humanizeAction(action)} (${count.toLocaleString()} times)`;
+}

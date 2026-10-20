@@ -23,8 +23,8 @@ export function ConfirmDialog({
   return (
     <AlertDialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <AlertDialogPrimitive.Portal>
-        <AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgb(26_25_23/0.28)] dark:bg-black/60" />
-        <AlertDialogPrimitive.Content className="fixed top-1/2 left-1/2 z-50 flex w-[calc(100%-32px)] max-w-[420px] -translate-x-1/2 -translate-y-1/2 flex-col gap-5 rounded-2xl bg-popover p-6 text-popover-foreground shadow-popover">
+        <AlertDialogPrimitive.Overlay className="motion-overlay fixed inset-0 z-50 bg-[rgb(26_25_23/0.28)] dark:bg-black/60" />
+        <AlertDialogPrimitive.Content className="motion-pop fixed top-1/2 left-1/2 z-50 flex w-[calc(100%-32px)] max-w-[420px] -translate-x-1/2 -translate-y-1/2 flex-col gap-5 rounded-2xl bg-popover p-6 text-popover-foreground shadow-popover">
           <div className="flex flex-col gap-1">
             <AlertDialogPrimitive.Title className="m-0 text-[17px] font-semibold tracking-[-0.02em]">
               {title}
@@ -39,7 +39,7 @@ export function ConfirmDialog({
             </AlertDialogPrimitive.Cancel>
             <Button
               variant="destructive"
-              disabled={pending}
+              pending={pending}
               onClick={(event) => {
                 // Keep the dialog open until the action finishes.
                 event.preventDefault();

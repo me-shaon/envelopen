@@ -6,6 +6,7 @@ import { campaignsQuery } from "@/api/queries";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader, SectionHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { RecentActivity } from "@/features/audit/recent-activity";
 import { CampaignTable } from "@/features/campaigns/campaigns-page";
@@ -36,7 +37,9 @@ function RecentCampaigns({ workspaceId }: { workspaceId: number }) {
           ) : null
         }
       />
-      {items.length > 0 ? (
+      {campaigns.isPending ? (
+        <TableSkeleton label="Loading the recent campaigns" rows={3} columns={5} />
+      ) : items.length > 0 ? (
         <CampaignTable items={items} />
       ) : (
         <EmptyState
@@ -133,7 +136,7 @@ export function OverviewPage() {
                 href={resource.href}
                 target="_blank"
                 rel="noreferrer"
-                className="flex min-h-8 max-sm:min-h-11 items-center gap-2.5 text-[13px] text-muted-foreground hover:text-foreground"
+                className="flex min-h-8 max-sm:min-h-11 items-center gap-2.5 text-[13px] text-muted-foreground transition-colors duration-(--duration-press) hover:text-foreground"
               >
                 <Icon className="size-[15px]" strokeWidth={1.7} aria-hidden="true" />
                 {resource.label}

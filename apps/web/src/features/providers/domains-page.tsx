@@ -11,7 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { LoadingRegion, Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
+import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, formatDateTime, PageTop } from "@/features/contacts/shared";
 import {
@@ -105,7 +107,7 @@ function AddDomainForm() {
             spellCheck={false}
           />
         </Field>
-        <Button type="submit" disabled={create.isPending || !domain.trim()}>
+        <Button type="submit" pending={create.isPending} disabled={!domain.trim()}>
           <PlusIcon className="size-3.5" aria-hidden="true" />
           {create.isPending ? "Checking..." : "Add domain"}
         </Button>
@@ -142,7 +144,7 @@ export function DomainsPage() {
               {errorText(domains.error)}
             </p>
           ) : domains.isPending ? (
-            <div className="h-24 rounded-xl border border-border bg-muted" />
+            <TableSkeleton label="Loading the sending domains" rows={2} columns={4} />
           ) : items.length === 0 ? (
             <EmptyState icon={GlobeIcon} title="No sending domain yet">
               Add the domain that your emails come from. Envelopen lists the DNS records to copy and
@@ -215,7 +217,10 @@ function SettingsForm({ domain }: { domain: SendingDomain }) {
           },
         }),
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ws", current.id] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["ws", current.id] });
+      toast("Domain settings saved. The records were checked again.");
+    },
   });
   return (
     <form
@@ -245,7 +250,7 @@ function SettingsForm({ domain }: { domain: SendingDomain }) {
             spellCheck={false}
           />
         </Field>
-        <Button type="submit" variant="outline" disabled={update.isPending}>
+        <Button type="submit" variant="outline" pending={update.isPending}>
           Save and check
         </Button>
       </div>
@@ -295,15 +300,15 @@ export function DomainDetailPage({ domainId }: { domainId: number }) {
                 <span>Last checked {formatDateTime(data.lastCheckedAt)}</span>
               </span>
             ) : (
-              "Loading"
+              <Skeleton className="mt-1 h-4 w-56 rounded-sm" />
             )
           }
           actions={
             data ? (
               <>
-                <Button variant="outline" disabled={check.isPending} onClick={() => check.mutate()}>
+                <Button variant="outline" pending={check.isPending} onClick={() => check.mutate()}>
                   <RefreshCwIcon className="size-3.5" aria-hidden="true" />
-                  {check.isPending ? "Checking..." : "Check again"}
+                  Check again
                 </Button>
                 <Button variant="destructive-ghost" onClick={() => setRemoving(true)}>
                   Remove
@@ -318,7 +323,17 @@ export function DomainDetailPage({ domainId }: { domainId: number }) {
           {errorText(domain.error)}
         </p>
       ) : !data ? (
-        <div className="h-64 rounded-xl border border-border bg-muted" />
+        <LoadingRegion label="Loading the domain" className="flex flex-col gap-6">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-px overflow-hidden rounded-xl border border-border bg-border">
+            {["spf", "dkim", "dmarc", "tracking"].map((key) => (
+              <div key={key} className="flex flex-col gap-2 bg-background p-4">
+                <Skeleton className="h-3 w-12 rounded-sm" />
+                <Skeleton className="h-5 w-20 rounded-full" />
+              </div>
+            ))}
+          </div>
+          <Skeleton className="h-[180px] rounded-xl" />
+        </LoadingRegion>
       ) : (
         <>
           <FormError message={errorText(check.error)} />

@@ -52,6 +52,7 @@ import {
 import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
@@ -125,7 +126,7 @@ export function EditorPage({ templateId }: { templateId: number | null }) {
     enabled: templateId !== null,
   });
   if (templateId !== null && template.isPending) {
-    return <div className="h-96 rounded-xl border border-border bg-muted" aria-busy="true" />;
+    return <EditorSkeleton />;
   }
   if (templateId !== null && !template.data) {
     return (
@@ -138,6 +139,46 @@ export function EditorPage({ templateId }: { templateId: number | null }) {
   const data = template.data ?? null;
   if (data && data.format !== "blocks") return <SourceEditor template={data} />;
   return <BlockEditor template={data} />;
+}
+
+/** The editor while the template loads: the header, the subject fields, and the canvas. */
+function EditorSkeleton() {
+  return (
+    <LoadingRegion label="Loading the template" className="flex flex-col gap-8">
+      <div className="flex flex-col gap-3">
+        <BackLink />
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-[34px] w-[280px] max-w-full" />
+            <Skeleton className="h-3 w-24 rounded-sm" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-[104px] rounded-[9px]" />
+            <Skeleton className="h-9 w-16 rounded-[9px]" />
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Skeleton className="h-[60px] rounded-[9px]" />
+        <Skeleton className="h-[60px] rounded-[9px]" />
+      </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_288px]">
+        <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-muted">
+          <div className="h-11 border-b border-border" />
+          <div className="px-3 py-6 sm:px-6">
+            <div className="mx-auto flex max-w-[600px] flex-col gap-3 rounded-xl border border-border bg-card px-6 py-8 sm:px-10">
+              <Skeleton className="h-6 w-[55%]" />
+              <Skeleton className="h-3.5 w-[90%] rounded-sm" />
+              <Skeleton className="h-3.5 w-[82%] rounded-sm" />
+              <Skeleton className="h-3.5 w-[64%] rounded-sm" />
+              <Skeleton className="mt-3 h-9 w-32 rounded-[9px]" />
+            </div>
+          </div>
+        </div>
+        <Skeleton className="h-[320px] rounded-xl" />
+      </div>
+    </LoadingRegion>
+  );
 }
 
 function BackLink() {
@@ -638,7 +679,7 @@ function SaveBlockDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={save.isPending}>
+            <Button type="submit" pending={save.isPending}>
               Save block
             </Button>
           </DialogFooter>
@@ -750,7 +791,7 @@ function BlockEditor({ template }: { template: Template | null }) {
               <SendIcon className="size-3.5" aria-hidden="true" />
               Send test
             </Button>
-            <Button onClick={() => void saveNow().catch(() => undefined)} disabled={save.isPending}>
+            <Button onClick={() => void saveNow().catch(() => undefined)} pending={save.isPending}>
               Save
             </Button>
           </>
@@ -859,7 +900,7 @@ function SourceEditor({ template }: { template: Template }) {
               <SendIcon className="size-3.5" aria-hidden="true" />
               Send test
             </Button>
-            <Button onClick={() => void saveNow().catch(() => undefined)} disabled={save.isPending}>
+            <Button onClick={() => void saveNow().catch(() => undefined)} pending={save.isPending}>
               Save
             </Button>
           </>

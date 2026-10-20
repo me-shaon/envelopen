@@ -10,12 +10,16 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { formatDate } from "@/lib/format";
+import { presenceClass, usePresence } from "@/lib/motion";
 import { ContactsNav, errorText, Figure, PageTop } from "./shared";
 
 // Lists and tags (R14). Members and tagged contacts open the contact list with a filter.
+
+const byId = (item: { id: number }) => item.id;
 
 interface Item {
   id: number;
@@ -54,7 +58,7 @@ function CreateForm({
             onChange={(event) => setName(event.target.value)}
           />
         </Field>
-        <Button type="submit" disabled={pending || !name.trim()}>
+        <Button type="submit" pending={pending} disabled={!name.trim()}>
           <PlusIcon className="size-3.5" aria-hidden="true" />
           Create
         </Button>
@@ -102,7 +106,7 @@ function RenameDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" pending={pending}>
               Save
             </Button>
           </DialogFooter>
@@ -146,7 +150,8 @@ export function ListsPage() {
   const { create, rename, remove } = useAudienceMutations("lists");
   const [renaming, setRenaming] = useState<Item | null>(null);
   const [deleting, setDeleting] = useState<Item | null>(null);
-  const items = lists.data?.items ?? [];
+  // A new list fades in, a deleted one fades out.
+  const items = usePresence(lists.data?.items ?? [], byId, lists.isSuccess);
 
   return (
     <div className="flex flex-col gap-10">
@@ -161,7 +166,7 @@ export function ListsPage() {
           onCreate={(name, reset) => create.mutate(name, { onSuccess: reset })}
         />
         {lists.isPending ? (
-          <div className="h-32 rounded-xl border border-border bg-muted" />
+          <TableSkeleton label="Loading the lists" rows={4} columns={4} />
         ) : items.length === 0 ? (
           <EmptyState icon={ListIcon} title="No lists yet">
             A list groups contacts who get the same campaigns. Each member keeps a status, so an
@@ -181,8 +186,12 @@ export function ListsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((list) => (
-                <TableRow key={list.id} data-testid="list-row">
+              {items.map(({ key, item: list, state }) => (
+                <TableRow
+                  key={key}
+                  data-testid={state === "exit" ? undefined : "list-row"}
+                  className={presenceClass(state)}
+                >
                   <TableCell className="font-medium">
                     <Link to="/contacts" search={{ listId: list.id }} className="hover:underline">
                       {list.name}
@@ -247,7 +256,8 @@ export function TagsPage() {
   const { create, rename, remove } = useAudienceMutations("tags");
   const [renaming, setRenaming] = useState<Item | null>(null);
   const [deleting, setDeleting] = useState<Item | null>(null);
-  const items = tags.data?.items ?? [];
+  // A new tag fades in, a deleted one fades out.
+  const items = usePresence(tags.data?.items ?? [], byId, tags.isSuccess);
 
   return (
     <div className="flex flex-col gap-10">
@@ -262,7 +272,7 @@ export function TagsPage() {
           onCreate={(name, reset) => create.mutate(name, { onSuccess: reset })}
         />
         {tags.isPending ? (
-          <div className="h-32 rounded-xl border border-border bg-muted" />
+          <TableSkeleton label="Loading the tags" rows={4} columns={3} />
         ) : items.length === 0 ? (
           <EmptyState icon={TagIcon} title="No tags yet">
             Tags mark contacts, for example by course. Imports and the API can add them too.
@@ -280,8 +290,12 @@ export function TagsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((tag) => (
-                <TableRow key={tag.id} data-testid="tag-row">
+              {items.map(({ key, item: tag, state }) => (
+                <TableRow
+                  key={key}
+                  data-testid={state === "exit" ? undefined : "tag-row"}
+                  className={presenceClass(state)}
+                >
                   <TableCell className="font-medium">
                     <Link to="/contacts" search={{ tagId: tag.id }} className="hover:underline">
                       {tag.name}

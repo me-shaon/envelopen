@@ -521,7 +521,7 @@ function PreviewStep({ item, onChangeSettings }: { item: Import; onChangeSetting
         <Button variant="outline" onClick={onChangeSettings}>
           Change settings
         </Button>
-        <Button onClick={() => start.mutate()} disabled={start.isPending || importing === 0}>
+        <Button onClick={() => start.mutate()} pending={start.isPending} disabled={importing === 0}>
           <span>
             Import <Figure value={importing} /> {importing === 1 ? "contact" : "contacts"}
           </span>
@@ -541,7 +541,7 @@ function ErrorFileButton({ item }: { item: Import }) {
     <div className="flex flex-col gap-2">
       <FormError message={errorText(download.error)} />
       <div>
-        <Button variant="outline" onClick={() => download.mutate()} disabled={download.isPending}>
+        <Button variant="outline" onClick={() => download.mutate()} pending={download.isPending}>
           <DownloadIcon className="size-3.5" aria-hidden="true" />
           <span>
             Download the error file (<Figure value={item.errorCount} /> rows)

@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LoadingRegion, Skeleton } from "@/components/ui/skeleton";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 
 // Tracking and event retention for the workspace (R45, R51). A campaign can turn
@@ -84,7 +85,25 @@ export function TrackingSection() {
         aside="Applies to every campaign in this workspace."
       />
       {draft === null ? (
-        <p className="m-0 text-[13px] text-muted-foreground">Loading...</p>
+        <LoadingRegion
+          label="Loading the tracking settings"
+          className="flex flex-col gap-5 rounded-xl border border-border p-5"
+        >
+          {["w-24", "w-[88px]"].map((width) => (
+            <div key={width} className="flex items-start gap-2.5">
+              <Skeleton className="size-4 rounded-[5px]" />
+              <div className="flex flex-col gap-1.5">
+                <Skeleton className={`h-3.5 rounded-sm ${width}`} />
+                <Skeleton className="h-3 w-56 rounded-sm" />
+              </div>
+            </div>
+          ))}
+          <div className="flex max-w-[260px] flex-col gap-1.5">
+            <Skeleton className="h-3.5 w-40 rounded-sm" />
+            <Skeleton className="h-9 rounded-[9px]" />
+          </div>
+          <Skeleton className="h-9 w-[168px] rounded-[9px]" />
+        </LoadingRegion>
       ) : (
         <form
           className="flex flex-col gap-5 rounded-xl border border-border p-5"
@@ -144,11 +163,11 @@ export function TrackingSection() {
             />
           </Field>
           <div className="flex items-center gap-3">
-            <Button type="submit" disabled={save.isPending || daysError !== null}>
-              {save.isPending ? "Saving..." : "Save tracking settings"}
+            <Button type="submit" pending={save.isPending} disabled={daysError !== null}>
+              Save tracking settings
             </Button>
             {saved ? (
-              <span role="status" className="text-[13px] text-muted-foreground">
+              <span role="status" className="motion-enter text-[13px] text-muted-foreground">
                 Saved.
               </span>
             ) : null}

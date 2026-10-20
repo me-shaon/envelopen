@@ -12,12 +12,18 @@ import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
+import { presenceClass, usePresence } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
 // Test sends (R30, R72). A test goes only to the owner's address and to the addresses
 // added here. The email carries both unsubscribe headers, so "Show original" in Gmail
 // shows them before the first campaign.
 
 type TestResult = Schemas["TestSendResult"];
+type TestAddress = Schemas["TestAddressList"]["items"][number];
+
+const NO_ADDRESSES: TestAddress[] = [];
+const addressKey = (item: TestAddress) => item.email;
 
 export function TestSendSection({ hasConnection }: { hasConnection: boolean }) {
   const queryClient = useQueryClient();
@@ -48,7 +54,9 @@ export function TestSendSection({ hasConnection }: { hasConnection: boolean }) {
     onSuccess: invalidate,
   });
 
-  const items = addresses.data?.items ?? [];
+  const items = addresses.data?.items ?? NO_ADDRESSES;
+  // A new address fades in. A removed one fades out.
+  const listed = usePresence(items, addressKey, addresses.isSuccess);
   const owner = items.find((item) => item.owner)?.email;
   const recipients = picked ?? (owner ? [owner] : []);
   const fromValue = from || (firstDomain ? `hello@${firstDomain}` : "");
@@ -76,13 +84,13 @@ export function TestSendSection({ hasConnection }: { hasConnection: boolean }) {
           <span className="text-[13px] font-medium">Test addresses</span>
           <FormError message={errorText(add.error) ?? errorText(remove.error)} />
           <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Test addresses">
-            {items.map((item) => {
+            {listed.map(({ key, item, state }) => {
               const id = `test-to-${item.email}`;
               return (
                 <li
-                  key={item.email}
-                  className="flex items-center gap-2.5"
-                  data-testid="test-address"
+                  key={key}
+                  className={cn("flex items-center gap-2.5", presenceClass(state))}
+                  data-testid={state === "exit" ? undefined : "test-address"}
                 >
                   <Checkbox
                     id={id}
@@ -133,7 +141,12 @@ export function TestSendSection({ hasConnection }: { hasConnection: boolean }) {
                 onChange={(event) => setNewAddress(event.target.value)}
               />
             </Field>
-            <Button type="submit" variant="outline" disabled={add.isPending || !newAddress.trim()}>
+            <Button
+              type="submit"
+              variant="outline"
+              pending={add.isPending}
+              disabled={!newAddress.trim()}
+            >
               <PlusIcon className="size-3.5" aria-hidden="true" />
               Add
             </Button>
@@ -162,12 +175,11 @@ export function TestSendSection({ hasConnection }: { hasConnection: boolean }) {
           <div className="mt-auto flex flex-wrap items-center gap-3">
             <Button
               type="submit"
-              disabled={!hasConnection || send.isPending || recipients.length === 0 || !fromValue}
+              pending={send.isPending}
+              disabled={!hasConnection || recipients.length === 0 || !fromValue}
             >
               <SendIcon className="size-3.5" aria-hidden="true" />
-              {send.isPending
-                ? "Sending..."
-                : `Send to ${recipients.length} ${recipients.length === 1 ? "address" : "addresses"}`}
+              {`Send to ${recipients.length} ${recipients.length === 1 ? "address" : "addresses"}`}
             </Button>
             {!hasConnection ? (
               <span className="text-xs text-muted-foreground">Connect a provider first.</span>

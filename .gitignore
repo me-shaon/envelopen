@@ -12,3 +12,6 @@ coverage/
 .claude/worktrees/
 playwright-report/
 test-results/
+
+# Brand kit archive (kept outside git)
+envelopen-brand-kit.zip

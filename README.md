@@ -135,6 +135,21 @@ You do not need a Cloudflare account to run Envelopen locally. You need:
 
 `package.json` sets the pnpm version for the project. If your pnpm version is different, pnpm downloads and uses the project version.
 
+### Try the demo
+
+To see Envelopen with sample data, run two commands:
+
+```sh
+pnpm install
+pnpm demo
+```
+
+The demo makes its own secrets and its own local data in `.wrangler/demo`. It adds sample contacts, lists, templates, and campaigns with stats. When the demo is ready, it shows the URL and the login: `demo@example.com` with the password `envelopen-demo`.
+
+The demo sends no real email and does not connect to Cloudflare. A local mock stands in for the email provider. To delete the demo data and seed it again, run `pnpm demo --reset`. To stop the demo, press Ctrl+C. See [Run the demo](docs/guides/local-development.md#run-the-demo).
+
+### Set up a local Worker
+
 1. Install the dependencies: `pnpm install`.
 2. Copy the secrets file: `cp .dev.vars.example .dev.vars`.
 3. Replace the three values in `.dev.vars`. The comments in the file show how to make each value.
@@ -149,6 +164,7 @@ You do not need a Cloudflare account to run Envelopen locally. You need:
 Other commands:
 
 ```sh
+pnpm demo        # Local demo with sample data (--reset seeds again)
 pnpm test        # Vitest in the Workers runtime
 pnpm test:e2e    # Playwright against local Workers and a mock provider
 pnpm typecheck   # TypeScript in all packages

@@ -11,6 +11,7 @@
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply DB --local",
     "dev": "turbo run build --filter=@envelopen/web && wrangler dev",
+    "demo": "node scripts/demo.mjs",
     "test": "turbo run test",
     "test:e2e": "pnpm --filter @envelopen/web test:e2e",
     "typecheck": "turbo run typecheck",

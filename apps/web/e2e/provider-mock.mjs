@@ -1,5 +1,6 @@
 // A local stand-in for the email providers and the DNS-over-HTTPS resolver, for the
-// providers spec. The Worker under test runs with OUTBOUND_MOCK_ORIGIN pointing here,
+// end-to-end tests and for `pnpm demo` (scripts/demo.mjs). The Worker runs with
+// OUTBOUND_MOCK_ORIGIN pointing here,
 // so `https://api.resend.com/domains` arrives as `/api.resend.com/domains`.
 //
 //   node e2e/provider-mock.mjs <port> [--dmarc]
@@ -64,10 +65,11 @@ const routes = {
     }),
   "POST /api.resend.com/emails/batch": (_req, res, body) => {
     const emails = JSON.parse(body);
-    sent.push(...emails);
-    json(res, 200, {
-      data: emails.map((_email, index) => ({ id: `e2e-${sent.length}-${index}` })),
-    });
+    const end = sent.length + emails.length;
+    // Each record keeps the message id, so `pnpm demo` can send events for it.
+    const records = emails.map((email, index) => ({ ...email, id: `e2e-${end}-${index}` }));
+    sent.push(...records);
+    json(res, 200, { data: records.map((record) => ({ id: record.id })) });
   },
   "GET /api.tosend.com/v2/info": (_req, res) =>
     json(res, 200, {

@@ -10,6 +10,41 @@ This guide shows how to run Envelopen on your computer with `wrangler dev`. The 
 `package.json` sets the pnpm version for the project (`packageManager`). If your pnpm version is different, pnpm downloads and uses the project version. So every contributor uses the same pnpm version.
 - Install `openssl`, to make the secret values. macOS and most Linux systems have it.
 
+## Run the demo
+
+The demo starts a local Envelopen with sample data. Use it to look at the app before you set up your own data. You do not need `.dev.vars` or `openssl` for the demo.
+
+1. Install the dependencies: `pnpm install`.
+2. Start the demo: `pnpm demo`.
+3. Wait for the **Envelopen demo is ready** message. The first start takes about two minutes.
+4. Open the URL in the message. The URL is usually `http://localhost:8787`.
+5. Sign in with the email `demo@example.com` and the password `envelopen-demo`.
+
+The demo adds this sample data to the workspace **Acme Demo**:
+
+- A Resend connection and the verified sending domain `mail.example.com`.
+- 240 contacts with custom fields, three lists, and four tags. Some contacts are unsubscribed or suppressed.
+- Two templates.
+- Two sent campaigns with deliveries, bounces, opens, clicks, and unsubscribes.
+- One draft campaign and one campaign that is scheduled three days from now.
+- One API key.
+
+The demo sends no real email. A local mock stands in for Resend and for the DNS resolver. The demo does not connect to Cloudflare. The opens and clicks come from requests to the tracking links of the sample emails.
+
+The demo runs the cron every minute. Some opens and clicks arrive during the first two hours, so the hourly charts fill in.
+
+The demo keeps its data, its secrets, and the `wrangler dev` log in `.wrangler/demo`. It does not change the `pnpm dev` data in `.wrangler/state`. When you start the demo again, it keeps the data and does not seed again.
+
+To delete the demo data and seed again, run:
+
+```sh
+pnpm demo --reset
+```
+
+To use a different port, run `pnpm demo --port 8890`. If you do not set a port, the demo uses the first free port from 8787.
+
+To stop the demo, press Ctrl+C. The demo stops `wrangler dev` and the mock.
+
 ## Steps
 
 ### 1. Install the dependencies
@@ -135,6 +170,7 @@ The end-to-end tests start their own Workers with their own data. They do not ch
 | The setup page does not accept the token. | The token is not the value in `.dev.vars`, or the Worker started before you changed the file. | Check the value. Restart `pnpm dev`. |
 | The setup page shows **Go to sign in**. | The owner exists already. | Sign in, or reset the local data. |
 | A campaign stays at **Sending** after all batches are done. | The cron did not run. | Run the cron. See step 6. |
+| `pnpm demo` stops with **The seed failed**. | A seed step did not complete. | Read `.wrangler/demo/wrangler.log`. Run `pnpm demo` again. It deletes the partial data and seeds again. |
 | `pnpm` is not found. | pnpm is not installed. | Install pnpm. See [Before you start](#before-you-start). |
 | `pnpm install` stops with an unsupported engine error. | The Node.js version is earlier than 22.12. | Install Node.js 22.12 or later. |
 

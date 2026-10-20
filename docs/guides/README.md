@@ -9,6 +9,7 @@ Vendors change their limits and prices often. Each guide shows the date of the l
 | Guide | What it covers |
 |---|---|
 | [README](../../README.md) | Deploy, secrets, first-run setup, and the first campaign. |
+| [Run Envelopen locally](local-development.md) | Local secrets, the local database, the cron, and the provider mock. |
 | [Set up a sending domain](sending-domain.md) | DNS records, verification, and the tracking domain. |
 | [Import contacts](import-contacts.md) | CSV files, column mapping, consent basis, tags, lists, and export. |
 | [Send a test email](test-send.md) | Test addresses, test sends, and the unsubscribe headers in Gmail. |

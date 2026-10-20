@@ -128,15 +128,19 @@ Envelopen records every change with the actor, the surface (UI, API, or MCP), an
 
 ## Local development
 
-pnpm runs through corepack. Node.js 22.12 or later is necessary.
+You do not need a Cloudflare account to run Envelopen locally. Node.js 22.12 or later is necessary. pnpm runs through corepack.
 
-```sh
-corepack pnpm install
-cp .dev.vars.example .dev.vars
-corepack pnpm dev
-```
+1. Enable corepack one time: `corepack enable`.
+2. Install the dependencies: `corepack pnpm install`.
+3. Copy the secrets file: `cp .dev.vars.example .dev.vars`.
+4. Replace the three values in `.dev.vars`. The comments in the file show how to make each value.
+5. Make the local database: `corepack pnpm exec wrangler d1 migrations apply DB --local`.
+6. Start the Worker: `corepack pnpm dev`.
+7. Open `http://localhost:8787/setup`, and create the owner with the `SETUP_TOKEN` value.
 
-Replace the values in `.dev.vars` before you start. Then open `http://localhost:8787/setup`.
+`wrangler dev` does not run the per-minute cron. Without the cron, scheduled campaigns do not start, and a campaign does not change to **Sent**. To run the cron one time, send `curl "http://localhost:8787/cdn-cgi/local/scheduled"`.
+
+[Run Envelopen locally](docs/guides/local-development.md) explains each step. It also shows how to run the cron every minute, how to use the provider mock instead of a real provider, and how to reset the local data.
 
 Other commands:
 

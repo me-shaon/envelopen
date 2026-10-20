@@ -120,12 +120,13 @@ function parseJson<T>(text: string | null, fallback: T): T {
 }
 
 // D1 rows written per contact. Each table row also writes its index entries. The import
-// test measures a new contact with one tag (9 rows). The list and field values count
-// the table row and every index of their tables.
+// test measures a new contact with one tag (10 rows). The list and field values count
+// the table row and every index of their tables. Since migration 0014, a trigger writes
+// one more row per tag or list: its member count.
 const WRITES_PER_NEW_CONTACT = 6;
 const WRITES_PER_UPDATED_CONTACT = 1;
-const WRITES_PER_TAG = 3;
-const WRITES_PER_LIST = 4;
+const WRITES_PER_TAG = 4;
+const WRITES_PER_LIST = 5;
 const WRITES_PER_FIELD = 3;
 
 /** An upper estimate of the D1 rows that an import writes. */

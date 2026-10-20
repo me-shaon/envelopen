@@ -252,6 +252,9 @@ export interface ListsTable {
   workspace_id: Immutable<number>;
   name: string;
   description: string | null;
+  /** Kept by triggers on list_members (migration 0014). Only the recount writes it. */
+  subscribed_count: ColumnType<number, never, number>;
+  unsubscribed_count: ColumnType<number, never, number>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -271,6 +274,8 @@ export interface TagsTable {
   id: Generated<number>;
   workspace_id: Immutable<number>;
   name: string;
+  /** Kept by triggers on contact_tags (migration 0014). Only the recount writes it. */
+  contact_count: ColumnType<number, never, number>;
   created_at: Generated<number>;
 }
 

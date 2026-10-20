@@ -74,6 +74,7 @@ export {
   processImportChunk,
   runImportJob,
 } from "./import/process";
+export { COUNT_CHUNK, type CountRepair, repairAllCounts, repairCounts } from "./lists/counts";
 export {
   DEFAULT_PAGE_SIZE,
   decodeCursor,

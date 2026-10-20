@@ -26,6 +26,11 @@ import {
 //
 // The fragments expect the contact as `c` and a LEFT JOIN of its suppression as `s`.
 // Every subquery names its workspace, as the scope rule asks (KTD4).
+//
+// The estimate and the snapshot start from the memberships of the targeted lists and
+// tags (`candidates`), not from every contact: a list of 10,000 in a workspace of 50,000
+// reads about 20,000 rows instead of 80,000. audience.test.ts compares them with the
+// contact-driven form of the same rules.
 
 function idList(ids: readonly number[]): RawBuilder<unknown> {
   return sql.join(ids.map((id) => sql`${id}`));
@@ -93,15 +98,101 @@ export interface AudienceEstimate {
   excluded: ExclusionCounts;
 }
 
-function countsFrom(rows: { reason: string | null; n: number }[]): AudienceEstimate {
-  const estimate: AudienceEstimate = { recipients: 0, excluded: emptyExclusions() };
-  for (const row of rows) {
-    if (row.reason === null) estimate.recipients += Number(row.n);
-    else if ((EXCLUSION_REASONS as readonly string[]).includes(row.reason)) {
-      estimate.excluded[row.reason as keyof ExclusionCounts] += Number(row.n);
-    }
+/** Contact ids in (afterId, toId]: one snapshot page. */
+interface IdRange {
+  afterId: number;
+  toId: number;
+}
+
+function inRange(column: string, range: IdRange | undefined) {
+  return range
+    ? sql` AND ${sql.ref(column)} > ${range.afterId} AND ${sql.ref(column)} <= ${range.toId}`
+    : sql``;
+}
+
+/**
+ * The targeted contacts, as `x(contact_id, sub)`, read from the membership and tag
+ * indexes instead of every contact of the workspace. `sub` is 1 when a subscribed
+ * membership in a targeted list or a targeted tag reaches the contact: the `reachable`
+ * rule of `exclusionReason`. A contact in two targeted lists or tags appears once.
+ *
+ * The rows come in contact id order: list_members_list_contact_idx and
+ * contact_tags_tag_idx hold (list or tag, workspace, contact).
+ */
+function candidates(workspaceId: number, audience: CampaignAudience, range?: IdRange) {
+  const parts: RawBuilder<unknown>[] = [];
+  if (audience.listIds.length > 0) {
+    parts.push(
+      sql`SELECT contact_id, status = 'subscribed' AS sub FROM list_members WHERE list_id IN (${idList(audience.listIds)}) AND workspace_id = ${workspaceId}${inRange("contact_id", range)}`,
+    );
   }
-  return estimate;
+  if (audience.tagIds.length > 0) {
+    parts.push(
+      sql`SELECT contact_id, 1 AS sub FROM contact_tags WHERE tag_id IN (${idList(audience.tagIds)}) AND workspace_id = ${workspaceId}${inRange("contact_id", range)}`,
+    );
+  }
+  // One list or one tag has each contact once. Otherwise group, which also sorts by id.
+  if (parts.length === 1 && audience.listIds.length + audience.tagIds.length === 1) {
+    return sql`(${parts[0]}) AS x`;
+  }
+  return sql`(SELECT contact_id, max(sub) AS sub FROM (${sql.join(parts, sql` UNION ALL `)}) GROUP BY contact_id) AS x`;
+}
+
+/**
+ * The targeted contacts that the owner did not exclude, joined with the contact as `c`
+ * and its suppression as `s`. The same contacts as
+ * `WHERE targeted(...) AND NOT excluded(...)` over all contacts, at the cost of the
+ * targeted memberships only.
+ */
+function audienceFrom(
+  workspaceId: number,
+  audience: CampaignAudience,
+  range?: IdRange,
+): RawBuilder<unknown> {
+  const followUp = audience.followUpOf
+    ? sql` AND ${parentNonOpener(workspaceId, audience.followUpOf)}`
+    : sql``;
+  // CROSS JOIN keeps x as the outer loop, so SQLite reads each contact by primary key.
+  return sql`FROM ${candidates(workspaceId, audience, range)}
+CROSS JOIN contacts c
+${suppressionJoin(workspaceId)}
+WHERE c.id = x.contact_id AND c.workspace_id = ${workspaceId}${followUp}
+  AND NOT ${excluded(workspaceId, audience)}`;
+}
+
+/**
+ * `exclusionReason` for a row of `audienceFrom`: the candidate row tells whether the
+ * contact is reachable, so no membership is read again.
+ */
+function candidateReason(type: CampaignType): RawBuilder<string | null> {
+  const consent =
+    type === "regular" ? sql`WHEN c.consent_basis = 'unknown' THEN 'consent_unknown' ` : sql``;
+  return sql<
+    string | null
+  >`CASE WHEN s.id IS NOT NULL THEN 'suppressed' WHEN c.unsubscribed_at IS NOT NULL THEN 'unsubscribed' WHEN NOT x.sub THEN 'unsubscribed' ${consent}ELSE NULL END`;
+}
+
+/** One row of counts. Sums, not GROUP BY: D1 counts the rows that a sort reads. */
+export interface AudienceCounts {
+  recipients: number | null;
+  consent_unknown: number | null;
+  suppressed: number | null;
+  unsubscribed: number | null;
+}
+
+function countsQuery(from: RawBuilder<unknown>, type: CampaignType) {
+  return sql<AudienceCounts>`
+SELECT sum(reason IS NULL) AS recipients,
+  sum(reason = 'consent_unknown') AS consent_unknown,
+  sum(reason = 'suppressed') AS suppressed,
+  sum(reason = 'unsubscribed') AS unsubscribed
+FROM (SELECT ${candidateReason(type)} AS reason ${from})`;
+}
+
+function countsFrom(row: AudienceCounts | undefined): AudienceEstimate {
+  const excluded = emptyExclusions();
+  for (const reason of EXCLUSION_REASONS) excluded[reason] = Number(row?.[reason] ?? 0);
+  return { recipients: Number(row?.recipients ?? 0), excluded };
 }
 
 /**
@@ -117,13 +208,8 @@ export async function estimateAudience(
   if (audience.listIds.length === 0 && audience.tagIds.length === 0) {
     return { recipients: 0, excluded: emptyExclusions() };
   }
-  const { rows } = await sql<{ reason: string | null; n: number }>`
-SELECT reason, count(*) AS n FROM (
-  SELECT ${exclusionReason(workspaceId, audience, type)} AS reason
-  FROM contacts c ${suppressionJoin(workspaceId)}
-  WHERE c.workspace_id = ${workspaceId} AND ${targeted(workspaceId, audience)} AND NOT ${excluded(workspaceId, audience)}
-) GROUP BY reason`.execute(db.db);
-  return countsFrom(rows);
+  const { rows } = await countsQuery(audienceFrom(workspaceId, audience), type).execute(db.db);
+  return countsFrom(rows[0]);
 }
 
 /** The exclusion counts of one snapshot page: contacts in (afterId, toId]. */
@@ -135,17 +221,11 @@ export function pageExclusionsQuery(
   afterId: number,
   toId: number,
 ) {
-  return sql<{ reason: string | null; n: number }>`
-SELECT reason, count(*) AS n FROM (
-  SELECT ${exclusionReason(workspaceId, audience, type)} AS reason
-  FROM contacts c ${suppressionJoin(workspaceId)}
-  WHERE c.workspace_id = ${workspaceId} AND c.id > ${afterId} AND c.id <= ${toId}
-    AND ${targeted(workspaceId, audience)} AND NOT ${excluded(workspaceId, audience)}
-) WHERE reason IS NOT NULL GROUP BY reason`.compile(db);
+  return countsQuery(audienceFrom(workspaceId, audience, { afterId, toId }), type).compile(db);
 }
 
-export function exclusionCountsOf(rows: { reason: string | null; n: number }[]): ExclusionCounts {
-  return countsFrom(rows).excluded;
+export function exclusionCountsOf(rows: AudienceCounts[]): ExclusionCounts {
+  return countsFrom(rows[0]).excluded;
 }
 
 /**
@@ -164,11 +244,9 @@ export function insertPageRecipientsQuery(
   return sql`
 INSERT INTO campaign_recipients (workspace_id, campaign_id, contact_id)
 SELECT ${workspaceId}, ${campaignId}, c.id
-FROM contacts c ${suppressionJoin(workspaceId)}
-WHERE c.workspace_id = ${workspaceId} AND c.id > ${afterId} AND c.id <= ${toId}
-  AND ${targeted(workspaceId, audience)} AND NOT ${excluded(workspaceId, audience)}
-  AND (${exclusionReason(workspaceId, audience, type)}) IS NULL
-ORDER BY c.id
+${audienceFrom(workspaceId, audience, { afterId, toId })}
+  AND (${candidateReason(type)}) IS NULL
+ORDER BY x.contact_id
 ON CONFLICT (campaign_id, contact_id) DO NOTHING`.compile(db);
 }
 

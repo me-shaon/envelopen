@@ -157,11 +157,17 @@ async function testSendStep(db: DbConnection, workspaceId: number, ready: boolea
   // A sent campaign also proves that sending works.
   const sent =
     tested ??
+    // From the workspace's campaigns to their recipients by campaign_id: no index of
+    // campaign_recipients starts with workspace_id, so a workspace without a sent
+    // recipient read every recipient of the database.
     (await db.db
-      .selectFrom("campaign_recipients")
-      .select("id")
-      .where("workspace_id", "=", workspaceId)
-      .where("status", "=", "sent")
+      .selectFrom("campaigns as c")
+      .crossJoin("campaign_recipients as r")
+      .select("r.id")
+      .where("c.workspace_id", "=", workspaceId)
+      .where("r.workspace_id", "=", workspaceId)
+      .whereRef("r.campaign_id", "=", "c.id")
+      .where("r.status", "=", "sent")
       .limit(1)
       .executeTakeFirst());
   if (sent) return step("send_test", "done", "A test email was sent.");

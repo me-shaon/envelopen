@@ -34,26 +34,20 @@ export const TagSchema = z
   })
   .meta({ id: "Tag" });
 
+// The counts are columns that triggers keep (migration 0014), so a page of lists reads
+// one row per list. counts.ts recounts them once a day.
 function listsWithCounts(db: Kysely<Database>, workspaceId: number) {
   return db
     .selectFrom("lists as l")
-    .leftJoin("list_members as m", (join) =>
-      join.onRef("m.list_id", "=", "l.id").on("m.workspace_id", "=", workspaceId),
-    )
-    .select((eb) => [
+    .select([
       "l.id",
       "l.name",
       "l.description",
       "l.created_at",
-      eb.fn
-        .sum<number>(eb.case().when("m.status", "=", "subscribed").then(1).else(0).end())
-        .as("subscribed"),
-      eb.fn
-        .sum<number>(eb.case().when("m.status", "=", "unsubscribed").then(1).else(0).end())
-        .as("unsubscribed"),
+      "l.subscribed_count as subscribed",
+      "l.unsubscribed_count as unsubscribed",
     ])
-    .where("l.workspace_id", "=", workspaceId)
-    .groupBy("l.id");
+    .where("l.workspace_id", "=", workspaceId);
 }
 
 type ListRow = {
@@ -244,10 +238,13 @@ export const listsAddContacts = defineOperation({
               created_at: now,
             })),
           )
-          .onConflict((conflict) => conflict.doNothing()),
+          .onConflict((conflict) => conflict.doNothing())
+          // D1 counts the rows that the member count trigger writes in meta.changes, so
+          // the new memberships are the returned rows.
+          .returning("contact_id"),
       ),
     );
-    const added = results.reduce((sum, result) => sum + (result.meta.changes ?? 0), 0);
+    const added = results.reduce((sum, result) => sum + (result.results?.length ?? 0), 0);
     return { added, keptUnsubscribed: Number(kept.count) };
   },
   auditTarget: (input, output) => ({
@@ -289,22 +286,11 @@ export const listsRemoveContact = defineOperation({
 
 // Tags -----------------------------------------------------------------------------------
 
-// A count per tag, not a join with GROUP BY: the join sorted every tagged contact,
-// and D1 counts the sorted rows as rows read. The subquery reads the tag index only.
+// The count is a column that triggers keep (migration 0014).
 function tagsWithCounts(db: Kysely<Database>, workspaceId: number) {
   return db
     .selectFrom("tags as t")
-    .select((eb) => [
-      "t.id",
-      "t.name",
-      "t.created_at",
-      eb
-        .selectFrom("contact_tags as ct")
-        .select((sub) => sub.fn.countAll<number>().as("count"))
-        .where("ct.workspace_id", "=", workspaceId)
-        .whereRef("ct.tag_id", "=", "t.id")
-        .as("contacts"),
-    ])
+    .select(["t.id", "t.name", "t.created_at", "t.contact_count as contacts"])
     .where("t.workspace_id", "=", workspaceId);
 }
 

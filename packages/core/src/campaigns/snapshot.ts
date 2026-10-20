@@ -2,7 +2,12 @@ import type { DbConnection } from "@envelopen/db";
 import { getAdapter } from "@envelopen/providers";
 import { sql } from "kysely";
 import type { CampaignJob, SendQueue } from "../services";
-import { exclusionCountsOf, insertPageRecipientsQuery, pageExclusionsQuery } from "./audience";
+import {
+  type AudienceCounts,
+  exclusionCountsOf,
+  insertPageRecipientsQuery,
+  pageExclusionsQuery,
+} from "./audience";
 import { dispatchAll } from "./dispatch";
 import { type FinalizeResult, tryFinalizeCampaign } from "./finalize";
 import {
@@ -154,7 +159,7 @@ export async function snapshotPage(
   const base = Math.trunc(Number(seq?.max ?? 0)) + 1;
   const size = Math.max(1, Math.trunc(page.batchSize));
 
-  const results = await db.atomic<{ reason: string | null; n: number }>([
+  const results = await db.atomic<AudienceCounts>([
     pageExclusionsQuery(db.db, workspaceId, audience, state.type, page.afterId, toId),
     insertPageRecipientsQuery(
       db.db,
@@ -199,7 +204,13 @@ export function addExclusions(a: ExclusionCounts, b: ExclusionCounts): Exclusion
   return sum;
 }
 
-/** Stores the totals and marks the snapshot done. The campaign can then finish. */
+/**
+ * Stores the totals and marks the snapshot done. The campaign can then finish.
+ *
+ * Each page puts every new recipient in a batch in the same D1 batch as the insert, and
+ * a batch's recipient_count never changes. So the sum over the batches is the number of
+ * recipients, at one row read per batch instead of one per recipient.
+ */
 export async function finishSnapshot(
   db: DbConnection,
   job: CampaignJob,
@@ -210,7 +221,7 @@ export async function finishSnapshot(
   await sql`
 UPDATE campaigns SET
   snapshot_done_at = COALESCE(snapshot_done_at, ${now}),
-  recipient_count = (SELECT count(*) FROM campaign_recipients WHERE workspace_id = ${workspaceId} AND campaign_id = ${campaignId}),
+  recipient_count = (SELECT COALESCE(SUM(recipient_count), 0) FROM campaign_batches WHERE workspace_id = ${workspaceId} AND campaign_id = ${campaignId}),
   exclusions = ${JSON.stringify(excluded)},
   updated_at = ${now}
 WHERE workspace_id = ${workspaceId} AND id = ${campaignId}`.execute(db.db);

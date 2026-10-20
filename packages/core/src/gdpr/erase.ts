@@ -58,11 +58,6 @@ export async function eraseContact(
   options: { now: number; source: string },
 ): Promise<EraseResult> {
   const pattern = containsPattern(target.email);
-  const recipientIds = db.db
-    .selectFrom("campaign_recipients")
-    .select("id")
-    .where("workspace_id", "=", workspaceId)
-    .where("contact_id", "=", target.id);
   const messageIds = db.db
     .selectFrom("campaign_recipients")
     .select("provider_message_id")
@@ -84,13 +79,12 @@ export async function eraseContact(
         created_at: options.now,
       })
       .onConflict((conflict) => conflict.columns(["workspace_id", "email_hash"]).doNothing()),
-    // 1. Raw events. The recipient rows still carry the contact id here.
-    db.db
-      .deleteFrom("email_events")
-      .where("workspace_id", "=", workspaceId)
-      .where((eb) =>
-        eb.or([eb("contact_id", "=", target.id), eb("recipient_id", "in", recipientIds)]),
-      ),
+    // 1. Raw events. An event stores the contact id of its recipient, and a recipient's
+    // contact id only changes to NULL, so this also covers the events of every recipient
+    // of the contact (migration 0014). INDEXED BY: SQLite otherwise reads the workspace's
+    // events through the index that starts with workspace_id.
+    sql`DELETE FROM email_events INDEXED BY email_events_contact_idx
+WHERE contact_id = ${target.id} AND workspace_id = ${workspaceId}`.compile(db.db),
     db.db
       .deleteFrom("provider_events")
       .where("workspace_id", "=", workspaceId)

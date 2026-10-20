@@ -188,12 +188,15 @@ export async function savePreferences(
   const update = (ids: number[], status: "subscribed" | "unsubscribed") =>
     sql`UPDATE list_members SET status = ${status}, status_source = 'preference_page', status_at = ${now}, status_campaign_id = ${campaignId}
 WHERE workspace_id = ${workspaceId} AND contact_id = ${contactId} AND status <> ${status}
-  AND list_id IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`.compile(db.db);
+  AND list_id IN (SELECT value FROM json_each(${JSON.stringify(ids)}))
+RETURNING list_id`.compile(db.db);
   const queries = [];
   if (leave.length > 0) queries.push(update(leave, "unsubscribed"));
   if (join.length > 0) queries.push(update(join, "subscribed"));
   const results = await db.atomic(queries);
-  const changes = results.map((result) => result.meta.changes ?? 0);
+  // The returned rows, not meta.changes: D1 adds the rows that the member count
+  // trigger writes (migration 0014).
+  const changes = results.map((result) => result.results?.length ?? 0);
   return {
     unsubscribed: leave.length > 0 ? (changes[0] ?? 0) : 0,
     resubscribed: join.length > 0 ? (changes.at(-1) ?? 0) : 0,

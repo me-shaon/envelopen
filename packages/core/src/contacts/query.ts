@@ -52,6 +52,9 @@ export function filteredContacts(
 ) {
   let query = contactBase(db, workspaceId);
   const search = filters.search?.trim();
+  // The search reads every contact of the workspace when few contacts match. An FTS5
+  // trigram index is deferred: `wrangler d1 export` does not support virtual tables, and
+  // trigram support on remote D1 is not verified.
   if (search) {
     const pattern = likePattern(search);
     query = query.where(

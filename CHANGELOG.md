@@ -18,6 +18,12 @@ The release workflow uses the section of a version as the notes of its GitHub re
 - Deleting a contact or a draft campaign no longer reads every event and recipient.
 - The hourly event retention job reads only the expired events.
 - Event flushes look up campaign recipients by id instead of reading the workspace.
+- Lists and tags store their member counts, so the lists and tags pages no longer count every membership.
+- Campaign estimates and recipient snapshots read the memberships of the targeted lists and tags only.
+- The end of a recipient snapshot sums the batch sizes instead of counting every recipient.
+- Erasing a contact deletes its raw events through the contact index instead of reading every event.
+- The onboarding checklist finds a sent email without reading every campaign recipient.
+- A daily cron job recounts the stored list and tag counts and corrects any drift.
 
 ### Fixed
 

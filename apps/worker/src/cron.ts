@@ -5,6 +5,7 @@ import {
   purgeExpiredEvents,
   type RetentionResult,
   redispatchWaiting,
+  repairAllCounts,
   rescueSnapshots,
   resealLegacyConnections,
   resumeAfterPlatformLimit,
@@ -32,6 +33,8 @@ import { campaignStarter, createServices, sendQueue } from "./services";
 // 5. The event pipeline (U10): provider events that no flush applied go to their
 //    EventBuffer again, and once an hour raw events past the workspace's retention
 //    period are deleted (R51). Rollups stay.
+// 6. Once a day, the stored member counts of lists and tags are recounted
+//    (lists/counts.ts). Triggers keep them, so the recount normally writes nothing.
 //
 // Each job runs on its own, so one failure does not stop the others. Every job bounds
 // its work, so one run stays inside the Free limits.
@@ -168,6 +171,15 @@ export async function runEventCron(
   return report;
 }
 
+/** The UTC hour and minute of the daily recount of list and tag member counts. */
+export const RECOUNT_HOUR = 3;
+export const RECOUNT_MINUTE = 41;
+
+function isRecountTime(now: number): boolean {
+  const date = new Date(now);
+  return date.getUTCHours() === RECOUNT_HOUR && date.getUTCMinutes() === RECOUNT_MINUTE;
+}
+
 /** The `scheduled()` handler. */
 export async function runCron(
   env: Env,
@@ -189,6 +201,11 @@ export async function runCron(
       console.error("Cron job reseal connections failed", error),
     );
     if (!report.limited) await runEventCron(db, eventSink(env), now);
+    if (!report.limited && isRecountTime(now)) {
+      await repairAllCounts(db).catch((error) =>
+        console.error("Cron job recount of member counts failed", error),
+      );
+    }
     return report;
   } finally {
     ctx.waitUntil(db.meter.flush().catch((error) => console.error("Usage report failed", error)));

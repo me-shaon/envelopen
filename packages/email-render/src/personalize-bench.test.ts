@@ -10,10 +10,12 @@ import { createTokenSigner } from "./tokens";
 // measures the work here.
 // The real Free-plan number comes from the deployed benchmark in
 // apps/worker/scripts/personalize-benchmark. This test only catches a regression,
-// for example a parse per recipient, so its bound is loose.
+// for example a parse per recipient, so its bound is loose. Shared CI runners measure
+// up to about 8 ms where a laptop measures under 1 ms; a parse per recipient costs far
+// more than 20 ms.
 
 const RUNS = 15;
-const LOCAL_BUDGET_MS = 8;
+const LOCAL_BUDGET_MS = 20;
 
 describe("personalize benchmark", () => {
   it("personalizes the default batch of 50 well inside the Free CPU budget", async () => {

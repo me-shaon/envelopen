@@ -2,6 +2,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import {
   MAX_WELCOME_STEPS,
   planStep,
+  readWorkersPlan,
   runWelcomeStep,
   type StepOutcome,
   type StepPlan,
@@ -28,7 +29,10 @@ import { createServices, tokenSigner } from "../services";
 //
 // A stop (unsubscribed, suppressed, erased, left the list, series off or deleted) ends
 // the run. At the D1 daily limit or past the reserved budget (KTD9, U11), the send step
-// sleeps until after 00:00 UTC and runs again.
+// sleeps until after 00:00 UTC and runs again. The reserved budget is 70% of the day's
+// D1 writes on Workers Free (the owner's Workers plan setting), so campaigns and
+// unsubscribes keep the rest. On Paid, the check is off. The run reports its writes as
+// automation, so the usage view shows the share of welcome steps.
 
 /** Provider refusals get 4 retries: about 1, 2, 4, and 8 minutes later. */
 export const SEND_STEP = {
@@ -49,7 +53,7 @@ type Planned = StepPlan | { kind: "limit"; until: number };
 export class WelcomeWorkflow extends WorkflowEntrypoint<Env, WelcomeJob> {
   /** Runs work on a fresh metered connection and reports its writes. */
   private async withDb<T>(work: (db: DbConnection) => Promise<T>): Promise<T> {
-    const db = createDb(this.env, { usageSink: usageSink(this.env) });
+    const db = createDb(this.env, { usageSink: usageSink(this.env, "automation") });
     try {
       return await work(db);
     } finally {
@@ -76,8 +80,8 @@ export class WelcomeWorkflow extends WorkflowEntrypoint<Env, WelcomeJob> {
       },
       pendingUnsubscribes: (workspaceId, contactIds) =>
         pendingUnsubscribedContacts(unsubscribeLedger(this.env), db, workspaceId, contactIds),
-      // KTD9: the reserved budget for automation. U11 asks the UsageMeter here.
-      budget: async () => "ok",
+      // KTD9: the reserved budget for automation. The plan is the owner's setting.
+      budget: async () => meter.reserve(await readWorkersPlan(db)),
       now: () => Date.now(),
     };
   }

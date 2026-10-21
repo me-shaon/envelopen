@@ -113,11 +113,20 @@
           "defaultSourceUrl": {
             "type": "string",
             "description": "The upstream repository URL."
+          },
+          "workersPlan": {
+            "type": "string",
+            "enum": [
+              "free",
+              "paid"
+            ],
+            "description": "The Workers plan of the Cloudflare account, as the owner set it. On `free`, welcome steps wait after 70% of the daily D1 writes. On `paid`, they do not."
           }
         },
         "required": [
           "sourceUrl",
-          "defaultSourceUrl"
+          "defaultSourceUrl",
+          "workersPlan"
         ]
       },
       "BackupStatus": {
@@ -4947,6 +4956,17 @@
                 "type": "number",
                 "description": "Share of the daily limit used, 0 to 1 or more."
               },
+              "automation": {
+                "type": "integer",
+                "description": "The part of `used` that welcome steps wrote today."
+              },
+              "reserved": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "The rows after which welcome steps wait until the reset (70% of the limit), so campaigns and unsubscribes keep the rest. Null on Workers Paid."
+              },
               "state": {
                 "type": "string",
                 "enum": [
@@ -4962,8 +4982,22 @@
               "limit",
               "remaining",
               "ratio",
+              "automation",
+              "reserved",
               "state"
             ]
+          },
+          "workersPlan": {
+            "type": "string",
+            "enum": [
+              "free",
+              "paid"
+            ],
+            "description": "The Workers plan that the owner set in Settings."
+          },
+          "reserveRatio": {
+            "type": "number",
+            "description": "The share of the daily D1 writes that welcome steps can use on Free."
           },
           "warning": {
             "type": "boolean",
@@ -5038,6 +5072,8 @@
           "day",
           "resetsAt",
           "d1Writes",
+          "workersPlan",
+          "reserveRatio",
           "warning",
           "paidHint",
           "platformLimit",
@@ -5290,6 +5326,17 @@
                     "type": "number",
                     "description": "Share of the daily limit used, 0 to 1 or more."
                   },
+                  "automation": {
+                    "type": "integer",
+                    "description": "The part of `used` that welcome steps wrote today."
+                  },
+                  "reserved": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "The rows after which welcome steps wait until the reset (70% of the limit), so campaigns and unsubscribes keep the rest. Null on Workers Paid."
+                  },
                   "state": {
                     "type": "string",
                     "enum": [
@@ -5305,8 +5352,22 @@
                   "limit",
                   "remaining",
                   "ratio",
+                  "automation",
+                  "reserved",
                   "state"
                 ]
+              },
+              "workersPlan": {
+                "type": "string",
+                "enum": [
+                  "free",
+                  "paid"
+                ],
+                "description": "The Workers plan that the owner set in Settings."
+              },
+              "reserveRatio": {
+                "type": "number",
+                "description": "The share of the daily D1 writes that welcome steps can use on Free."
               },
               "warning": {
                 "type": "boolean",
@@ -5381,6 +5442,8 @@
               "day",
               "resetsAt",
               "d1Writes",
+              "workersPlan",
+              "reserveRatio",
               "warning",
               "paidHint",
               "platformLimit",
@@ -6134,7 +6197,7 @@
       "get": {
         "operationId": "settings.get",
         "summary": "Get the deployment settings",
-        "description": "Returns the settings of the whole deployment: the link to the source code that the admin app and the public subscriber pages show (AGPL section 13).",
+        "description": "Returns the settings of the whole deployment: the link to the source code that the admin app and the public subscriber pages show (AGPL section 13), and the Workers plan of the Cloudflare account.",
         "tags": [
           "settings"
         ],
@@ -6222,7 +6285,7 @@
       "patch": {
         "operationId": "settings.update",
         "summary": "Update the deployment settings",
-        "description": "Sets the link to the source code of this deployment. The admin app and every public subscriber page show it. Only https URLs are accepted.",
+        "description": "Sets the link to the source code of this deployment, the Workers plan, or both. The admin app and every public subscriber page show the link. Only https URLs are accepted. On the `free` plan, welcome steps wait after 70% of the daily D1 writes.",
         "tags": [
           "settings"
         ],
@@ -6235,7 +6298,7 @@
         "x-envelopen-risk": "write",
         "x-envelopen-mcp": "never",
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -6245,11 +6308,16 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 500
+                  },
+                  "workersPlan": {
+                    "type": "string",
+                    "enum": [
+                      "free",
+                      "paid"
+                    ],
+                    "description": "The Workers plan of the Cloudflare account."
                   }
-                },
-                "required": [
-                  "sourceUrl"
-                ]
+                }
               }
             }
           }
@@ -21581,7 +21649,7 @@
       "get": {
         "operationId": "usage.get",
         "summary": "Get the platform usage",
-        "description": "Returns today's D1 rows written on the deployment, the rows left before the Workers Free limit, the reset time (00:00 UTC), and the platform_limit pause when it is in force. The D1 limit is per Cloudflare account, so every workspace sees the same numbers.",
+        "description": "Returns today's D1 rows written on the deployment, the rows left before the Workers Free limit, the reset time (00:00 UTC), and the platform_limit pause when it is in force. It also gives the Workers plan that the owner set, the reserved threshold where welcome steps wait (70% on Free), and the writes that welcome steps made today. The D1 limit is per Cloudflare account, so every workspace sees the same numbers.",
         "tags": [
           "usage"
         ],

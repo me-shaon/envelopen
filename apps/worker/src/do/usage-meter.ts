@@ -1,5 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
-import type { PlatformLimit, UsageStatus } from "@envelopen/core";
+import {
+  type BudgetDecision,
+  type PlatformLimit,
+  type UsageStatus,
+  type WorkersPlan,
+  welcomeReserve,
+} from "@envelopen/core";
 import { D1_DAILY_WRITE_LIMIT } from "./usage";
 
 // The daily D1 budget on Workers Free (KTD24, R71). One instance for the deployment,
@@ -16,6 +22,12 @@ import { D1_DAILY_WRITE_LIMIT } from "./usage";
 //   rejected (KTD1). It lives here because the send consumer reads `status` before each
 //   batch anyway, so the check costs no extra call while the ledger is empty. The
 //   ledger sets and clears it with a version, so an older report cannot undo a newer one.
+// - Welcome steps report their rows as automation (KTD9, U11). They count in the day's
+//   total and in a second count, so the usage view can show the automation share.
+// - `reserve` is the check before each welcome step: "defer" when the day's writes are
+//   at 70% of the daily limit or more, on Workers Free. The caller passes the plan from
+//   the owner's setting, because the Worker cannot read the account's plan. Campaigns,
+//   confirmation emails, and unsubscribes do not ask it: they stop only at the limit.
 
 interface LedgerFlag {
   pending: boolean;
@@ -38,15 +50,23 @@ export class UsageMeter extends DurableObject<Env> {
     return stored?.day === day ? stored : { day, rows: 0 };
   }
 
+  private async todayAutomation(now: number): Promise<DayCount> {
+    const stored = await this.ctx.storage.get<DayCount>("automation");
+    const day = utcDay(now);
+    return stored?.day === day ? stored : { day, rows: 0 };
+  }
+
   async status(now = Date.now()): Promise<UsageStatus> {
-    const [count, limit, ledger] = await Promise.all([
+    const [count, automation, limit, ledger] = await Promise.all([
       this.today(now),
+      this.todayAutomation(now),
       this.ctx.storage.get<PlatformLimit>("platform_limit"),
       this.ctx.storage.get<LedgerFlag>("unsubscribes"),
     ]);
     return {
       day: count.day,
       rowsWritten: count.rows,
+      automationRows: automation.rows,
       dailyLimit: D1_DAILY_WRITE_LIMIT,
       platformLimit: limit ?? null,
       unsubscribesPending: ledger?.pending ?? false,
@@ -69,6 +89,22 @@ export class UsageMeter extends DurableObject<Env> {
     if (!Number.isFinite(rows) || rows <= 0) return;
     const count = await this.today(now);
     await this.ctx.storage.put("rows", { day: count.day, rows: count.rows + rows });
+  }
+
+  /** Adds the rows that a welcome step wrote: to the day's total and to the automation count. */
+  async recordAutomation(rows: number, now = Date.now()): Promise<void> {
+    if (!Number.isFinite(rows) || rows <= 0) return;
+    const [count, automation] = await Promise.all([this.today(now), this.todayAutomation(now)]);
+    await this.ctx.storage.put({
+      rows: { day: count.day, rows: count.rows + rows },
+      automation: { day: automation.day, rows: automation.rows + rows },
+    });
+  }
+
+  /** The reserve check for a welcome step (KTD9). Always "ok" on Workers Paid. */
+  async reserve(plan: WorkersPlan, now = Date.now()): Promise<BudgetDecision> {
+    const count = await this.today(now);
+    return welcomeReserve(plan, count.rows, D1_DAILY_WRITE_LIMIT);
   }
 
   /** Sets the flag. A second report keeps the first time and the later reset. */

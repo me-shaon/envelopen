@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { usageQuery } from "@/api/queries";
 import { PageHeader, SectionHeader } from "@/components/page-header";
 import { FormError } from "@/components/ui/field";
@@ -16,6 +17,11 @@ import { formatUtcClock, USAGE_STATE } from "./shared";
 // each invocation reports its writes to the UsageMeter Durable Object. The view warns
 // at 80%, shows the reset at 00:00 UTC, and advises Workers Paid near the limit. The
 // other Free limits are listed with their values, marked as not measured.
+//
+// The owner's Workers plan setting (U11) shapes the copy. On Free, a second mark on the
+// bar shows the reserved threshold (70%): from there, welcome emails wait until the
+// reset, so campaigns and unsubscribes keep the rest. The view also shows the writes
+// that welcome emails made today. The limits table marks the plan that the owner chose.
 
 const WARNING_RATIO = 0.8;
 
@@ -29,11 +35,17 @@ function hoursUntil(ms: number): string {
 export function UsagePage() {
   const usage = useQuery(usageQuery);
   const data = usage.data;
+  const paid = data?.workersPlan === "paid";
+  const reserved = data?.d1Writes.reserved ?? null;
   return (
     <div className="flex max-w-[760px] flex-col gap-12">
       <PageHeader
         title="Usage"
-        description="Today's use of the Workers Free daily limits, for the whole deployment."
+        description={
+          paid
+            ? "Today's D1 writes on Workers Paid, for the whole deployment."
+            : "Today's use of the Workers Free daily limits, for the whole deployment."
+        }
       />
       {!data ? (
         usage.isPending ? (
@@ -88,14 +100,24 @@ export function UsagePage() {
                   {formatCount(data.d1Writes.used)}
                 </span>
                 <span className="mt-1.5 text-xs text-muted-foreground">
-                  of {formatCount(data.d1Writes.limit)} on Workers Free
+                  {paid
+                    ? "on Workers Paid, with no daily limit"
+                    : `of ${formatCount(data.d1Writes.limit)} on Workers Free`}
                 </span>
               </div>
+              {paid ? null : (
+                <div className="flex flex-col">
+                  <span className="figure text-[20px] leading-[1.2]">
+                    {formatCount(data.d1Writes.remaining)}
+                  </span>
+                  <span className="mt-1 text-xs text-muted-foreground">left today</span>
+                </div>
+              )}
               <div className="flex flex-col">
-                <span className="figure text-[20px] leading-[1.2]">
-                  {formatCount(data.d1Writes.remaining)}
+                <span className="figure text-[20px] leading-[1.2]" data-testid="usage-automation">
+                  {formatCount(data.d1Writes.automation)}
                 </span>
-                <span className="mt-1 text-xs text-muted-foreground">left today</span>
+                <span className="mt-1 text-xs text-muted-foreground">by welcome emails</span>
               </div>
               <div className="flex flex-col">
                 <span className="figure text-[20px] leading-[1.2]">
@@ -116,15 +138,44 @@ export function UsagePage() {
                   style={{ width: `${barWidth(data.d1Writes.ratio)}%` }}
                 />
               </div>
-              <span
-                className="absolute -top-1 h-3 w-px bg-muted-foreground/50"
-                style={{ left: `${WARNING_RATIO * 100}%` }}
-                aria-hidden="true"
-              />
+              {paid ? null : (
+                <span
+                  className="absolute -top-1 h-3 w-px bg-muted-foreground/50"
+                  style={{ left: `${WARNING_RATIO * 100}%` }}
+                  aria-hidden="true"
+                />
+              )}
+              {reserved !== null ? (
+                <span
+                  data-testid="usage-reserved-line"
+                  className="absolute -top-1 h-3 w-px border-l border-dashed border-foreground/60"
+                  style={{ left: `${data.reserveRatio * 100}%` }}
+                  aria-hidden="true"
+                />
+              ) : null}
             </div>
+            {reserved !== null ? (
+              <p className="m-0 text-xs text-muted-foreground" data-testid="usage-reserved">
+                <span className="font-medium text-foreground">
+                  Welcome emails wait from {formatCount(reserved)} writes (
+                  {Math.round(data.reserveRatio * 100)}%).
+                </span>{" "}
+                After that, they send again after 00:00 UTC. Campaigns, confirmation emails, and
+                unsubscribes use the rest of the day's writes.
+              </p>
+            ) : null}
             <p className="m-0 text-xs text-muted-foreground">
-              Envelopen warns at 80%. At the limit, D1 rejects writes: campaigns pause and resume
-              after 00:00 UTC. Workers Paid has no daily D1 write limit.{" "}
+              {paid
+                ? "The Workers plan in Settings is Paid: D1 has no daily write limit, and welcome emails do not wait. "
+                : "Envelopen warns at 80%. At the limit, D1 rejects writes: campaigns pause and resume after 00:00 UTC. Workers Paid has no daily D1 write limit. "}
+              <Link
+                to="/settings"
+                hash="workers-plan"
+                className="font-medium text-foreground underline underline-offset-2"
+              >
+                Workers plan setting
+              </Link>
+              {" · "}
               <a
                 href={guideUrl("docs/guides/cloudflare-platform.md")}
                 target="_blank"
@@ -140,14 +191,18 @@ export function UsagePage() {
             <SectionHeader
               id="limits-title"
               title="Workers plan limits"
-              aside="The Worker cannot read the account's plan"
+              aside={`Your plan in Settings: Workers ${paid ? "Paid" : "Free"}`}
             />
             <Table aria-label="Workers plan limits">
               <thead>
                 <tr>
                   <TableHead>Limit</TableHead>
-                  <TableHead>Free</TableHead>
-                  <TableHead>Paid</TableHead>
+                  <TableHead className={cn(!paid && "text-foreground")}>
+                    Free{!paid ? " (your plan)" : ""}
+                  </TableHead>
+                  <TableHead className={cn(paid && "text-foreground")}>
+                    Paid{paid ? " (your plan)" : ""}
+                  </TableHead>
                   <TableHead className="text-right">Today</TableHead>
                 </tr>
               </thead>
@@ -155,8 +210,12 @@ export function UsagePage() {
                 {data.limits.map((limit) => (
                   <TableRow key={limit.id}>
                     <TableCell className="font-medium">{limit.label}</TableCell>
-                    <TableCell className="text-muted-foreground">{limit.free}</TableCell>
-                    <TableCell className="text-muted-foreground">{limit.paid}</TableCell>
+                    <TableCell className={paid ? "text-muted-foreground" : "font-medium"}>
+                      {limit.free}
+                    </TableCell>
+                    <TableCell className={paid ? "font-medium" : "text-muted-foreground"}>
+                      {limit.paid}
+                    </TableCell>
                     <TableCell className="text-right">
                       {limit.measured && limit.used !== null ? (
                         <span className="figure">{formatCount(limit.used)}</span>

@@ -239,6 +239,41 @@ test.describe("password mode", () => {
     await expect(footerLink).toHaveAttribute("href", upstream);
   });
 
+  test("the owner sets the Workers plan, and the usage view marks it and its threshold (KTD9)", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto("/usage");
+    // The default plan is Free: the view shows the reserved threshold of welcome emails.
+    await expect(page.getByTestId("usage-reserved")).toContainText(
+      "Welcome emails wait from 70,000 writes (70%).",
+    );
+    await expect(page.getByTestId("usage-reserved-line")).toHaveCount(1);
+    await expect(page.getByTestId("usage-automation")).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Free (your plan)" })).toBeVisible();
+
+    await page.goto("/settings#workers-plan");
+    const section = page.locator("#workers-plan");
+    await expect(section.getByRole("radio", { name: /Workers Free/ })).toBeChecked();
+    await section.getByRole("radio", { name: /Workers Paid/ }).check();
+    await section.getByRole("button", { name: "Save plan" }).click();
+    await expect(section.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
+
+    await page.goto("/usage");
+    await expect(page.getByRole("columnheader", { name: "Paid (your plan)" })).toBeVisible();
+    await expect(page.getByTestId("usage-reserved")).toHaveCount(0);
+    await expect(page.getByTestId("usage-reserved-line")).toHaveCount(0);
+
+    // Back to Free. The setting survives a reload.
+    await page.goto("/settings#workers-plan");
+    await expect(section.getByRole("radio", { name: /Workers Paid/ })).toBeChecked();
+    await section.getByRole("radio", { name: /Workers Free/ }).check();
+    await section.getByRole("button", { name: "Save plan" }).click();
+    await expect(section.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
+    await page.reload();
+    await expect(section.getByRole("radio", { name: /Workers Free/ })).toBeChecked();
+  });
+
   test("the workspace switcher changes the data that a list view loads", async ({ page }) => {
     await signIn(page);
     await page.goto("/settings");

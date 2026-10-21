@@ -14,16 +14,17 @@ export function UsageCard({ onNavigate }: { onNavigate?: () => void }) {
   const data = usage.data;
   if (!data) return null;
   const { d1Writes } = data;
+  const title = data.workersPlan === "paid" ? "D1 usage" : "Free tier usage";
   return (
     <Link
       to="/usage"
       onClick={onNavigate}
       data-testid="usage-card"
-      aria-label={`Free tier usage: ${formatCount(d1Writes.used)} of ${formatCount(d1Writes.limit)} D1 writes today`}
+      aria-label={`${title}: ${formatCount(d1Writes.used)} of ${formatCount(d1Writes.limit)} D1 writes today`}
       className="flex flex-col gap-2 rounded-[10px] border border-sidebar-border bg-card p-3 transition-colors hover:border-border"
     >
       <span className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium">Free tier usage</span>
+        <span className="text-xs font-medium">{title}</span>
         {d1Writes.state !== "ok" ? (
           <Pill tone={USAGE_STATE[d1Writes.state].tone} className="px-[7px] py-px text-[11px]">
             {USAGE_STATE[d1Writes.state].label}
@@ -40,8 +41,10 @@ export function UsageCard({ onNavigate }: { onNavigate?: () => void }) {
         />
       </span>
       <span className="text-xs text-sidebar-muted">
-        <span className="figure text-sidebar-foreground">{formatCount(d1Writes.used)}</span> of{" "}
-        {formatCompact(d1Writes.limit)} D1 writes today
+        <span className="figure text-sidebar-foreground">{formatCount(d1Writes.used)}</span>{" "}
+        {data.workersPlan === "paid"
+          ? "D1 writes today"
+          : `of ${formatCompact(d1Writes.limit)} D1 writes today`}
       </span>
       <span className="text-[11px] leading-[1.4] text-sidebar-muted">
         D1 is the database. Each save to it is one write.

@@ -2,6 +2,7 @@ import type { DbConnection } from "@envelopen/db";
 import { z } from "zod";
 import { defineOperation } from "../registry/operation";
 import type { SettingsCache } from "../services";
+import { WORKERS_PLANS, type WorkersPlan } from "../usage/limits";
 
 // Deployment settings (KTD16). They apply to the whole deployment, not to one workspace,
 // so they live in the global `system_settings` table. Only the owner session can read or
@@ -11,12 +12,22 @@ import type { SettingsCache } from "../services";
 // subscriber page. The public pages read it through a cache (KV in the Worker), so a
 // page view costs no D1 read in the common case. A change writes the new value to the
 // cache at once. Edge copies of the old value expire within a few minutes.
+//
+// The Workers plan (KTD9, U11) is the owner's statement of the account's plan, because
+// the Worker cannot read it. On Free, welcome steps wait when the day's D1 writes pass
+// the reserved threshold. On Paid, that check is off. The usage view marks the plan.
 
 /** The upstream repository. Each deployment links here until the owner sets another URL. */
 export const DEFAULT_SOURCE_URL = "https://github.com/me-shaon/envelopen";
 
 /** The `system_settings` key of the source link. */
 export const SOURCE_URL_SETTING = "source_url";
+
+/** The `system_settings` key of the Workers plan. */
+export const WORKERS_PLAN_SETTING = "workers_plan";
+
+/** The plan until the owner sets one. */
+export const DEFAULT_WORKERS_PLAN: WorkersPlan = "free";
 
 const MAX_URL_LENGTH = 500;
 
@@ -45,6 +56,11 @@ export const DeploymentSettingsSchema = z
   .object({
     sourceUrl: z.string().meta({ description: "The link to the source code of this deployment." }),
     defaultSourceUrl: z.string().meta({ description: "The upstream repository URL." }),
+    workersPlan: z.enum(WORKERS_PLANS).meta({
+      description:
+        "The Workers plan of the Cloudflare account, as the owner set it. On `free`, welcome " +
+        "steps wait after 70% of the daily D1 writes. On `paid`, they do not.",
+    }),
   })
   .meta({ id: "DeploymentSettings" });
 
@@ -57,6 +73,34 @@ async function storedSourceUrl(db: DbConnection): Promise<string> {
     .where("key", "=", SOURCE_URL_SETTING)
     .executeTakeFirst();
   return row && isHttpsUrl(row.value) ? row.value : DEFAULT_SOURCE_URL;
+}
+
+function isWorkersPlan(value: string): value is WorkersPlan {
+  return (WORKERS_PLANS as readonly string[]).includes(value);
+}
+
+/** Reads the Workers plan. A missing or unknown value gives Free. */
+export async function readWorkersPlan(db: DbConnection): Promise<WorkersPlan> {
+  // `system_settings` is a global table, so no workspace filter applies.
+  const row = await db.db
+    .selectFrom("system_settings")
+    .select("value")
+    .where("key", "=", WORKERS_PLAN_SETTING)
+    .executeTakeFirst();
+  return row && isWorkersPlan(row.value) ? row.value : DEFAULT_WORKERS_PLAN;
+}
+
+async function deploymentSettings(db: DbConnection) {
+  const [sourceUrl, workersPlan] = await Promise.all([storedSourceUrl(db), readWorkersPlan(db)]);
+  return { sourceUrl, defaultSourceUrl: DEFAULT_SOURCE_URL, workersPlan };
+}
+
+async function putSetting(db: DbConnection, key: string, value: string, now: number) {
+  await db.db
+    .insertInto("system_settings")
+    .values({ key, value, updated_at: now })
+    .onConflict((oc) => oc.column("key").doUpdateSet({ value, updated_at: now }))
+    .execute();
 }
 
 /**
@@ -95,7 +139,8 @@ export const settingsGet = defineOperation({
   summary: "Get the deployment settings",
   description:
     "Returns the settings of the whole deployment: the link to the source code that the " +
-    "admin app and the public subscriber pages show (AGPL section 13).",
+    "admin app and the public subscriber pages show (AGPL section 13), and the Workers plan " +
+    "of the Cloudflare account.",
   method: "get",
   path: "/settings",
   scope: "workspace:admin",
@@ -104,7 +149,7 @@ export const settingsGet = defineOperation({
   input: z.object({}),
   output: DeploymentSettingsSchema,
   async handler(_input, { db }) {
-    return { sourceUrl: await storedSourceUrl(db), defaultSourceUrl: DEFAULT_SOURCE_URL };
+    return deploymentSettings(db);
   },
 });
 
@@ -112,32 +157,43 @@ export const settingsUpdate = defineOperation({
   id: "settings.update",
   summary: "Update the deployment settings",
   description:
-    "Sets the link to the source code of this deployment. The admin app and every public " +
-    "subscriber page show it. Only https URLs are accepted.",
+    "Sets the link to the source code of this deployment, the Workers plan, or both. The " +
+    "admin app and every public subscriber page show the link. Only https URLs are " +
+    "accepted. On the `free` plan, welcome steps wait after 70% of the daily D1 writes.",
   method: "patch",
   path: "/settings",
   scope: "workspace:admin",
   risk: "write",
   mcp: SETTINGS_MCP,
-  input: z.object({ sourceUrl: SourceUrlSchema }),
+  input: z.object({
+    sourceUrl: SourceUrlSchema.optional(),
+    workersPlan: z
+      .enum(WORKERS_PLANS, { error: "Choose Free or Paid." })
+      .optional()
+      .meta({ description: "The Workers plan of the Cloudflare account." }),
+  }),
   output: DeploymentSettingsSchema,
   async handler(input, { db, now, services }) {
-    await db.db
-      .insertInto("system_settings")
-      .values({ key: SOURCE_URL_SETTING, value: input.sourceUrl, updated_at: now })
-      .onConflict((oc) => oc.column("key").doUpdateSet({ value: input.sourceUrl, updated_at: now }))
-      .execute();
-    // Write through, so the public pages show the new link without a wait for expiry.
-    // A failed cache write is not fatal: the cached copy expires on its own.
-    try {
-      await services.settingsCache?.put(SOURCE_URL_SETTING, input.sourceUrl);
-    } catch (error) {
-      console.error("The settings cache write failed", error);
+    if (input.workersPlan !== undefined) {
+      await putSetting(db, WORKERS_PLAN_SETTING, input.workersPlan, now);
     }
-    return { sourceUrl: input.sourceUrl, defaultSourceUrl: DEFAULT_SOURCE_URL };
+    if (input.sourceUrl !== undefined) {
+      await putSetting(db, SOURCE_URL_SETTING, input.sourceUrl, now);
+      // Write through, so the public pages show the new link without a wait for expiry.
+      // A failed cache write is not fatal: the cached copy expires on its own.
+      try {
+        await services.settingsCache?.put(SOURCE_URL_SETTING, input.sourceUrl);
+      } catch (error) {
+        console.error("The settings cache write failed", error);
+      }
+    }
+    return deploymentSettings(db);
   },
   auditTarget: (input) => ({
     targetType: "deployment_settings",
-    metadata: { sourceUrl: input.sourceUrl },
+    metadata: {
+      ...(input.sourceUrl !== undefined ? { sourceUrl: input.sourceUrl } : {}),
+      ...(input.workersPlan !== undefined ? { workersPlan: input.workersPlan } : {}),
+    },
   }),
 });

@@ -83,6 +83,8 @@ export interface UsageStatus {
   rowsWritten: number;
   /** The Workers Free daily limit of D1 rows written. */
   dailyLimit: number;
+  /** The part of `rowsWritten` that welcome steps reported (KTD9). */
+  automationRows?: number;
   platformLimit: PlatformLimit | null;
   /**
    * True while the UnsubscribeLedger holds unsubscribes that D1 rejected at its daily

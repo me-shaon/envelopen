@@ -1,3 +1,4 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import {
   type BatchPointer,
@@ -19,6 +20,7 @@ import { createDb, type DbConnection } from "@envelopen/db";
 import { createTokenSigner, type TokenSigner } from "@envelopen/email-render";
 import type { Grant } from "../src/do/rate-limiter";
 import { type LedgerClient, ledgerMeterName, unsubscribeLedger } from "../src/do/unsubscribes";
+import { USAGE_METER_NAME } from "../src/do/usage";
 import type { ConsumerDeps, RateLimiterClient } from "../src/queue/send-consumer";
 
 // Shared setup of the campaign engine tests: a sendable workspace, a sending campaign
@@ -335,3 +337,24 @@ export function testLedger(name = `test:${crypto.randomUUID()}`): LedgerClient &
 }
 
 export { createProviderMock };
+
+/**
+ * A busy day on the deployment's UsageMeter: sets today's D1 rows written, so a test can
+ * pass the reserved threshold (KTD9). The returned function puts the old counts back.
+ */
+export async function busyDay(rows: number): Promise<() => Promise<void>> {
+  const stub = env.USAGE_METER.getByName(USAGE_METER_NAME);
+  const day = new Date().toISOString().slice(0, 10);
+  const before = await runInDurableObject(stub, async (_instance, state) =>
+    state.storage.get<{ day: string; rows: number }>("rows"),
+  );
+  await runInDurableObject(stub, async (_instance, state) => {
+    await state.storage.put("rows", { day, rows });
+  });
+  return async () => {
+    await runInDurableObject(stub, async (_instance, state) => {
+      if (before) await state.storage.put("rows", before);
+      else await state.storage.delete("rows");
+    });
+  };
+}

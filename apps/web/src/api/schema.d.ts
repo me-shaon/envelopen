@@ -98,7 +98,7 @@ export interface paths {
         };
         /**
          * Get the deployment settings
-         * @description Returns the settings of the whole deployment: the link to the source code that the admin app and the public subscriber pages show (AGPL section 13).
+         * @description Returns the settings of the whole deployment: the link to the source code that the admin app and the public subscriber pages show (AGPL section 13), and the Workers plan of the Cloudflare account.
          */
         get: operations["settings.get"];
         put?: never;
@@ -108,7 +108,7 @@ export interface paths {
         head?: never;
         /**
          * Update the deployment settings
-         * @description Sets the link to the source code of this deployment. The admin app and every public subscriber page show it. Only https URLs are accepted.
+         * @description Sets the link to the source code of this deployment, the Workers plan, or both. The admin app and every public subscriber page show the link. Only https URLs are accepted. On the `free` plan, welcome steps wait after 70% of the daily D1 writes.
          */
         patch: operations["settings.update"];
         trace?: never;
@@ -1887,7 +1887,7 @@ export interface paths {
         };
         /**
          * Get the platform usage
-         * @description Returns today's D1 rows written on the deployment, the rows left before the Workers Free limit, the reset time (00:00 UTC), and the platform_limit pause when it is in force. The D1 limit is per Cloudflare account, so every workspace sees the same numbers.
+         * @description Returns today's D1 rows written on the deployment, the rows left before the Workers Free limit, the reset time (00:00 UTC), and the platform_limit pause when it is in force. It also gives the Workers plan that the owner set, the reserved threshold where welcome steps wait (70% on Free), and the writes that welcome steps made today. The D1 limit is per Cloudflare account, so every workspace sees the same numbers.
          */
         get: operations["usage.get"];
         put?: never;
@@ -1951,6 +1951,11 @@ export interface components {
             sourceUrl: string;
             /** @description The upstream repository URL. */
             defaultSourceUrl: string;
+            /**
+             * @description The Workers plan of the Cloudflare account, as the owner set it. On `free`, welcome steps wait after 70% of the daily D1 writes. On `paid`, they do not.
+             * @enum {string}
+             */
+            workersPlan: "free" | "paid";
         };
         BackupStatus: {
             passphraseSet: boolean;
@@ -3105,12 +3110,23 @@ export interface components {
                 remaining: number;
                 /** @description Share of the daily limit used, 0 to 1 or more. */
                 ratio: number;
+                /** @description The part of `used` that welcome steps wrote today. */
+                automation: number;
+                /** @description The rows after which welcome steps wait until the reset (70% of the limit), so campaigns and unsubscribes keep the rest. Null on Workers Paid. */
+                reserved: number | null;
                 /**
                  * @description `warning` from 80% of the limit. `limit` when D1 rejected writes and sending is paused until the reset.
                  * @enum {string}
                  */
                 state: "ok" | "warning" | "limit";
             };
+            /**
+             * @description The Workers plan that the owner set in Settings.
+             * @enum {string}
+             */
+            workersPlan: "free" | "paid";
+            /** @description The share of the daily D1 writes that welcome steps can use on Free. */
+            reserveRatio: number;
             /** @description True from 80% of the daily D1 writes. */
             warning: boolean;
             /** @description Advice to move to Workers Paid, near the limit. Null otherwise. */
@@ -3188,12 +3204,23 @@ export interface components {
                     remaining: number;
                     /** @description Share of the daily limit used, 0 to 1 or more. */
                     ratio: number;
+                    /** @description The part of `used` that welcome steps wrote today. */
+                    automation: number;
+                    /** @description The rows after which welcome steps wait until the reset (70% of the limit), so campaigns and unsubscribes keep the rest. Null on Workers Paid. */
+                    reserved: number | null;
                     /**
                      * @description `warning` from 80% of the limit. `limit` when D1 rejected writes and sending is paused until the reset.
                      * @enum {string}
                      */
                     state: "ok" | "warning" | "limit";
                 };
+                /**
+                 * @description The Workers plan that the owner set in Settings.
+                 * @enum {string}
+                 */
+                workersPlan: "free" | "paid";
+                /** @description The share of the daily D1 writes that welcome steps can use on Free. */
+                reserveRatio: number;
                 /** @description True from 80% of the daily D1 writes. */
                 warning: boolean;
                 /** @description Advice to move to Workers Paid, near the limit. Null otherwise. */
@@ -3822,10 +3849,15 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
                 "application/json": {
-                    sourceUrl: string;
+                    sourceUrl?: string;
+                    /**
+                     * @description The Workers plan of the Cloudflare account.
+                     * @enum {string}
+                     */
+                    workersPlan?: "free" | "paid";
                 };
             };
         };

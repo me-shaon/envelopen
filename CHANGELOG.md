@@ -18,6 +18,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 - Signup forms as a hosted page and an iframe embed, with Turnstile and a confirmation email before each subscription.
 - Custom fields on signup forms with required answers, and on the preference page, where subscribers can see or change their own answers.
 - Welcome series: 1 to 5 emails with a wait before each, sent once to each new subscriber of a list after a confirmed form signup or an add with the start option.
+- A Workers plan setting (Free or Paid). On Free, welcome emails wait after 70% of the daily D1 writes until 00:00 UTC, so campaigns and unsubscribes keep the rest. The usage view shows this threshold and the writes of welcome emails.
 
 ### Manual steps
 

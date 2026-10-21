@@ -181,13 +181,16 @@ export {
 } from "./services";
 export {
   DEFAULT_SOURCE_URL,
+  DEFAULT_WORKERS_PLAN,
   DeploymentSettingsSchema,
   isHttpsUrl,
   readSourceUrl,
+  readWorkersPlan,
   SOURCE_URL_SETTING,
   SourceUrlSchema,
   settingsGet,
   settingsUpdate,
+  WORKERS_PLAN_SETTING,
 } from "./settings/operations";
 export {
   annotateClicks,
@@ -254,7 +257,6 @@ export {
   welcomeSendIdOf,
 } from "./welcome/model";
 export {
-  type BudgetDecision,
   planStep,
   runWelcomeStep,
   type StepOutcome,

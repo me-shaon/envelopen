@@ -18,9 +18,17 @@ export function usageReader(env: Pick<Env, "USAGE_METER">): UsageReader {
   return { status: () => usageMeter(env).status() };
 }
 
-/** The sink for `createDb`: the meter reports its rows to the Durable Object. */
-export function usageSink(env: Pick<Env, "USAGE_METER">): UsageSink {
-  return (rows) => usageMeter(env).record(rows);
+/**
+ * The sink for `createDb`: the meter reports its rows to the Durable Object. The welcome
+ * Workflow reports as `automation`, so the usage view can show its share (KTD9).
+ */
+export function usageSink(
+  env: Pick<Env, "USAGE_METER">,
+  source: "default" | "automation" = "default",
+): UsageSink {
+  return source === "automation"
+    ? (rows) => usageMeter(env).recordAutomation(rows)
+    : (rows) => usageMeter(env).record(rows);
 }
 
 /** The flag when it is still in force, or null. */

@@ -13,6 +13,7 @@ import { adapterContext, adapterOf, decryptCredentials, refsOf } from "../connec
 import { checkCampaignPolicy, sendingConnection } from "../connections/policy-gate";
 import type { Services } from "../services";
 import { testLinkOrigin, verifiedTrackingDomain } from "../templates/preview";
+import type { BudgetDecision } from "../usage/limits";
 import { checkStepEligibility, type StopReason } from "./eligibility";
 import { parseSteps, WELCOME_TOKEN_CAMPAIGN, type WelcomeJob, welcomeRecipientId } from "./model";
 
@@ -25,8 +26,8 @@ import { parseSteps, WELCOME_TOKEN_CAMPAIGN, type WelcomeJob, welcomeRecipientId
 // 2. A `sent` row ends the step: a retry after the provider accepted the email sends
 //    nothing. A `pending` row is a send whose result is unknown, so it counts as sent. A
 //    `skipped` row means that the series stopped for the contact. A `failed` row goes on.
-// 3. At the D1 daily limit, or when the budget hook says so (KTD9, U11), the step waits
-//    until after 00:00 UTC.
+// 3. At the D1 daily limit, or past the reserved threshold of the day's writes (the
+//    UsageMeter reserve, KTD9, U11), the step waits until after 00:00 UTC.
 // 4. Read the contact again: the series is on, the contact is subscribed to the list and
 //    did not unsubscribe, the address is not suppressed, and no unsubscribe waits in the
 //    UnsubscribeLedger. Otherwise a `skipped` row records the stop.
@@ -41,9 +42,6 @@ import { parseSteps, WELCOME_TOKEN_CAMPAIGN, type WelcomeJob, welcomeRecipientId
 // Welcome emails carry no open pixel and no tracked links. The stats pages report
 // campaigns only, and a tracked link needs a campaign's link table.
 
-/** The decision of the budget hook (KTD9). U11 fills it with the UsageMeter reserve. */
-export type BudgetDecision = "ok" | "defer";
-
 export interface WelcomeStepDeps {
   db: DbConnection;
   services: Pick<Services, "credentials" | "outboundFetch" | "hashEmail">;
@@ -52,7 +50,10 @@ export interface WelcomeStepDeps {
   usage(): Promise<{ limited: boolean; unsubscribesPending: boolean }>;
   /** The contacts with an unsubscribe in the UnsubscribeLedger (KTD1). */
   pendingUnsubscribes(workspaceId: number, contactIds: readonly number[]): Promise<Set<number>>;
-  /** The reserved D1 budget for automation (KTD9). A stub that says "ok" until U11. */
+  /**
+   * The reserved D1 budget for automation (KTD9): "defer" past 70% of the day's writes
+   * on Workers Free. The Workflow asks the UsageMeter `reserve` check.
+   */
   budget(workspaceId: number): Promise<BudgetDecision>;
   now(): number;
 }

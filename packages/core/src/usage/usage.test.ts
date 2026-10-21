@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createWorkspace, testDb, testServices } from "../../test/fixtures";
 import { runOperation } from "../executor";
 import { sessionPrincipal } from "../principal";
+import { WORKERS_PLAN_SETTING } from "../settings/operations";
+import { reservedThreshold, WELCOME_RESERVE_RATIO, welcomeReserve } from "./limits";
 import { usageGet } from "./operations";
 import { PAID_HINT, type UsageView, usageView } from "./view";
 
@@ -65,5 +67,64 @@ describe("usage view", () => {
     )) as UsageView;
     expect(view.warning).toBe(true);
     expect(view.d1Writes.remaining).toBe(15_000);
+  });
+
+  it("shows the reserved threshold and the welcome share on Free", () => {
+    const view = usageView({ ...status(72_000), automationRows: 4_500 }, NOW);
+    expect(view.workersPlan).toBe("free");
+    expect(view.reserveRatio).toBe(0.7);
+    expect(view.d1Writes).toMatchObject({ reserved: 70_000, automation: 4_500, state: "ok" });
+    // The automation share never passes the total.
+    expect(usageView({ ...status(10), automationRows: 50 }, NOW).d1Writes.automation).toBe(10);
+  });
+
+  it("gives no threshold, no warning, and no Paid hint on Paid", () => {
+    const view = usageView(status(95_000), NOW, "paid");
+    expect(view.workersPlan).toBe("paid");
+    expect(view.d1Writes).toMatchObject({ reserved: null, state: "ok" });
+    expect(view.warning).toBe(false);
+    expect(view.paidHint).toBeNull();
+    // A rejected write is still a limit.
+    const limited = usageView(status(10, { since: NOW - 1, until: MIDNIGHT }), NOW, "paid");
+    expect(limited.d1Writes.state).toBe("limit");
+    expect(limited.paidHint).toBeNull();
+  });
+
+  it("reads the Workers plan setting through the operation", async () => {
+    const db = testDb();
+    const services = await testServices();
+    services.usageStatus = status(85_000);
+    const workspaceId = await createWorkspace(db);
+    await db.db
+      .insertInto("system_settings")
+      .values({ key: WORKERS_PLAN_SETTING, value: "paid", updated_at: NOW })
+      .execute();
+    try {
+      const view = (await runOperation(
+        sessionPrincipal({ workspaceId, userId: "owner" }),
+        usageGet,
+        {},
+        { db, services, now: () => NOW },
+      )) as UsageView;
+      expect(view.workersPlan).toBe("paid");
+      expect(view.d1Writes.reserved).toBeNull();
+    } finally {
+      await db.db.deleteFrom("system_settings").where("key", "=", WORKERS_PLAN_SETTING).execute();
+    }
+  });
+});
+
+describe("welcome reserve (KTD9, R17)", () => {
+  it("defers a welcome step from 70% of the daily writes on Free", () => {
+    expect(WELCOME_RESERVE_RATIO).toBe(0.7);
+    expect(reservedThreshold(100_000)).toBe(70_000);
+    expect(welcomeReserve("free", 69_999, 100_000)).toBe("ok");
+    expect(welcomeReserve("free", 70_000, 100_000)).toBe("defer");
+    expect(welcomeReserve("free", 120_000, 100_000)).toBe("defer");
+  });
+
+  it("never defers on Paid", () => {
+    expect(welcomeReserve("paid", 70_000, 100_000)).toBe("ok");
+    expect(welcomeReserve("paid", 5_000_000, 100_000)).toBe("ok");
   });
 });

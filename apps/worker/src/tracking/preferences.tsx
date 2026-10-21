@@ -1,6 +1,16 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource hono/jsx */
-import type { Subscription } from "@envelopen/core";
+import {
+  type PreferenceField,
+  preferenceFieldText,
+  rawFieldValue,
+  type Subscription,
+} from "@envelopen/core";
+import {
+  type FormPageError,
+  fieldInputId,
+  fieldInputName,
+} from "@envelopen/email-render/form-page";
 import type { Child } from "hono/jsx";
 import { ENVELOPEN_VERSION } from "../version";
 
@@ -8,6 +18,10 @@ import { ENVELOPEN_VERSION } from "../version";
 // forms, so they work without JavaScript and send no script at all. They follow the
 // Calm look of the admin app (plan U5): a warm off-white page, a white card with a
 // hairline border, black primary buttons, and the Geist type scale with system fallbacks.
+//
+// The page also shows the custom fields that the owner put on it (R14): a read-only
+// field as text, an editable field as an input. Field labels and values come from the
+// owner and the subscriber, so they render as escaped text only.
 //
 // States: the preference page, the "unsubscribe from all" confirmation, unsubscribed
 // (just now, or already) with a resubscribe form, an invalid or forged link (one
@@ -22,7 +36,13 @@ import { ENVELOPEN_VERSION } from "../version";
 // Every response sends a strict Content-Security-Policy: no scripts, the one inline
 // style block by nonce, and forms that post only to this origin (KTD27).
 
-export type PageNotice = "saved" | "resubscribed" | null;
+export type PageNotice = "saved" | "resubscribed" | "retry" | null;
+
+/** The values of a save that failed the checks, so the page shows them again. */
+export interface PageValues {
+  lists: ReadonlySet<number>;
+  fields: Readonly<Record<string, readonly string[]>>;
+}
 
 export type PageView =
   | { kind: "invalid" }
@@ -36,6 +56,9 @@ export type PageView =
       action: string;
       confirmHref: string;
       notice: PageNotice;
+      /** Problems with the field answers of a save. Nothing was saved. */
+      errors?: readonly FormPageError[];
+      values?: PageValues;
     }
   | { kind: "confirm_all"; sub: Subscription; csrf: string; action: string; backHref: string }
   | {
@@ -61,12 +84,14 @@ const CSS = `
   --bg: #f8f7f4; --card: #ffffff; --fg: #1a1917; --muted: #6b675f; --border: #edebe6;
   --hairline: #f1efeb; --input: #e6e3dd; --primary: #1a1917; --primary-fg: #ffffff;
   --ring: #7b66c4; --notice: #e6efee; --notice-fg: #2e4b4a; --tone: #fbeadf; --tone-fg: #7a4614;
+  --error: #fbe4e1; --error-fg: #8a2b1f;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #141312; --card: #1a1917; --fg: #edebe6; --muted: #a39e94; --border: #2a2826;
     --hairline: #232220; --input: #3a3834; --primary: #edebe6; --primary-fg: #141312;
     --ring: #b3a3e6; --notice: #1f2e2d; --notice-fg: #b7d3d1; --tone: #3a2a20; --tone-fg: #f0c3a8;
+    --error: #3a1f1b; --error-fg: #f2b8ae;
   }
 }
 * { box-sizing: border-box; }
@@ -91,6 +116,24 @@ legend { padding: 0; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 .lists li + li { border-top: 1px solid var(--hairline); }
 .lists label { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
 .lists input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
+.field { margin-top: 16px; }
+.field > label, .field > .label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.field fieldset { margin: 0; }
+.value { margin: 0; overflow-wrap: anywhere; white-space: pre-line; }
+input[type=text], input[type=number], input[type=date] {
+  width: 100%; font: inherit; color: inherit; background: var(--card); border: 1px solid var(--input);
+  border-radius: 8px; padding: 8px 11px; min-height: 38px;
+}
+input[aria-invalid=true] { border-color: var(--error-fg); }
+.choices { display: flex; flex-direction: column; gap: 6px; }
+.choice { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.choice input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); flex: none; }
+.errors { margin: 20px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--error); color: var(--error-fg); font-size: 13px; }
+.errors h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0; }
+.errors ul { margin: 6px 0 0; padding-left: 18px; }
+.errors a { color: inherit; }
+.errors:focus-visible, .errors a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.inline-error { margin: 6px 0 0; font-size: 12px; color: var(--error-fg); }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; align-items: center; }
 button, .button {
   font: inherit; font-weight: 500; font-size: 14px; line-height: 20px; border-radius: 8px;
@@ -170,8 +213,161 @@ function Resubscribe({ csrf, action }: { csrf: string; action: string }) {
   );
 }
 
+const RETRY_TEXT = "Your list choices are saved. Your answers were not saved. Try again later.";
+
+function Notice({ notice }: { notice: PageNotice }) {
+  if (notice === "saved") {
+    return (
+      <p class="notice" role="status">
+        Your choices are saved.
+      </p>
+    );
+  }
+  if (notice === "resubscribed") {
+    return (
+      <p class="notice" role="status">
+        You are subscribed again.
+      </p>
+    );
+  }
+  if (notice === "retry") {
+    return (
+      <p class="notice tone" role="status">
+        {RETRY_TEXT}
+      </p>
+    );
+  }
+  return null;
+}
+
+function ErrorSummary({ errors }: { errors: readonly FormPageError[] }) {
+  if (errors.length === 0) return null;
+  // `autofocus` moves the focus to the summary without a script, so a screen reader
+  // reads the problems first.
+  return (
+    <div
+      class="errors"
+      id="errors"
+      role="alert"
+      tabindex={-1}
+      autofocus
+      aria-labelledby="errors-title"
+    >
+      <h2 id="errors-title">Correct the problems below</h2>
+      <ul>
+        {errors.map((error) => (
+          <li>{error.target ? <a href={`#${error.target}`}>{error.message}</a> : error.message}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function InlineError({ id, error }: { id: string; error: FormPageError | undefined }) {
+  return error ? (
+    <p class="inline-error" id={`${id}-error`}>
+      {error.message}
+    </p>
+  ) : null;
+}
+
+/** A read-only field as text. */
+function ReadOnlyField({ field }: { field: PreferenceField }) {
+  const value = preferenceFieldText(field);
+  return (
+    <div class="field">
+      <span class="label">{field.label}</span>
+      <p class={value === null ? "value muted" : "value"}>{value ?? "Not set"}</p>
+    </div>
+  );
+}
+
+/** An editable field as an input, a group of radios, or a group of checkboxes. */
+function EditableField({
+  field,
+  current,
+  error,
+}: {
+  field: PreferenceField;
+  current: readonly string[];
+  error: FormPageError | undefined;
+}) {
+  const id = fieldInputId(field.key);
+  const name = fieldInputName(field.key);
+  const invalid = error
+    ? { "aria-invalid": "true" as const, "aria-describedby": `${id}-error` }
+    : {};
+  if (field.kind !== null) {
+    const type = field.kind === "choice" ? "radio" : "checkbox";
+    return (
+      <div class="field">
+        <fieldset>
+          <legend>{field.label}</legend>
+          <div class="choices">
+            {field.options.map((option, index) => (
+              <label class="choice">
+                <input
+                  type={type}
+                  id={index === 0 ? id : `${id}-${option.id}`}
+                  name={name}
+                  value={String(option.id)}
+                  checked={current.includes(String(option.id))}
+                  {...(index === 0 ? invalid : {})}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <InlineError id={id} error={error} />
+        </fieldset>
+      </div>
+    );
+  }
+  if (field.type === "boolean") {
+    return (
+      <div class="field">
+        <label class="choice">
+          <input
+            type="checkbox"
+            id={id}
+            name={name}
+            value="true"
+            checked={current.includes("true")}
+            {...invalid}
+          />
+          <span>{field.label}</span>
+        </label>
+        <InlineError id={id} error={error} />
+      </div>
+    );
+  }
+  const type = field.type === "number" ? "number" : field.type === "date" ? "date" : "text";
+  return (
+    <div class="field">
+      <label for={id}>{field.label}</label>
+      <input
+        type={type}
+        id={id}
+        name={name}
+        value={current[0] ?? ""}
+        maxlength={1000}
+        {...(field.type === "number" ? { step: "any", inputmode: "decimal" } : {})}
+        {...invalid}
+      />
+      <InlineError id={id} error={error} />
+    </div>
+  );
+}
+
 function Preferences({ view }: { view: Extract<PageView, { kind: "preferences" }> }) {
-  const { sub, csrf, action, confirmHref, notice } = view;
+  const { sub, csrf, action, confirmHref, notice, values } = view;
+  const errors = view.errors ?? [];
+  const editable = sub.fields.filter((field) => field.preference === "editable");
+  const isChecked = (listId: number, status: string) =>
+    values ? values.lists.has(listId) : status === "subscribed";
+  const currentOf = (field: PreferenceField) => values?.fields[field.key] ?? rawFieldValue(field);
+  const errorOf = (field: PreferenceField) =>
+    errors.find((error) => error.target === fieldInputId(field.key));
   return (
     <>
       <p class="eyebrow">{sub.workspaceName}</p>
@@ -179,45 +375,61 @@ function Preferences({ view }: { view: Extract<PageView, { kind: "preferences" }
       <p class="muted">
         Choose the emails that <span class="email">{sub.email}</span> gets from {sub.workspaceName}.
       </p>
-      {notice === "saved" ? (
-        <p class="notice" role="status">
-          Your choices are saved.
-        </p>
-      ) : null}
-      {notice === "resubscribed" ? (
-        <p class="notice" role="status">
-          You are subscribed again.
-        </p>
-      ) : null}
-      {sub.lists.length > 0 ? (
-        <form method="post" action={action}>
+      <Notice notice={notice} />
+      <ErrorSummary errors={errors} />
+      {sub.lists.length > 0 || editable.length > 0 ? (
+        <form method="post" action={action} novalidate>
           <Csrf value={csrf} />
           <input type="hidden" name="action" value="save" />
           {sub.lists.map((list) => (
             <input type="hidden" name="shown" value={String(list.id)} />
           ))}
-          <fieldset>
-            <legend>Lists</legend>
-            <ul class="lists">
-              {sub.lists.map((list) => (
-                <li>
-                  <label>
-                    <input
-                      type="checkbox"
-                      name="list"
-                      value={String(list.id)}
-                      checked={list.status === "subscribed"}
-                    />
-                    <span>{list.name}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </fieldset>
+          {editable.map((field) => (
+            <input type="hidden" name="field_shown" value={field.key} />
+          ))}
+          {sub.lists.length > 0 ? (
+            <fieldset>
+              <legend>Lists</legend>
+              <ul class="lists">
+                {sub.lists.map((list) => (
+                  <li>
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="list"
+                        value={String(list.id)}
+                        checked={isChecked(list.id, list.status)}
+                      />
+                      <span>{list.name}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+          ) : null}
+          {sub.fields.length > 0 ? (
+            <section aria-labelledby="details-title">
+              <h2 id="details-title">Your details</h2>
+              {sub.fields.map((field) =>
+                field.preference === "editable" ? (
+                  <EditableField field={field} current={currentOf(field)} error={errorOf(field)} />
+                ) : (
+                  <ReadOnlyField field={field} />
+                ),
+              )}
+            </section>
+          ) : null}
           <div class="actions">
             <button type="submit">Save preferences</button>
           </div>
         </form>
+      ) : sub.fields.length > 0 ? (
+        <section aria-labelledby="details-title">
+          <h2 id="details-title">Your details</h2>
+          {sub.fields.map((field) => (
+            <ReadOnlyField field={field} />
+          ))}
+        </section>
       ) : null}
       <hr />
       <h2>Unsubscribe from all</h2>
@@ -290,11 +502,7 @@ function Limited({ view }: { view: Extract<PageView, { kind: "limited" }> }) {
         Your list choices are not available now. You can still unsubscribe from all emails from this
         sender.
       </p>
-      {notice === "saved" ? (
-        <p class="notice" role="status">
-          Your choices are saved.
-        </p>
-      ) : null}
+      <Notice notice={notice} />
       <form method="post" action={action}>
         <Csrf value={csrf} />
         <input type="hidden" name="action" value="unsubscribe_all" />

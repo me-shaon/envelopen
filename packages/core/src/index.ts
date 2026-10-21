@@ -62,6 +62,14 @@ export { isOperationError, OperationError, type OperationErrorCode } from "./err
 export * from "./events";
 export { type OperationDeps, runOperation } from "./executor";
 export {
+  checkAnswers,
+  type PreferenceAnswers,
+  type PreferenceField,
+  preferenceAnswers,
+  preferenceFieldText,
+  rawFieldValue,
+} from "./forms/answers";
+export {
   type ConfirmOutcome,
   confirmSignup,
   FORM_CONSENT_BASIS,

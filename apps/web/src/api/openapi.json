@@ -1408,6 +1408,15 @@
             },
             "description": "The options of a choice field, in order. Empty for other types."
           },
+          "preference": {
+            "type": "string",
+            "enum": [
+              "hidden",
+              "read_only",
+              "editable"
+            ],
+            "description": "What the preference page shows: `hidden` (nothing), `read_only` (the value as text), or `editable` (the subscriber can change the value)."
+          },
           "createdAt": {
             "type": "integer"
           }
@@ -1418,6 +1427,7 @@
           "label",
           "type",
           "options",
+          "preference",
           "createdAt"
         ]
       },
@@ -1562,6 +1572,13 @@
             },
             "description": "The custom fields that the form asks, in order."
           },
+          "requiredFieldIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "The fields of `fieldIds` that a subscriber must answer."
+          },
           "consentText": {
             "type": "string"
           },
@@ -1626,6 +1643,7 @@
           "name",
           "listIds",
           "fieldIds",
+          "requiredFieldIds",
           "consentText",
           "consentVersion",
           "successMessage",
@@ -11135,6 +11153,15 @@
                       "maxLength": 120
                     },
                     "maxItems": 100
+                  },
+                  "preference": {
+                    "type": "string",
+                    "enum": [
+                      "hidden",
+                      "read_only",
+                      "editable"
+                    ],
+                    "default": "hidden"
                   }
                 },
                 "required": [
@@ -11243,8 +11270,8 @@
     "/fields/{id}": {
       "patch": {
         "operationId": "fields.update",
-        "summary": "Rename a custom field",
-        "description": "Changes the label. The key and the type stay.",
+        "summary": "Change a custom field",
+        "description": "Changes the label, or what the preference page shows of the field. The key and the type stay. Give at least one of `label` and `preference`.",
         "tags": [
           "fields"
         ],
@@ -11268,7 +11295,7 @@
           }
         ],
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -11278,11 +11305,16 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100
+                  },
+                  "preference": {
+                    "type": "string",
+                    "enum": [
+                      "hidden",
+                      "read_only",
+                      "editable"
+                    ]
                   }
-                },
-                "required": [
-                  "label"
-                ]
+                }
               }
             }
           }
@@ -11832,6 +11864,15 @@
                       },
                       "description": "The options of a choice field, in order. Empty for other types."
                     },
+                    "preference": {
+                      "type": "string",
+                      "enum": [
+                        "hidden",
+                        "read_only",
+                        "editable"
+                      ],
+                      "description": "What the preference page shows: `hidden` (nothing), `read_only` (the value as text), or `editable` (the subscriber can change the value)."
+                    },
                     "createdAt": {
                       "type": "integer"
                     },
@@ -11846,6 +11887,7 @@
                     "label",
                     "type",
                     "options",
+                    "preference",
                     "createdAt",
                     "merged"
                   ]
@@ -12462,6 +12504,16 @@
                     "maxItems": 10,
                     "default": []
                   },
+                  "requiredFieldIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "maxItems": 10,
+                    "default": [],
+                    "description": "The fields of `fieldIds` that a subscriber must answer."
+                  },
                   "consentText": {
                     "type": "string",
                     "minLength": 1,
@@ -12757,6 +12809,16 @@
                       "exclusiveMinimum": 0
                     },
                     "maxItems": 10
+                  },
+                  "requiredFieldIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "maxItems": 10,
+                    "default": [],
+                    "description": "The fields of `fieldIds` that a subscriber must answer."
                   },
                   "consentText": {
                     "type": "string",

@@ -1,5 +1,7 @@
 import { type DbConnection, unscoped } from "@envelopen/db";
 import { sql } from "kysely";
+import { loadFieldDefs } from "../contacts/fields";
+import type { PreferenceField } from "../forms/answers";
 
 // Unsubscribe and preferences (R24, R25, R64, F3). The public pages under `/u/` call
 // these with the recipient from a verified token. The token holds no workspace id, so
@@ -37,6 +39,11 @@ export interface Subscription {
   /** The address is on the suppression list (a bounce or a complaint). */
   suppressed: boolean;
   lists: SubscriptionList[];
+  /**
+   * The custom fields that the preference page shows (R14), in field order: `read_only`
+   * fields as text, `editable` fields as inputs. Hidden fields are left out.
+   */
+  fields: PreferenceField[];
 }
 
 /** The contact behind a recipient, or null when the recipient or its contact is gone. */
@@ -66,7 +73,7 @@ export async function loadSubscription(
     .executeTakeFirst();
   if (!row) return null;
   const workspaceId = row.workspace_id;
-  const [lists, suppression] = await Promise.all([
+  const [lists, suppression, fields] = await Promise.all([
     db.db
       .selectFrom("list_members as m")
       .innerJoin("lists as l", (join) =>
@@ -85,6 +92,7 @@ export async function loadSubscription(
           .where("email_hash", "=", row.email_hash)
           .executeTakeFirst()
       : Promise.resolve(undefined),
+    preferenceFields(db, workspaceId, row.contact_id),
   ]);
   return {
     workspaceId,
@@ -96,7 +104,37 @@ export async function loadSubscription(
     unsubscribedAt: row.unsubscribed_at,
     suppressed: suppression !== undefined,
     lists,
+    fields,
   };
+}
+
+/** The fields that the preference page shows, with the contact's values. */
+async function preferenceFields(
+  db: DbConnection,
+  workspaceId: number,
+  contactId: number,
+): Promise<PreferenceField[]> {
+  const defs = [...(await loadFieldDefs(db.db, workspaceId)).values()].filter(
+    (def) => def.preference !== "hidden",
+  );
+  if (defs.length === 0) return [];
+  const values = await db.db
+    .selectFrom("contact_field_values")
+    .select(["field_id", "value"])
+    .where("workspace_id", "=", workspaceId)
+    .where("contact_id", "=", contactId)
+    .execute();
+  const stored = new Map(values.map((row) => [row.field_id, row.value]));
+  return defs.map((def) => ({
+    id: def.id,
+    key: def.key,
+    label: def.label,
+    type: def.type,
+    kind: def.kind,
+    options: def.options,
+    preference: def.preference as PreferenceField["preference"],
+    value: stored.get(def.id) ?? null,
+  }));
 }
 
 /**
@@ -173,16 +211,19 @@ export async function resubscribe(
 }
 
 /**
- * Applies the list choices of the preference page: each of the contact's lists in
- * `subscribedIds` is subscribed, every other one is unsubscribed. Ids of lists that the
- * contact is not in are ignored. Returns how many memberships changed each way.
+ * Applies the list choices and the field answers of the preference page in one atomic
+ * batch. Each of the contact's lists in `subscribedIds` is subscribed, every other one is
+ * unsubscribed. Ids of lists that the contact is not in are ignored. `fieldValues` holds
+ * the stored values of the changed editable fields by field id (null clears a value).
+ * Returns how many memberships changed each way and how many field values changed.
  */
 export async function savePreferences(
   db: DbConnection,
   target: Subscription,
   subscribedIds: ReadonlySet<number>,
   now: number,
-): Promise<{ unsubscribed: number; resubscribed: number }> {
+  fieldValues: ReadonlyMap<number, string | null> = new Map(),
+): Promise<{ unsubscribed: number; resubscribed: number; fields: number }> {
   const { workspaceId, contactId, campaignId } = target;
   const leave = target.lists
     .filter((list) => list.status === "subscribed" && !subscribedIds.has(list.id))
@@ -195,16 +236,41 @@ export async function savePreferences(
 WHERE workspace_id = ${workspaceId} AND contact_id = ${contactId} AND status <> ${status}
   AND list_id IN (SELECT value FROM json_each(${JSON.stringify(ids)}))
 RETURNING list_id`.compile(db.db);
+  // Only the editable fields of the page. An id of another field is ignored.
+  const editable = new Set(
+    target.fields.filter((field) => field.preference === "editable").map((field) => field.id),
+  );
+  const answers = [...fieldValues].filter(([fieldId]) => editable.has(fieldId));
   const queries = [];
   if (leave.length > 0) queries.push(update(leave, "unsubscribed"));
   if (join.length > 0) queries.push(update(join, "subscribed"));
+  const listQueries = queries.length;
+  if (answers.length > 0) {
+    // One JSON parameter carries every answer: [[field id, value], ...].
+    queries.push(
+      sql`INSERT INTO contact_field_values (workspace_id, contact_id, field_id, value, updated_at)
+SELECT ${workspaceId}, ${contactId}, json_extract(j.value, '$[0]'), json_extract(j.value, '$[1]'), ${now}
+FROM json_each(${JSON.stringify(answers)}) AS j
+WHERE EXISTS (SELECT 1 FROM contact_fields f WHERE f.workspace_id = ${workspaceId} AND f.id = json_extract(j.value, '$[0]'))
+ON CONFLICT (contact_id, field_id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`.compile(
+        db.db,
+      ),
+      db.db
+        .updateTable("contacts")
+        .set({ updated_at: now })
+        .where("workspace_id", "=", workspaceId)
+        .where("id", "=", contactId)
+        .compile(),
+    );
+  }
   const results = await db.atomic(queries);
   // The returned rows, not meta.changes: D1 adds the rows that the member count
   // trigger writes (migration 0014).
-  const changes = results.map((result) => result.results?.length ?? 0);
+  const changes = results.slice(0, listQueries).map((result) => result.results?.length ?? 0);
   return {
     unsubscribed: leave.length > 0 ? (changes[0] ?? 0) : 0,
     resubscribed: join.length > 0 ? (changes.at(-1) ?? 0) : 0,
+    fields: answers.length,
   };
 }
 

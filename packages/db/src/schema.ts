@@ -13,6 +13,8 @@ type Immutable<T> = ColumnType<T, T, never>;
 export type Bool = 0 | 1;
 export type ConsentBasis = "existing_customer" | "explicit_opt_in" | "unknown";
 export type ContactFieldKind = "choice" | "multi";
+/** What the preference page shows of a custom field (migration 0020). */
+export type FieldPreference = "hidden" | "read_only" | "editable";
 export type ListMemberStatus = "subscribed" | "unsubscribed";
 export type CampaignType = "regular" | "re-permission";
 export type CampaignStatus =
@@ -239,6 +241,8 @@ export interface ContactFieldsTable {
   type: Defaulted<"text" | "number" | "date" | "boolean">;
   /** Null for a plain field. A choice field keeps `type` 'text' (migration 0018). */
   kind: Defaulted<ContactFieldKind | null>;
+  /** What the preference page shows of the field (migration 0020). */
+  preference: Defaulted<FieldPreference>;
   created_at: Generated<number>;
 }
 
@@ -702,6 +706,8 @@ export interface FormsTable {
   list_ids: Defaulted<string>;
   /** JSON array of the custom field ids that the form asks. */
   field_ids: Defaulted<string>;
+  /** JSON array of the field ids that the form requires, each also in `field_ids` (0020). */
+  required_field_ids: Defaulted<string>;
   consent_text: string;
   /** Goes up by one when the consent text changes. */
   consent_version: Defaulted<number>;

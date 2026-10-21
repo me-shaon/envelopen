@@ -23,6 +23,8 @@ export interface FormPageField {
   label: string;
   type: FormFieldType;
   options: readonly { id: number; label: string }[];
+  /** True when the subscriber must answer the field. */
+  required?: boolean;
 }
 
 export interface FormPageForm {
@@ -97,6 +99,10 @@ export const FORM_COPY = {
   dateInvalid: (label: string) => `Enter a date for ${label}.`,
   optionInvalid: (label: string) => `Select an option from the list for ${label}.`,
   textTooLong: (label: string) => `Use 1,000 characters or fewer for ${label}.`,
+  requiredValue: (label: string) => `Enter a value for ${label}.`,
+  requiredChoice: (label: string) => `Select an option for ${label}.`,
+  requiredBox: (label: string) => `Select the box for ${label}.`,
+  requiredMark: "(required)",
   turnstileFailed:
     "We could not make sure that you are a person. Wait for the check to finish, then try again.",
   inboxTitle: "Check your inbox",
@@ -160,6 +166,7 @@ input[aria-invalid=true] { border-color: var(--error-fg); }
 .choices { display: flex; flex-direction: column; gap: 6px; }
 .choice { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; }
 .choice input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); flex: none; }
+.req { font-weight: 400; color: var(--muted); }
 .consent { margin-top: 16px; font-size: 13px; color: var(--muted); }
 .turnstile { margin-top: 16px; min-height: 65px; }
 .placeholder { display: flex; align-items: center; justify-content: center; height: 65px; border: 1px dashed var(--input); border-radius: 8px; color: var(--muted); font-size: 12px; }
@@ -289,6 +296,8 @@ function customField(
   const name = fieldInputName(field.key);
   const error = errorFor(errors, id);
   const current = selected(values, field.key);
+  const mark = field.required ? ` <span class="req">${FORM_COPY.requiredMark}</span>` : "";
+  const ariaRequired = field.required ? ' aria-required="true"' : "";
   if (field.type === "choice" || field.type === "multi") {
     const type = field.type === "choice" ? "radio" : "checkbox";
     const options = field.options
@@ -298,15 +307,15 @@ function customField(
         return `<label class="choice"><input type="${type}" id="${esc(optionId)}" name="${esc(name)}" value="${option.id}"${checked}${index === 0 ? invalidAttrs(error, id) : ""}><span>${esc(option.label)}</span></label>`;
       })
       .join("");
-    return `<fieldset><legend>${esc(field.label)}</legend><div class="choices">${options}</div>${inlineError(error, id)}</fieldset>`;
+    return `<fieldset><legend>${esc(field.label)}${mark}</legend><div class="choices">${options}</div>${inlineError(error, id)}</fieldset>`;
   }
   if (field.type === "boolean") {
     const checked = current.includes("true") ? " checked" : "";
-    return `<div class="field"><label class="choice"><input type="checkbox" id="${esc(id)}" name="${esc(name)}" value="true"${checked}><span>${esc(field.label)}</span></label></div>`;
+    return `<div class="field"><label class="choice"><input type="checkbox" id="${esc(id)}" name="${esc(name)}" value="true"${checked}${ariaRequired}${invalidAttrs(error, id)}><span>${esc(field.label)}${mark}</span></label>${inlineError(error, id)}</div>`;
   }
   const inputType = field.type === "number" ? "number" : field.type === "date" ? "date" : "text";
   const extra = field.type === "number" ? ' step="any" inputmode="decimal"' : "";
-  return `<div class="field"><label for="${esc(id)}">${esc(field.label)}</label><input type="${inputType}" id="${esc(id)}" name="${esc(name)}" value="${esc(current[0] ?? "")}" maxlength="1000"${extra}${invalidAttrs(error, id)}>${inlineError(error, id)}</div>`;
+  return `<div class="field"><label for="${esc(id)}">${esc(field.label)}${mark}</label><input type="${inputType}" id="${esc(id)}" name="${esc(name)}" value="${esc(current[0] ?? "")}" maxlength="1000"${extra}${ariaRequired}${invalidAttrs(error, id)}>${inlineError(error, id)}</div>`;
 }
 
 function errorSummary(errors: readonly FormPageError[]): string {

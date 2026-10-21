@@ -40,6 +40,11 @@ const FormInputShape = {
   name: z.string().trim().min(1).max(FORM_NAME_MAX),
   listIds: z.array(z.number().int().positive()).max(MAX_FORM_LISTS),
   fieldIds: z.array(z.number().int().positive()).max(MAX_FORM_FIELDS),
+  requiredFieldIds: z
+    .array(z.number().int().positive())
+    .max(MAX_FORM_FIELDS)
+    .default([])
+    .meta({ description: "The fields of `fieldIds` that a subscriber must answer." }),
   consentText: z.string().trim().min(1).max(CONSENT_TEXT_MAX),
   successMessage: z.string().trim().min(1).max(SUCCESS_MESSAGE_MAX),
   allowedOrigins: z.array(z.string().max(200)).max(MAX_EMBED_ORIGINS),
@@ -82,6 +87,12 @@ async function cleanInput(db: Kysely<Database>, workspaceId: number, input: Form
       field: "fieldIds",
     });
   }
+  const requiredIds = [...new Set(input.requiredFieldIds)];
+  if (requiredIds.some((id) => !fieldIds.includes(id))) {
+    throw new OperationError("invalid_input", "A required field must be a field of the form.", {
+      field: "requiredFieldIds",
+    });
+  }
   const origins = [...new Set(input.allowedOrigins.map(normalizeEmbedOrigin))];
   let fromEmail: string | null = null;
   if (input.fromEmail) {
@@ -108,6 +119,7 @@ async function cleanInput(db: Kysely<Database>, workspaceId: number, input: Form
     name: input.name,
     list_ids: JSON.stringify(listIds),
     field_ids: JSON.stringify(fieldIds),
+    required_field_ids: JSON.stringify(requiredIds),
     consent_text: input.consentText,
     success_message: input.successMessage,
     allowed_origins: JSON.stringify(origins),

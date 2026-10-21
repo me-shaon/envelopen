@@ -138,6 +138,7 @@ async function subscription(
     unsubscribedAt: contact.unsubscribed_at,
     suppressed: false,
     lists,
+    fields: [],
   };
 }
 
@@ -235,7 +236,11 @@ describe("stored member counts", () => {
         // The returned counts are the memberships that changed, not the trigger rows.
         const leave = target.lists.filter((l) => l.status === "subscribed" && !keep.has(l.id));
         const join = target.lists.filter((l) => l.status === "unsubscribed" && keep.has(l.id));
-        expect(result).toEqual({ unsubscribed: leave.length, resubscribed: join.length });
+        expect(result).toEqual({
+          unsubscribed: leave.length,
+          resubscribed: join.length,
+          fields: 0,
+        });
         return result;
       },
       suppress: async () => {

@@ -1,5 +1,6 @@
 import {
   loadSubscription,
+  preferenceAnswers,
   resubscribe,
   type Subscription,
   savePreferences,
@@ -9,6 +10,7 @@ import {
 } from "@envelopen/core";
 import { isD1DailyLimitError } from "@envelopen/db";
 import type { VerifiedToken } from "@envelopen/email-render";
+import { fieldInputName } from "@envelopen/email-render/form-page";
 import { type Context, Hono } from "hono";
 import { clientIp } from "../auth/rate-limit-do";
 import { readBodyLimited } from "../body";
@@ -39,6 +41,10 @@ import { type PageNotice, publicPage } from "./preferences";
 //   the read failed, the intent has only the recipient of the verified token.
 // - A save keeps an intent for each list that the subscriber cleared. The form lists
 //   the lists that it showed (`shown`), so this needs no D1 read.
+// - A save that changes a custom field answer (R14) keeps no field change: only an
+//   unsubscribe is critical for compliance. The page then says that the answers were
+//   not saved, and asks the subscriber to try again later. When the read failed, the
+//   page cannot compare, so any field that the form showed (`field_shown`) counts.
 // - The page GET shows a short page that offers only "Unsubscribe from all".
 // - A resubscribe needs D1, so it shows the error page.
 // Ledger writes are limited per IP. A full ledger or another D1 error shows the error
@@ -197,6 +203,12 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+/** The text values of a form field. */
+function texts(raw: unknown): string[] {
+  const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+  return values.map((value) => text(value));
+}
+
 /** The positive list ids in a form field. */
 function listIds(raw: unknown): Set<number> {
   const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
@@ -233,7 +245,7 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
           csrf,
           action,
           unsubscribed: waiting.some((intent) => intent.listId === null),
-          notice: state === "saved" ? "saved" : null,
+          notice: state === "saved" || state === "retry" ? state : null,
         });
       }
       const { sub } = loaded;
@@ -249,7 +261,8 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
       if (c.req.query("step") === "confirm-all") {
         return publicPage(deps, { kind: "confirm_all", sub, csrf, action, backHref: action });
       }
-      const notice: PageNotice = state === "saved" || state === "resubscribed" ? state : null;
+      const notice: PageNotice =
+        state === "saved" || state === "resubscribed" || state === "retry" ? state : null;
       return publicPage(deps, {
         kind: "preferences",
         sub,
@@ -327,6 +340,14 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
       const back = preferencesPath(token);
       const checked = listIds(form.list);
       const sub = loaded.kind === "ok" ? loaded.sub : null;
+      const shownFields = new Set(texts(form.field_shown));
+      const rawFields = Object.fromEntries(
+        (sub?.fields ?? []).map((field) => [field.key, texts(form[fieldInputName(field.key)])]),
+      );
+      const answers =
+        sub && action === "save" ? preferenceAnswers(sub.fields, rawFields, shownFields) : null;
+      // An answer that changes a field. Without the contact, any shown field counts.
+      const fieldChange = answers ? answers.ok && answers.changes.size > 0 : shownFields.size > 0;
 
       // At the daily limit: keep the unsubscribes in the ledger (KTD1).
       const atLimit = async () => {
@@ -341,7 +362,7 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
                 .map((list) => list.id)
             : [...listIds(form.shown)].filter((id) => !checked.has(id));
           if (await keep(c, deps, intents(ref, sub, leave, "preference_page", now))) {
-            return c.redirect(`${back}?state=saved`, 303);
+            return c.redirect(`${back}?state=${fieldChange ? "retry" : "saved"}`, 303);
           }
         }
         return publicPage(deps, { kind: "error" }, 503);
@@ -352,6 +373,22 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
           return publicPage(deps, { kind: "invalid" }, 400);
         }
         return atLimit();
+      }
+      if (answers && !answers.ok) {
+        return publicPage(
+          deps,
+          {
+            kind: "preferences",
+            sub,
+            csrf: await deps.formToken(token),
+            action: back,
+            confirmHref: `${back}?step=confirm-all`,
+            notice: null,
+            errors: answers.errors,
+            values: { lists: checked, fields: rawFields },
+          },
+          400,
+        );
       }
       try {
         if (action === "unsubscribe_all") {
@@ -365,7 +402,8 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
           return c.redirect(`${back}?state=resubscribed`, 303);
         }
         if (action === "save") {
-          const result = await savePreferences(deps.db, sub, checked, now);
+          const changes = answers?.ok ? answers.changes : new Map<number, string | null>();
+          const result = await savePreferences(deps.db, sub, checked, now, changes);
           if (result.unsubscribed > 0) {
             background(c, deps.sink(sub.workspaceId, [unsubscribeEvent(sub, now)]));
           }

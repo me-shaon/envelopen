@@ -4,15 +4,14 @@ import {
   FORM_COPY,
   type FormPageError,
   type FormPageForm,
-  fieldInputId,
 } from "@envelopen/email-render/form-page";
 import { sendSystemEmail } from "../connections/send";
 import { normalizeEmail } from "../contacts/email";
-import { type FieldDef, type FieldInput, storedFieldValue } from "../contacts/fields";
+import type { FieldDef, FieldInput } from "../contacts/fields";
 import { isOperationError } from "../errors";
 import { requireService, type Services } from "../services";
+import { checkAnswers } from "./answers";
 import {
-  FORM_TEXT_MAX,
   formFieldDefs,
   idList,
   MAX_SIGNUP_RESENDS,
@@ -79,6 +78,8 @@ export interface PublicForm {
   row: Row<"forms">;
   workspaceName: string;
   defs: FieldDef[];
+  /** The ids of the fields that the form requires. */
+  required: ReadonlySet<number>;
   page: FormPageForm;
 }
 
@@ -105,15 +106,17 @@ async function publicFormOf(db: DbConnection, row: Row<"forms">): Promise<Public
     .where("id", "=", row.workspace_id)
     .executeTakeFirstOrThrow();
   const defs = await formFieldDefs(db.db, row.workspace_id, idList(row.field_ids));
+  const required = new Set(idList(row.required_field_ids));
   return {
     row,
     workspaceName: workspace.name,
     defs,
+    required,
     page: {
       name: row.name,
       consentText: row.consent_text,
       successMessage: row.success_message,
-      fields: pageFields(defs),
+      fields: pageFields(defs, required),
     },
   };
 }
@@ -130,55 +133,24 @@ export type ValidatedSubmission =
   | { ok: true; email: string; values: Record<string, FieldInput> }
   | { ok: false; errors: FormPageError[] };
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * Checks the email address and the custom fields that the form shows. Other fields are
- * ignored. A choice field takes only the ids of its own options, so a forged id fails.
+ * ignored. A choice field takes only the ids of its own options, so a forged id fails. A
+ * field in `required` (by id) must have an answer.
  */
 export function validateSubmission(
   defs: readonly FieldDef[],
   raw: RawSubmission,
+  required: ReadonlySet<number> = new Set(),
 ): ValidatedSubmission {
-  const errors: FormPageError[] = [];
   const email = normalizeEmail(raw.email);
-  if (!email) errors.push({ target: "email", message: FORM_COPY.emailInvalid });
-  const values: Record<string, FieldInput> = {};
-  for (const def of defs) {
-    const target = fieldInputId(def.key);
-    const items = (raw.fields[def.key] ?? []).map((item) => item.trim()).filter(Boolean);
-    if (items.length === 0) continue;
-    if (def.kind !== null) {
-      // Option ids only: a label or a foreign id is refused.
-      if (!items.every((item) => /^\d+$/.test(item))) {
-        errors.push({ target, message: FORM_COPY.optionInvalid(def.label) });
-        continue;
-      }
-      const ids = items.map(Number);
-      try {
-        storedFieldValue(def, def.kind === "choice" ? (ids[0] ?? null) : ids);
-        if (def.kind === "choice" && ids.length > 1) throw new Error("one option");
-        values[def.key] = def.kind === "choice" ? (ids[0] ?? null) : ids;
-      } catch {
-        errors.push({ target, message: FORM_COPY.optionInvalid(def.label) });
-      }
-      continue;
-    }
-    const value = items[0] ?? "";
-    if (items.length > 1 || value.length > FORM_TEXT_MAX) {
-      errors.push({ target, message: FORM_COPY.textTooLong(def.label) });
-    } else if (def.type === "number" && !Number.isFinite(Number(value))) {
-      errors.push({ target, message: FORM_COPY.numberInvalid(def.label) });
-    } else if (def.type === "date" && !DATE_PATTERN.test(value)) {
-      errors.push({ target, message: FORM_COPY.dateInvalid(def.label) });
-    } else if (def.type === "boolean") {
-      values[def.key] = value === "true" ? "true" : "false";
-    } else {
-      values[def.key] = value;
-    }
-  }
+  const errors: FormPageError[] = email
+    ? []
+    : [{ target: "email", message: FORM_COPY.emailInvalid }];
+  const answers = checkAnswers(defs, raw.fields, required);
+  errors.push(...answers.errors);
   if (errors.length > 0 || !email) return { ok: false, errors };
-  return { ok: true, email, values };
+  return { ok: true, email, values: answers.values };
 }
 
 // Tokens --------------------------------------------------------------------------------------

@@ -28,7 +28,7 @@ export const BACKUP_FORMAT_VERSION = 1;
  * refuses a newer backup, and upgrades an older one row by row (restore-plan.ts). A
  * test keeps it equal to the highest migration file.
  */
-export const BACKUP_SCHEMA_VERSION = 19;
+export const BACKUP_SCHEMA_VERSION = 20;
 /** Rows per chunk. A chunk of 1,000 rows encrypts in a few milliseconds of CPU. */
 export const CHUNK_ROWS = 1_000;
 

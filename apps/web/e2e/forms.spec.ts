@@ -283,4 +283,114 @@ test.describe("signup forms", () => {
     await page.waitForTimeout(1500);
     expect(await sentTo(page, "twice@example.org")).toHaveLength(1);
   });
+
+  // Fields on forms and the preference page (plan U9, R14).
+  test("a required field on the form, and the subscriber changes the answer on the preference page", async ({
+    page,
+  }) => {
+    const checkCsp = watchCsp(page);
+    await signIn(page);
+    const field = (await apiPost(page, "/fields", {
+      key: "frequency",
+      label: "Frequency",
+      type: "choice",
+      options: ["Weekly", "Monthly"],
+    })) as { id: number; options: { id: number; label: string }[] };
+    const monthly = field.options[1]?.id;
+
+    // The owner lets subscribers change the field on the preference page.
+    await page.goto("/contacts/fields");
+    const card = page.getByTestId("field-card").filter({ hasText: "Frequency" });
+    await card.getByLabel("On the preference page").selectOption("editable");
+    await expect(
+      page.getByText('The preference page setting of "Frequency" is saved.'),
+    ).toBeVisible();
+    await expectNoSeriousViolations(page);
+
+    // The owner asks the field on the form, as a required answer.
+    const forms = await page.request.get(`${BASE}/api/forms`);
+    const [form] = ((await forms.json()) as { items: { id: number; listIds: number[] }[] }).items;
+    await page.goto(`/forms/${form?.id}`);
+    await page.getByRole("group", { name: "Fields to ask" }).getByLabel("Frequency").check();
+    await page.getByRole("group", { name: "Required answers" }).getByLabel("Frequency").check();
+    const preview = page.frameLocator('iframe[data-testid="form-preview"]');
+    await expect(preview.getByText("(required)")).toBeVisible();
+    await expectNoSeriousViolations(page);
+    await page.getByRole("button", { name: "Save form" }).click();
+    await expect(page.getByText(/Form ".*" saved\./)).toBeVisible();
+
+    // Without an answer, the form shows an error and sends nothing.
+    await stubTurnstile(page);
+    await page.goto(hostedUrl);
+    await page.getByLabel("Email address").fill("pref@example.org");
+    await page.getByRole("button", { name: "Subscribe" }).click();
+    await expect(page.locator("#errors")).toBeFocused();
+    await expect(page.getByRole("link", { name: "Select an option for Frequency." })).toBeVisible();
+    expect(await sentTo(page, "pref@example.org")).toHaveLength(0);
+    await page.getByLabel("Weekly").check();
+    await page.getByRole("button", { name: "Subscribe" }).click();
+    await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
+    await page.goto(await confirmLink(page, "pref@example.org"));
+    await page.getByRole("button", { name: "Confirm" }).click();
+    await expect(page.getByRole("heading", { name: "You are subscribed" })).toBeVisible();
+
+    // A campaign email gives the subscriber a link to the preference page.
+    const template = await apiPost(page, "/templates", {
+      name: "Frequency news",
+      subject: "Frequency news",
+      format: "html",
+      source:
+        '<html><body><p>News.</p><p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p></body></html>',
+    });
+    const draft = await apiPost(page, "/campaigns", {
+      name: "Frequency news",
+      templateId: template.id,
+      fromName: "Course Academy",
+      fromEmail: "news@mail.example.com",
+      audience: { listIds: form?.listIds },
+    });
+    const prepared = await apiPost(page, `/campaigns/${draft.id}/prepare`, { mode: "send_now" });
+    expect(prepared.blocked, JSON.stringify(prepared.checklist)).toBe(false);
+    await apiPost(page, `/campaigns/${draft.id}/confirm`, { token: prepared.token });
+    let preferences = "";
+    await expect(async () => {
+      const sent = (await (await page.request.get(`${MOCK}/sent`)).json()) as {
+        to: string | string[];
+        subject: string;
+        headers?: Record<string, string>;
+      }[];
+      const mail = sent.find(
+        (item) =>
+          [item.to].flat().includes("pref@example.org") && item.subject === "Frequency news",
+      );
+      const url = mail?.headers?.["List-Unsubscribe"]?.slice(1, -1) ?? "";
+      expect(url).toMatch(/\/u\//);
+      preferences = `${BASE}${new URL(url).pathname}`;
+    }).toPass({ timeout: 20_000 });
+
+    // The subscriber sees the answer of the form and changes it.
+    await page.goto(preferences);
+    await expect(page.getByRole("heading", { name: "Email preferences" })).toBeVisible();
+    const group = page.getByRole("group", { name: "Frequency" });
+    await expect(group.getByLabel("Weekly")).toBeChecked();
+    await expectNoSeriousViolations(page);
+    await group.getByLabel("Monthly").check();
+    await page.getByRole("button", { name: "Save preferences" }).click();
+    await expect(page.getByText("Your choices are saved.")).toBeVisible();
+    await expect(
+      page.getByRole("group", { name: "Frequency" }).getByLabel("Monthly"),
+    ).toBeChecked();
+
+    const contacts = await page.request.get(`${BASE}/api/contacts`, {
+      params: { search: "pref@example.org" },
+    });
+    const [contact] = ((await contacts.json()) as { items: { id: number }[] }).items;
+    const detail = await page.request.get(`${BASE}/api/contacts/${contact?.id}`);
+    expect(
+      ((await detail.json()) as { fields: Record<string, string | null> }).fields,
+    ).toMatchObject({
+      frequency: String(monthly),
+    });
+    checkCsp();
+  });
 });

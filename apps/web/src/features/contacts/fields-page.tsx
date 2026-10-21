@@ -35,6 +35,14 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
 
 const isChoice = (type: FieldType) => type === "choice" || type === "multi";
 
+type Preference = ContactField["preference"];
+
+export const PREFERENCE_LABELS: Record<Preference, string> = {
+  hidden: "Hidden",
+  read_only: "Read only",
+  editable: "Subscriber can change it",
+};
+
 function useRefreshFields() {
   const queryClient = useQueryClient();
   const { current } = useCurrentWorkspace();
@@ -441,6 +449,48 @@ function OptionsEditor({ field }: { field: ContactField }) {
   );
 }
 
+/** What the preference page shows of the field. It saves when the value changes. */
+function PreferenceSetting({ field }: { field: ContactField }) {
+  const refresh = useRefreshFields();
+  const id = `field-${field.id}-preference`;
+  const change = useMutation({
+    mutationFn: (preference: Preference) =>
+      unwrap(
+        api.PATCH("/fields/{id}", {
+          params: { path: { id: field.id } },
+          body: { preference },
+        }),
+      ),
+    onSuccess: async (result) => {
+      await refresh();
+      toast(`The preference page setting of "${result.label}" is saved.`);
+    },
+  });
+  return (
+    <Field
+      id={id}
+      label="On the preference page"
+      hint="Each email links to this page. Subscribers can see or change their own answer there."
+      error={errorText(change.error)}
+      className="max-w-[420px]"
+    >
+      <NativeSelect
+        id={id}
+        value={field.preference}
+        disabled={change.isPending}
+        aria-describedby={`${id}-hint`}
+        onChange={(event) => change.mutate(event.target.value as Preference)}
+      >
+        {(Object.keys(PREFERENCE_LABELS) as Preference[]).map((value) => (
+          <option key={value} value={value}>
+            {PREFERENCE_LABELS[value]}
+          </option>
+        ))}
+      </NativeSelect>
+    </Field>
+  );
+}
+
 function FieldCard({ field }: { field: ContactField }) {
   return (
     <section
@@ -461,6 +511,7 @@ function FieldCard({ field }: { field: ContactField }) {
         <code className="font-mono text-xs text-muted-foreground">{`{{ ${field.key} }}`}</code>
       </div>
       {isChoice(field.type) ? <OptionsEditor field={field} /> : null}
+      <PreferenceSetting field={field} />
     </section>
   );
 }

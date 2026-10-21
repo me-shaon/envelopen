@@ -47,6 +47,7 @@ interface Draft {
   name: string;
   listIds: number[];
   fieldIds: number[];
+  requiredFieldIds: number[];
   consentText: string;
   successMessage: string;
   origins: string;
@@ -60,6 +61,7 @@ function draftOf(form: SignupForm | null): Draft {
     name: form?.name ?? "",
     listIds: form?.listIds ?? [],
     fieldIds: form?.fieldIds ?? [],
+    requiredFieldIds: form?.requiredFieldIds ?? [],
     consentText: form?.consentText ?? DEFAULT_CONSENT,
     successMessage: form?.successMessage ?? DEFAULT_SUCCESS,
     origins: (form?.allowedOrigins ?? []).join("\n"),
@@ -74,6 +76,7 @@ function bodyOf(draft: Draft) {
     name: draft.name.trim(),
     listIds: draft.listIds,
     fieldIds: draft.fieldIds,
+    requiredFieldIds: draft.requiredFieldIds.filter((id) => draft.fieldIds.includes(id)),
     consentText: draft.consentText.trim(),
     successMessage: draft.successMessage.trim(),
     allowedOrigins: draft.origins
@@ -314,12 +317,20 @@ function Editor({ form }: { form: SignupForm | null }) {
                 label: field.label,
                 type: field.type,
                 options: field.options.map((option) => ({ id: option.id, label: option.label })),
+                required: draft.requiredFieldIds.includes(field.id),
               },
             ]
           : [];
       }),
     }),
-    [draft.name, draft.consentText, draft.successMessage, draft.fieldIds, fieldDefs],
+    [
+      draft.name,
+      draft.consentText,
+      draft.successMessage,
+      draft.fieldIds,
+      draft.requiredFieldIds,
+      fieldDefs,
+    ],
   );
   const height = recommendedFormHeight(previewForm.fields);
   const fieldError =
@@ -387,9 +398,31 @@ function Editor({ form }: { form: SignupForm | null }) {
             legend="Fields to ask"
             items={fieldItems}
             selected={draft.fieldIds}
-            onChange={(fieldIds) => update({ fieldIds })}
+            onChange={(fieldIds) =>
+              update({
+                fieldIds,
+                requiredFieldIds: draft.requiredFieldIds.filter((id) => fieldIds.includes(id)),
+              })
+            }
             empty="No custom fields. The form asks only for the email address."
           />
+          {draft.fieldIds.length > 0 ? (
+            <CheckList
+              legend="Required answers"
+              items={draft.fieldIds.flatMap((id) => {
+                const item = fieldItems.find((field) => field.id === id);
+                return item ? [{ id, label: item.label }] : [];
+              })}
+              selected={draft.requiredFieldIds}
+              onChange={(requiredFieldIds) => update({ requiredFieldIds })}
+              empty=""
+            />
+          ) : null}
+          {errorOf("requiredFieldIds") ? (
+            <p className="m-0 -mt-4 text-xs text-tone-danger-foreground">
+              {errorOf("requiredFieldIds")}
+            </p>
+          ) : null}
           <Field
             id="form-consent"
             label="Consent text"

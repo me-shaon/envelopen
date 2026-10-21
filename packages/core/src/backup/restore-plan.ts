@@ -195,11 +195,18 @@ const identity: Upgrade = (_table, row) => row;
  * - 0018 adds `contact_fields.kind` and the options table. A field of an older backup is
  *   a plain field, so its kind is null. An older backup has no options.
  * - 0019 adds only new tables (forms, signups, form consents). An older backup has none.
+ * - 0020 adds `contact_fields.preference` and `forms.required_field_ids`. An older field
+ *   stays off the preference page, and an older form requires no field.
  */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
   18: (table, row) => (table === "contact_fields" ? { kind: null, ...row } : row),
   19: identity,
+  20: (table, row) => {
+    if (table === "contact_fields") return { preference: "hidden", ...row };
+    if (table === "forms") return { required_field_ids: "[]", ...row };
+    return row;
+  },
 };
 
 /** Returns why a backup of `schemaVersion` cannot be restored here, or null. */

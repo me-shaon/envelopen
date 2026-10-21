@@ -1,4 +1,4 @@
-import type { ContactFieldKind, Database } from "@envelopen/db";
+import type { ContactFieldKind, Database, FieldPreference } from "@envelopen/db";
 import { choiceText } from "@envelopen/email-render";
 import { type Kysely, sql } from "kysely";
 import { z } from "zod";
@@ -17,6 +17,12 @@ import { FIELD_KEY_PATTERN } from "./writes";
 
 export const FIELD_TYPES = ["text", "number", "date", "boolean", "choice", "multi"] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
+
+export const FIELD_PREFERENCES = [
+  "hidden",
+  "read_only",
+  "editable",
+] as const satisfies readonly FieldPreference[];
 
 export const MAX_OPTIONS = 100;
 export const OPTION_LABEL_MAX = 100;
@@ -40,6 +46,11 @@ export const ContactFieldSchema = z
     options: z.array(FieldOptionSchema).meta({
       description: "The options of a choice field, in order. Empty for other types.",
     }),
+    preference: z.enum(FIELD_PREFERENCES).meta({
+      description:
+        "What the preference page shows: `hidden` (nothing), `read_only` (the value as text), " +
+        "or `editable` (the subscriber can change the value).",
+    }),
     createdAt: z.number().int(),
   })
   .meta({ id: "ContactField" });
@@ -53,6 +64,7 @@ export interface FieldDef {
   type: FieldType;
   kind: ContactFieldKind | null;
   options: { id: number; label: string; position: number }[];
+  preference: FieldPreference;
   createdAt: number;
 }
 
@@ -76,7 +88,7 @@ export async function loadFieldDefs(
   if (keys && keys.length === 0) return new Map();
   let query = db
     .selectFrom("contact_fields")
-    .select(["id", "key", "label", "type", "kind", "created_at"])
+    .select(["id", "key", "label", "type", "kind", "preference", "created_at"])
     .where("workspace_id", "=", workspaceId);
   // One JSON parameter, so many keys stay within D1's 100 bound parameters.
   if (keys) {
@@ -109,6 +121,7 @@ export async function loadFieldDefs(
       options: options
         .filter((option) => option.field_id === field.id)
         .map(({ id, label, position }) => ({ id, label, position })),
+      preference: field.preference,
       createdAt: field.created_at,
     });
   }
@@ -122,6 +135,7 @@ export function toContactField(def: FieldDef): ContactField {
     label: def.label,
     type: def.type,
     options: def.options,
+    preference: def.preference,
     createdAt: def.createdAt,
   };
 }
@@ -371,6 +385,7 @@ export const fieldsCreate = defineOperation({
     label: FieldLabel,
     type: z.enum(FIELD_TYPES),
     options: z.array(OptionLabel).max(MAX_OPTIONS).optional(),
+    preference: z.enum(FIELD_PREFERENCES).default("hidden"),
   }),
   output: ContactFieldSchema,
   successStatus: 201,
@@ -406,6 +421,7 @@ export const fieldsCreate = defineOperation({
         label: input.label,
         type: choice ? "text" : (input.type as "text" | "number" | "date" | "boolean"),
         kind: choice ? (input.type as ContactFieldKind) : null,
+        preference: input.preference,
         created_at: now,
       }),
       // One JSON parameter carries every label, so 100 options fit D1's parameter limit.
@@ -431,26 +447,41 @@ WHERE f.workspace_id = ${workspaceId} AND f.key = ${input.key}`.compile(db.db),
 
 export const fieldsUpdate = defineOperation({
   id: "fields.update",
-  summary: "Rename a custom field",
-  description: "Changes the label. The key and the type stay.",
+  summary: "Change a custom field",
+  description:
+    "Changes the label, or what the preference page shows of the field. The key and the " +
+    "type stay. Give at least one of `label` and `preference`.",
   method: "patch",
   path: "/fields/{id}",
   scope: "lists:write",
   risk: "write",
-  mcp: { class: "now", reason: "A label change is reversible setup." },
-  input: z.object({ id: Id, label: FieldLabel }),
+  mcp: { class: "now", reason: "A label or a page setting change is reversible setup." },
+  input: z.object({
+    id: Id,
+    label: FieldLabel.optional(),
+    preference: z.enum(FIELD_PREFERENCES).optional(),
+  }),
   output: ContactFieldSchema,
   async handler(input, { principal, db }) {
     const def = await requireField(db.db, principal.workspaceId, input.id);
+    const label = input.label ?? def.label;
+    const preference = input.preference ?? def.preference;
+    if (input.label === undefined && input.preference === undefined) {
+      throw new OperationError("invalid_input", "Give a label or a preference page setting.");
+    }
     await db.db
       .updateTable("contact_fields")
-      .set({ label: input.label })
+      .set({ label, preference })
       .where("workspace_id", "=", principal.workspaceId)
       .where("id", "=", def.id)
       .execute();
-    return toContactField({ ...def, label: input.label });
+    return toContactField({ ...def, label, preference });
   },
-  auditTarget: (_input, output) => ({ targetType: "field", targetId: output.id }),
+  auditTarget: (input, output) => ({
+    targetType: "field",
+    targetId: output.id,
+    ...(input.preference === undefined ? {} : { metadata: { preference: input.preference } }),
+  }),
 });
 
 export const fieldsAddOption = defineOperation({

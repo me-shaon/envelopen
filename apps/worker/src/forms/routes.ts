@@ -306,7 +306,7 @@ export function createFormRoutes(options: FormRoutesOptions = {}) {
           },
           400,
         );
-      const checked = validateSubmission(form.defs, raw);
+      const checked = validateSubmission(form.defs, raw, form.required);
       if (!checked.ok) return formView(checked.errors);
       const verified = await deps.verifyTurnstile({
         token: first(fields, "cf-turnstile-response"),

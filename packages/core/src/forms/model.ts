@@ -122,12 +122,16 @@ export async function formFieldDefs(
   return fieldIds.flatMap((id) => defs.filter((def) => def.id === id));
 }
 
-export function pageFields(defs: readonly FieldDef[]): FormPageField[] {
+export function pageFields(
+  defs: readonly FieldDef[],
+  required: ReadonlySet<number> = new Set(),
+): FormPageField[] {
   return defs.map((def) => ({
     key: def.key,
     label: def.label,
     type: def.type,
     options: def.options.map((option) => ({ id: option.id, label: option.label })),
+    required: required.has(def.id),
   }));
 }
 
@@ -139,6 +143,9 @@ export const FormSchema = z
     listIds: z.array(z.number().int()),
     fieldIds: z.array(z.number().int()).meta({
       description: "The custom fields that the form asks, in order.",
+    }),
+    requiredFieldIds: z.array(z.number().int()).meta({
+      description: "The fields of `fieldIds` that a subscriber must answer.",
     }),
     consentText: z.string(),
     consentVersion: z.number().int().meta({
@@ -177,6 +184,7 @@ export function toForm(row: Row<"forms">, defs: readonly FieldDef[], appOrigin?:
     name: row.name,
     listIds: idList(row.list_ids),
     fieldIds: idList(row.field_ids),
+    requiredFieldIds: idList(row.required_field_ids),
     consentText: row.consent_text,
     consentVersion: row.consent_version,
     successMessage: row.success_message,

@@ -479,6 +479,17 @@ describe("restore plan", () => {
       id: 1,
       key: "course",
       kind: null,
+      preference: "hidden",
+    });
+    // 0020 adds the preference page setting of a field and the required fields of a form.
+    expect(upgradeRow("forms", { id: 1, field_ids: "[3]" }, 19)).toEqual({
+      id: 1,
+      field_ids: "[3]",
+      required_field_ids: "[]",
+    });
+    expect(upgradeRow("contact_fields", { id: 1, preference: "editable" }, 19)).toEqual({
+      id: 1,
+      preference: "editable",
     });
     expect(upgradeRow("contacts", { id: 1 }, 16)).toEqual({ id: 1 });
     expect(schemaProblem(BACKUP_SCHEMA_VERSION + 1)).toContain("newer Envelopen");

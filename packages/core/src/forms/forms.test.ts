@@ -54,6 +54,7 @@ interface Form {
   publicId: string;
   consentVersion: number;
   listIds: number[];
+  requiredFieldIds?: number[];
 }
 
 async function setup() {
@@ -444,6 +445,37 @@ describe("form values", () => {
       email: "a@example.org",
       values: { [key]: [field.options[1]?.id] },
     });
+  });
+
+  it("refuses a submission without an answer to a required field", async () => {
+    const { run, form, field, publicForm } = await setup();
+    const updated = await run<Form>(formsUpdate, {
+      ...form,
+      requiredFieldIds: [field.id],
+    });
+    expect(updated.requiredFieldIds).toEqual([field.id]);
+    const loaded = await publicForm();
+    expect(loaded.page.fields[0]?.required).toBe(true);
+    const key = loaded.defs[0]?.key ?? "";
+    const missing = validateSubmission(
+      loaded.defs,
+      { email: "a@example.org", fields: {} },
+      loaded.required,
+    );
+    expect(missing).toEqual({
+      ok: false,
+      errors: [{ target: `field-${key}`, message: "Select an option for Interests." }],
+    });
+    const answered = validateSubmission(
+      loaded.defs,
+      { email: "a@example.org", fields: { [key]: [String(field.options[0]?.id)] } },
+      loaded.required,
+    );
+    expect(answered.ok).toBe(true);
+    // A required field must be a field of the form.
+    await expect(
+      run(formsUpdate, { ...form, fieldIds: [], requiredFieldIds: [field.id] }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
   });
 });
 

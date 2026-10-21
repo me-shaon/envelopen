@@ -696,8 +696,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Rename a custom field
-         * @description Changes the label. The key and the type stay.
+         * Change a custom field
+         * @description Changes the label, or what the preference page shows of the field. The key and the type stay. Give at least one of `label` and `preference`.
          */
         patch: operations["fields.update"];
         trace?: never;
@@ -2171,6 +2171,11 @@ export interface components {
             type: "text" | "number" | "date" | "boolean" | "choice" | "multi";
             /** @description The options of a choice field, in order. Empty for other types. */
             options: components["schemas"]["FieldOption"][];
+            /**
+             * @description What the preference page shows: `hidden` (nothing), `read_only` (the value as text), or `editable` (the subscriber can change the value).
+             * @enum {string}
+             */
+            preference: "hidden" | "read_only" | "editable";
             createdAt: number;
         };
         FieldOption: {
@@ -2207,6 +2212,8 @@ export interface components {
             listIds: number[];
             /** @description The custom fields that the form asks, in order. */
             fieldIds: number[];
+            /** @description The fields of `fieldIds` that a subscriber must answer. */
+            requiredFieldIds: number[];
             consentText: string;
             /** @description Goes up by one each time the consent text changes. */
             consentVersion: number;
@@ -7033,6 +7040,11 @@ export interface operations {
                     /** @enum {string} */
                     type: "text" | "number" | "date" | "boolean" | "choice" | "multi";
                     options?: string[];
+                    /**
+                     * @default hidden
+                     * @enum {string}
+                     */
+                    preference?: "hidden" | "read_only" | "editable";
                 };
             };
         };
@@ -7129,10 +7141,12 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
                 "application/json": {
-                    label: string;
+                    label?: string;
+                    /** @enum {string} */
+                    preference?: "hidden" | "read_only" | "editable";
                 };
             };
         };
@@ -7416,6 +7430,11 @@ export interface operations {
                         type: "text" | "number" | "date" | "boolean" | "choice" | "multi";
                         /** @description The options of a choice field, in order. Empty for other types. */
                         options: components["schemas"]["FieldOption"][];
+                        /**
+                         * @description What the preference page shows: `hidden` (nothing), `read_only` (the value as text), or `editable` (the subscriber can change the value).
+                         * @enum {string}
+                         */
+                        preference: "hidden" | "read_only" | "editable";
                         createdAt: number;
                         /** @description Contacts moved to `mergeInto`. */
                         merged: number;
@@ -7913,6 +7932,11 @@ export interface operations {
                     listIds?: number[];
                     /** @default [] */
                     fieldIds?: number[];
+                    /**
+                     * @description The fields of `fieldIds` that a subscriber must answer.
+                     * @default []
+                     */
+                    requiredFieldIds?: number[];
                     /** @default I agree to get emails from this sender. I can unsubscribe at any time with the link in each email. */
                     consentText?: string;
                     /** @default Thank you. Your subscription is active. */
@@ -8103,6 +8127,11 @@ export interface operations {
                     name: string;
                     listIds: number[];
                     fieldIds: number[];
+                    /**
+                     * @description The fields of `fieldIds` that a subscriber must answer.
+                     * @default []
+                     */
+                    requiredFieldIds?: number[];
                     consentText: string;
                     successMessage: string;
                     allowedOrigins: string[];

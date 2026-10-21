@@ -105,3 +105,29 @@ describe("renderFormPage", () => {
     expect(snippet).not.toContain("<script");
   });
 });
+
+describe("required fields (U9)", () => {
+  it("marks a required field, escapes its label, and shows its error", () => {
+    const html = renderFormPage(
+      {
+        kind: "form",
+        form: {
+          ...form,
+          fields: [
+            { key: "frequency", label: ATTACK, type: "choice", options: [], required: true },
+            { key: "city", label: "City", type: "text", options: [], required: true },
+          ],
+        },
+        action: "/f/abc",
+        siteKey: null,
+        errors: [{ target: "field-city", message: FORM_COPY.requiredValue("City") }],
+      },
+      layout,
+    );
+    expect(html).not.toContain("<script>alert(1)");
+    expect(html).toContain(`<legend>&quot;&gt;&lt;script&gt;`);
+    expect(html).toContain(`City <span class="req">${FORM_COPY.requiredMark}</span>`);
+    expect(html).toContain('aria-required="true" aria-invalid="true"');
+    expect(html).toContain("Enter a value for City.");
+  });
+});

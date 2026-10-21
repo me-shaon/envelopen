@@ -182,6 +182,9 @@ importers:
       '@envelopen/providers':
         specifier: workspace:*
         version: link:../providers
+      aws4fetch:
+        specifier: 1.0.20
+        version: 1.0.20
       kysely:
         specifier: 0.29.7
         version: 0.29.7

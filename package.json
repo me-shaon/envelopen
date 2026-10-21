@@ -32,7 +32,7 @@
         "description": "KV namespace for read-mostly cache data, such as workspace settings."
       },
       "BUCKET": {
-        "description": "R2 bucket for uploaded images and CSV import files."
+        "description": "R2 bucket for uploaded images, CSV import files, and encrypted backups."
       },
       "IMPORT_WORKFLOW": {
         "description": "Workflow that previews and imports CSV files in chunks, then deletes the file."
@@ -54,6 +54,12 @@
       },
       "AUTH_RATE_LIMITER": {
         "description": "Durable Object that counts failed logins and setup attempts by IP and email."
+      },
+      "BACKUP_WORKFLOW": {
+        "description": "Workflow that writes the daily and on-demand encrypted backup of all data to R2, with an optional copy to an S3-compatible store."
+      },
+      "KEY_DERIVATION_WORKFLOW": {
+        "description": "Workflow that derives the backup key from the owner's passphrase in steps, so each step stays within the Workers Free CPU limit."
       },
       "CAMPAIGN_WORKFLOW": {
         "description": "Workflow that takes the recipient snapshot of a campaign in pages and puts its batches on the send queue."

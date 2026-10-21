@@ -5,9 +5,11 @@ import { createCredentialCipher } from "../src/crypto/credentials";
 import { createFileLinkSigner } from "../src/import/file-links";
 import type { ApiKeyScope } from "../src/scopes";
 import type {
+  BackupJob,
   BatchPointer,
   CampaignJob,
   ImportJob,
+  KeyDerivationJob,
   Services,
   SettingsCache,
   UsageStatus,
@@ -105,6 +107,10 @@ export interface TestServices extends Services {
   jobs: ImportJob[];
   /** Campaign snapshot runs that operations started, in order. */
   campaignJobs: CampaignJob[];
+  /** Backup runs that operations started, in order. */
+  backupJobs: BackupJob[];
+  /** Key derivations that operations started, in order. */
+  derivationJobs: KeyDerivationJob[];
   /** Batch pointers that operations put on the send queue, in order. */
   queued: BatchPointer[];
   /** What `usage.status()` returns. Tests change it. */
@@ -116,6 +122,8 @@ export async function testServices(options: { fetch?: typeof fetch } = {}): Prom
   const signer = await createFileLinkSigner(TEST_SIGNING_KEY);
   const jobs: ImportJob[] = [];
   const campaignJobs: CampaignJob[] = [];
+  const backupJobs: BackupJob[] = [];
+  const derivationJobs: KeyDerivationJob[] = [];
   const queued: BatchPointer[] = [];
   const services: TestServices = {
     bucket: env.BUCKET,
@@ -132,6 +140,14 @@ export async function testServices(options: { fetch?: typeof fetch } = {}): Prom
     queued,
     async startCampaignJob(job) {
       campaignJobs.push(job);
+    },
+    backupJobs,
+    async startBackupJob(job) {
+      backupJobs.push(job);
+    },
+    derivationJobs,
+    async startKeyDerivation(job) {
+      derivationJobs.push(job);
     },
     sendQueue: {
       async send(pointers) {

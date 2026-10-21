@@ -120,6 +120,215 @@
           "defaultSourceUrl"
         ]
       },
+      "BackupStatus": {
+        "type": "object",
+        "properties": {
+          "passphraseSet": {
+            "type": "boolean"
+          },
+          "keySetAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "retentionDays": {
+            "type": "number"
+          },
+          "s3": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "endpoint": {
+                "type": "string"
+              },
+              "region": {
+                "type": "string"
+              },
+              "bucket": {
+                "type": "string"
+              },
+              "accessKeyId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "endpoint",
+              "region",
+              "bucket",
+              "accessKeyId"
+            ],
+            "description": "The S3-compatible copy destination. The secret is never returned."
+          },
+          "lastRun": {
+            "$ref": "#/components/schemas/BackupRun"
+          },
+          "lastSuccess": {
+            "$ref": "#/components/schemas/BackupRun"
+          },
+          "nextRunAt": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "The next daily backup, when enabled."
+          },
+          "readBudget": {
+            "type": "number",
+            "description": "D1 rows that backups may read per UTC day."
+          },
+          "passphraseDerivation": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "ready",
+                  "failed"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "startedAt": {
+                "type": "number"
+              },
+              "finishedAt": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "error",
+              "startedAt",
+              "finishedAt"
+            ],
+            "description": "The latest passphrase key derivation. It runs in the background for a few seconds after the passphrase is set. The passphrase is in use when it is ready."
+          }
+        },
+        "required": [
+          "passphraseSet",
+          "keySetAt",
+          "enabled",
+          "retentionDays",
+          "s3",
+          "lastRun",
+          "lastSuccess",
+          "nextRunAt",
+          "readBudget",
+          "passphraseDerivation"
+        ]
+      },
+      "BackupRun": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "backupId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "partial",
+              "failed"
+            ]
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "schedule",
+              "manual"
+            ]
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "finishedAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "chunkCount": {
+            "type": "number"
+          },
+          "rowCount": {
+            "type": "number"
+          },
+          "sizeBytes": {
+            "type": "number"
+          },
+          "rowsRead": {
+            "type": "number"
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "s3Error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deletedAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "backupId",
+          "status",
+          "trigger",
+          "startedAt",
+          "finishedAt",
+          "chunkCount",
+          "rowCount",
+          "sizeBytes",
+          "rowsRead",
+          "destinations",
+          "error",
+          "s3Error",
+          "deletedAt"
+        ]
+      },
       "ApiKey": {
         "type": "object",
         "properties": {
@@ -5593,6 +5802,717 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeploymentSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backups": {
+      "get": {
+        "operationId": "backups.get",
+        "summary": "Get the backup status",
+        "description": "Returns the backup settings, the last run, the last successful run, and the time of the next daily backup. The S3 secret is never returned.",
+        "tags": [
+          "backups"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "never",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backups/runs": {
+      "get": {
+        "operationId": "backups.runs",
+        "summary": "List the backup runs",
+        "description": "Lists the most recent backup runs, newest first.",
+        "tags": [
+          "backups"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "never",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 30
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BackupRun"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "backups.start",
+        "summary": "Start a backup now",
+        "description": "Starts a backup of all data now. It runs in the background. Needs a backup passphrase and a sign-in in the last 10 minutes.",
+        "tags": [
+          "backups"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "never",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different path or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backups/passphrase": {
+      "post": {
+        "operationId": "backups.set_passphrase",
+        "summary": "Set or change the backup passphrase",
+        "description": "Starts the derivation of the backup key from the passphrase, and returns at once. The status shows when the key is ready. Envelopen stores only the public part. Envelopen cannot recover a lost passphrase. Backups made before a change still need the old passphrase. Needs a sign-in in the last 10 minutes.",
+        "tags": [
+          "backups"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "never",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "passphrase": {
+                    "type": "string",
+                    "minLength": 12,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "passphrase"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "passphraseSet": {
+                      "type": "boolean"
+                    },
+                    "keySetAt": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "retentionDays": {
+                      "type": "number"
+                    },
+                    "s3": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "endpoint": {
+                          "type": "string"
+                        },
+                        "region": {
+                          "type": "string"
+                        },
+                        "bucket": {
+                          "type": "string"
+                        },
+                        "accessKeyId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "endpoint",
+                        "region",
+                        "bucket",
+                        "accessKeyId"
+                      ],
+                      "description": "The S3-compatible copy destination. The secret is never returned."
+                    },
+                    "lastRun": {
+                      "$ref": "#/components/schemas/BackupRun"
+                    },
+                    "lastSuccess": {
+                      "$ref": "#/components/schemas/BackupRun"
+                    },
+                    "nextRunAt": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "The next daily backup, when enabled."
+                    },
+                    "readBudget": {
+                      "type": "number",
+                      "description": "D1 rows that backups may read per UTC day."
+                    },
+                    "passphraseDerivation": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "number"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "ready",
+                            "failed"
+                          ]
+                        },
+                        "error": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "startedAt": {
+                          "type": "number"
+                        },
+                        "finishedAt": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "error",
+                        "startedAt",
+                        "finishedAt"
+                      ],
+                      "description": "The latest passphrase key derivation. It runs in the background for a few seconds after the passphrase is set. The passphrase is in use when it is ready."
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "passphraseSet",
+                    "keySetAt",
+                    "enabled",
+                    "retentionDays",
+                    "s3",
+                    "lastRun",
+                    "lastSuccess",
+                    "nextRunAt",
+                    "readBudget",
+                    "passphraseDerivation",
+                    "changed"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different path or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backups/settings": {
+      "patch": {
+        "operationId": "backups.update_settings",
+        "summary": "Update the backup settings",
+        "description": "Turns the daily backup on or off, sets how many days backups are kept, and sets or removes the S3-compatible copy destination. Needs a sign-in in the last 10 minutes.",
+        "tags": [
+          "backups"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "never",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "retentionDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365
+                  },
+                  "s3": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "endpoint": {
+                        "type": "string",
+                        "description": "The S3 endpoint, for example https://s3.eu-central-1.amazonaws.com."
+                      },
+                      "region": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9-]{1,64}$",
+                        "description": "The region for request signing, for example us-east-1 or auto."
+                      },
+                      "bucket": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
+                        "description": "The bucket name."
+                      },
+                      "accessKeyId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "secretAccessKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    },
+                    "required": [
+                      "endpoint",
+                      "region",
+                      "bucket",
+                      "accessKeyId",
+                      "secretAccessKey"
+                    ],
+                    "description": "The S3-compatible copy destination. Null removes it. Leave it out to keep it."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupStatus"
                 }
               }
             }

@@ -26,6 +26,22 @@ export interface CampaignJob {
   startedAt: number;
 }
 
+/** A backup run that the backup Workflow executes (U4). */
+export interface BackupJob {
+  /** `backup_runs.id`. */
+  runId: number;
+  /** `backup_runs.backup_id`, the R2 folder name. */
+  backupId: string;
+}
+
+/** A passphrase key derivation that the key derivation Workflow runs in steps (U4). */
+export interface KeyDerivationJob {
+  /** `key_derivations.id`. */
+  derivationId: number;
+  /** The number of PBKDF2 segments, one per step. */
+  segments: number;
+}
+
 /**
  * A queue message: a pointer to one batch (KTD17). The database holds all recipient
  * state. A message whose generation differs from the batch's is stale.
@@ -112,6 +128,10 @@ export interface Services {
   usage: UsageReader;
   /** The cache that the public pages read deployment settings from. */
   settingsCache: SettingsCache;
+  /** Starts the backup Workflow for one run (U4). */
+  startBackupJob(job: BackupJob): Promise<void>;
+  /** Starts the key derivation Workflow for one passphrase (U4). */
+  startKeyDerivation(job: KeyDerivationJob): Promise<void>;
 }
 
 /** Returns the service, or throws when the surface did not provide it. */

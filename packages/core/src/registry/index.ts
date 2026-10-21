@@ -1,3 +1,10 @@
+import {
+  backupsGet,
+  backupsRuns,
+  backupsSetPassphrase,
+  backupsStart,
+  backupsUpdateSettings,
+} from "../backup/operations";
 import { campaignsFollowUp } from "../campaigns/follow-up";
 import {
   campaignsBatches,
@@ -172,6 +179,12 @@ export const registry = createRegistry([
   // Deployment settings (KTD16): the source link of this deployment.
   settingsGet,
   settingsUpdate,
+  // Encrypted backups (U4): owner session only, never MCP.
+  backupsGet,
+  backupsRuns,
+  backupsStart,
+  backupsSetPassphrase,
+  backupsUpdateSettings,
   apiKeysPresets,
   apiKeysList,
   apiKeysCreate,

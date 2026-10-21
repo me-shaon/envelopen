@@ -15,11 +15,13 @@ export const WORKSPACE_HEADER = "X-Envelopen-Workspace";
  * `owner`, and the owner has every scope.
  *
  * @param requested The raw header value, or undefined for the default workspace.
+ * @param signedInAt When the session's sign-in completed (Unix milliseconds).
  */
 export async function resolveSessionPrincipal(
   conn: DbConnection,
   userId: string,
   requested: string | undefined,
+  signedInAt: number | null = null,
 ): Promise<Principal> {
   let workspaceId: number | undefined;
   if (requested !== undefined) {
@@ -54,5 +56,5 @@ export async function resolveSessionPrincipal(
     // v1.x adds roles with their own scopes. Until then, only the owner signs in.
     throw new OperationError("forbidden", "Your role has no access in this version.");
   }
-  return sessionPrincipal({ workspaceId: membership.workspace_id, userId });
+  return sessionPrincipal({ workspaceId: membership.workspace_id, userId, signedInAt });
 }

@@ -40,7 +40,8 @@
   // Per-minute cron: starts due scheduled campaigns, runs the recovery sweep, resumes
   // campaigns after the D1 daily limit resets, and deletes expired files (U9, KTD19).
   // It also hands unapplied provider events to the EventBuffer and, once an hour,
-  // deletes raw events past the retention period (U10, R51).
+  // deletes raw events past the retention period (U10, R51). Once a day it starts the
+  // encrypted backup and removes backups past their retention period (U4).
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     // PBKDF2-SHA256 iterations for password hashes (KTD7). Workers accept at most 100000.
@@ -78,6 +79,15 @@
       "name": "envelopen-campaign",
       "binding": "CAMPAIGN_WORKFLOW",
       "class_name": "CampaignWorkflow"
+    },
+    // Encrypted backups (U4): the tables in chunks of about 1,000 rows to R2, within a daily
+    // D1 read budget.
+    { "name": "envelopen-backup", "binding": "BACKUP_WORKFLOW", "class_name": "BackupWorkflow" },
+    // Backup passphrase keys (U4): PBKDF2 in steps of 100,000 iterations, within the Free CPU limit.
+    {
+      "name": "envelopen-key-derivation",
+      "binding": "KEY_DERIVATION_WORKFLOW",
+      "class_name": "KeyDerivationWorkflow"
     }
   ]
 }

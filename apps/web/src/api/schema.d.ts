@@ -113,6 +113,90 @@ export interface paths {
         patch: operations["settings.update"];
         trace?: never;
     };
+    "/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the backup status
+         * @description Returns the backup settings, the last run, the last successful run, and the time of the next daily backup. The S3 secret is never returned.
+         */
+        get: operations["backups.get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the backup runs
+         * @description Lists the most recent backup runs, newest first.
+         */
+        get: operations["backups.runs"];
+        put?: never;
+        /**
+         * Start a backup now
+         * @description Starts a backup of all data now. It runs in the background. Needs a backup passphrase and a sign-in in the last 10 minutes.
+         */
+        post: operations["backups.start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/passphrase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set or change the backup passphrase
+         * @description Starts the derivation of the backup key from the passphrase, and returns at once. The status shows when the key is ready. Envelopen stores only the public part. Envelopen cannot recover a lost passphrase. Backups made before a change still need the old passphrase. Needs a sign-in in the last 10 minutes.
+         */
+        post: operations["backups.set_passphrase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update the backup settings
+         * @description Turns the daily backup on or off, sets how many days backups are kept, and sets or removes the S3-compatible copy destination. Needs a sign-in in the last 10 minutes.
+         */
+        patch: operations["backups.update_settings"];
+        trace?: never;
+    };
     "/api-keys/presets": {
         parameters: {
             query?: never;
@@ -1598,6 +1682,52 @@ export interface components {
             /** @description The upstream repository URL. */
             defaultSourceUrl: string;
         };
+        BackupStatus: {
+            passphraseSet: boolean;
+            keySetAt: number | null;
+            enabled: boolean;
+            retentionDays: number;
+            /** @description The S3-compatible copy destination. The secret is never returned. */
+            s3: {
+                endpoint: string;
+                region: string;
+                bucket: string;
+                accessKeyId: string;
+            } | null;
+            lastRun: components["schemas"]["BackupRun"];
+            lastSuccess: components["schemas"]["BackupRun"];
+            /** @description The next daily backup, when enabled. */
+            nextRunAt: number | null;
+            /** @description D1 rows that backups may read per UTC day. */
+            readBudget: number;
+            /** @description The latest passphrase key derivation. It runs in the background for a few seconds after the passphrase is set. The passphrase is in use when it is ready. */
+            passphraseDerivation: {
+                id: number;
+                /** @enum {string} */
+                status: "pending" | "ready" | "failed";
+                error: string | null;
+                startedAt: number;
+                finishedAt: number | null;
+            } | null;
+        };
+        BackupRun: {
+            id: number;
+            backupId: string;
+            /** @enum {string} */
+            status: "running" | "succeeded" | "partial" | "failed";
+            /** @enum {string} */
+            trigger: "schedule" | "manual";
+            startedAt: number;
+            finishedAt: number | null;
+            chunkCount: number;
+            rowCount: number;
+            sizeBytes: number;
+            rowsRead: number;
+            destinations: string[];
+            error: string | null;
+            s3Error: string | null;
+            deletedAt: number | null;
+        } | null;
         ApiKey: {
             id: number;
             name: string;
@@ -3315,6 +3445,468 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeploymentSettings"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backups.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupStatus"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backups.runs": {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["BackupRun"][];
+                    };
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backups.start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupRun"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different path or body. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backups.set_passphrase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    passphrase: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        passphraseSet: boolean;
+                        keySetAt: number | null;
+                        enabled: boolean;
+                        retentionDays: number;
+                        /** @description The S3-compatible copy destination. The secret is never returned. */
+                        s3: {
+                            endpoint: string;
+                            region: string;
+                            bucket: string;
+                            accessKeyId: string;
+                        } | null;
+                        lastRun: components["schemas"]["BackupRun"];
+                        lastSuccess: components["schemas"]["BackupRun"];
+                        /** @description The next daily backup, when enabled. */
+                        nextRunAt: number | null;
+                        /** @description D1 rows that backups may read per UTC day. */
+                        readBudget: number;
+                        /** @description The latest passphrase key derivation. It runs in the background for a few seconds after the passphrase is set. The passphrase is in use when it is ready. */
+                        passphraseDerivation: {
+                            id: number;
+                            /** @enum {string} */
+                            status: "pending" | "ready" | "failed";
+                            error: string | null;
+                            startedAt: number;
+                            finishedAt: number | null;
+                        } | null;
+                        changed: boolean;
+                    };
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different path or body. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backups.update_settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    enabled?: boolean;
+                    retentionDays?: number;
+                    /** @description The S3-compatible copy destination. Null removes it. Leave it out to keep it. */
+                    s3?: {
+                        /** @description The S3 endpoint, for example https://s3.eu-central-1.amazonaws.com. */
+                        endpoint: string;
+                        /** @description The region for request signing, for example us-east-1 or auto. */
+                        region: string;
+                        /** @description The bucket name. */
+                        bucket: string;
+                        accessKeyId: string;
+                        secretAccessKey: string;
+                    } | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupStatus"];
                 };
             };
             /** @description The input is not valid. */

@@ -676,6 +676,74 @@ export interface AuthPasskeyTable {
   aaguid: string | null;
 }
 
+// Backups (U4, KTD2) ---------------------------------------------------------------------
+
+export type BackupRunStatus = "running" | "succeeded" | "partial" | "failed";
+export type BackupTrigger = "schedule" | "manual";
+
+/** One row (id = 1): backup settings and the public key material (0016_backups.sql). */
+export interface BackupSettingsTable {
+  id: number;
+  enabled: Defaulted<Bool>;
+  retention_days: Defaulted<number>;
+  /** X25519 public key, base64url. */
+  public_key: Defaulted<string | null>;
+  kdf_salt: Defaulted<string | null>;
+  kdf_iterations: Defaulted<number | null>;
+  verifier: Defaulted<string | null>;
+  verifier_salt: Defaulted<string | null>;
+  verifier_iterations: Defaulted<number | null>;
+  key_set_at: Defaulted<number | null>;
+  /** Encrypted JSON of the S3-compatible destination. */
+  s3_config: Defaulted<string | null>;
+  s3_key_version: Defaulted<number | null>;
+  updated_at: Defaulted<number>;
+}
+
+export interface BackupRunsTable {
+  id: Generated<number>;
+  backup_id: Immutable<string>;
+  status: Defaulted<BackupRunStatus>;
+  trigger: Immutable<BackupTrigger>;
+  started_at: Immutable<number>;
+  finished_at: Defaulted<number | null>;
+  chunk_count: Defaulted<number>;
+  row_count: Defaulted<number>;
+  size_bytes: Defaulted<number>;
+  rows_read: Defaulted<number>;
+  read_day: Defaulted<string | null>;
+  rows_read_day: Defaulted<number>;
+  /** JSON array, for example `["r2","s3"]`. */
+  destinations: Defaulted<string>;
+  error: Defaulted<string | null>;
+  s3_error: Defaulted<string | null>;
+  deleted_at: Defaulted<number | null>;
+}
+
+export type KeyDerivationPurpose = "setup" | "unwrap";
+export type KeyDerivationStatus = "pending" | "ready" | "failed";
+
+/** A passphrase key derivation in steps (0016_backups.sql). */
+export interface KeyDerivationsTable {
+  id: Generated<number>;
+  purpose: Immutable<KeyDerivationPurpose>;
+  status: Defaulted<KeyDerivationStatus>;
+  kdf_salt: Immutable<string>;
+  kdf_iterations: Immutable<number>;
+  done_iterations: Defaulted<number>;
+  verifier_salt: Immutable<string>;
+  verifier_iterations: Immutable<number>;
+  public_key: Defaulted<string | null>;
+  verifier: Defaulted<string | null>;
+  sealed_secret: Defaulted<string | null>;
+  sealed_state: Defaulted<string | null>;
+  sealed_result: Defaulted<string | null>;
+  key_version: Defaulted<number | null>;
+  error: Defaulted<string | null>;
+  created_at: Immutable<number>;
+  finished_at: Defaulted<number | null>;
+}
+
 // Database -------------------------------------------------------------------------------
 
 export interface Database {
@@ -719,6 +787,9 @@ export interface Database {
   auth_account: AuthAccountTable;
   auth_verification: AuthVerificationTable;
   auth_passkey: AuthPasskeyTable;
+  backup_settings: BackupSettingsTable;
+  backup_runs: BackupRunsTable;
+  key_derivations: KeyDerivationsTable;
 }
 
 export type TableName = keyof Database;
@@ -770,6 +841,10 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   auth_account: "global",
   auth_verification: "global",
   auth_passkey: "global",
+  // Backups cover the whole deployment (U4).
+  backup_settings: "global",
+  backup_runs: "global",
+  key_derivations: "global",
 };
 
 export const TENANT_TABLES: ReadonlySet<string> = new Set(

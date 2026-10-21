@@ -38,8 +38,15 @@ export interface CredentialKey {
 
 /** What a ciphertext belongs to. Decryption fails for any other owner. */
 export interface CredentialOwner {
+  /** The workspace, or 0 for a deployment-wide value such as the backup destination. */
   workspaceId: number;
-  purpose: "credentials" | "webhook_secret";
+  purpose:
+    | "credentials"
+    | "webhook_secret"
+    | "backup_destination"
+    | "derivation_secret"
+    | "derivation_state"
+    | "derivation_result";
   /**
    * The provider connection. `encrypt` binds the value to it (the `v2.` format) when it
    * is set. `decrypt` needs it for a `v2.` value.

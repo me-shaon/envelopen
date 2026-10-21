@@ -15,6 +15,8 @@ interface __BaseEnv_Env {
 	UNSUBSCRIBE_LEDGER: DurableObjectNamespace<import("./src/index").UnsubscribeLedger>;
 	IMPORT_WORKFLOW: Workflow<Parameters<import("./src/index").ImportWorkflow['run']>[0]['payload']>;
 	CAMPAIGN_WORKFLOW: Workflow<Parameters<import("./src/index").CampaignWorkflow['run']>[0]['payload']>;
+	BACKUP_WORKFLOW: Workflow<Parameters<import("./src/index").BackupWorkflow['run']>[0]['payload']>;
+	KEY_DERIVATION_WORKFLOW: Workflow<Parameters<import("./src/index").KeyDerivationWorkflow['run']>[0]['payload']>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {

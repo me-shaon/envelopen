@@ -19,10 +19,19 @@ export interface Principal {
   readonly apiKeyId: number | null;
   readonly scopes: ReadonlySet<Scope>;
   readonly surface: PrincipalSurface;
+  /**
+   * For a session: when the sign-in that created the session completed, in Unix
+   * milliseconds. Sensitive actions need a recent sign-in (requireRecentSignIn).
+   */
+  readonly signedInAt?: number | null;
 }
 
 /** The owner's session. In v1 the owner has every scope. */
-export function sessionPrincipal(input: { workspaceId: number; userId: string }): Principal {
+export function sessionPrincipal(input: {
+  workspaceId: number;
+  userId: string;
+  signedInAt?: number | null;
+}): Principal {
   return {
     workspaceId: input.workspaceId,
     actorType: "user",
@@ -30,7 +39,23 @@ export function sessionPrincipal(input: { workspaceId: number; userId: string })
     apiKeyId: null,
     scopes: new Set<Scope>(ALL_SCOPES),
     surface: "ui",
+    signedInAt: input.signedInAt ?? null,
   };
+}
+
+/**
+ * A sensitive action needs a sign-in that completed this recently. It is the same rule
+ * as for adding a passkey (apps/worker/src/auth/passkeys.ts).
+ */
+export const RECENT_SIGN_IN_MS = 10 * 60 * 1000;
+/** The error detail code that tells the admin app to ask the owner to sign in again. */
+export const SESSION_NOT_FRESH = "SESSION_NOT_FRESH";
+
+/** True for a session whose sign-in completed within RECENT_SIGN_IN_MS of `now`. */
+export function hasRecentSignIn(principal: Principal, now: number): boolean {
+  if (principal.actorType !== "user") return false;
+  const at = principal.signedInAt;
+  return typeof at === "number" && now - at < RECENT_SIGN_IN_MS && at <= now + 60_000;
 }
 
 export function apiKeyPrincipal(input: {

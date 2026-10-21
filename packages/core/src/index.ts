@@ -10,6 +10,7 @@ export {
   resolveApiKey,
 } from "./api-keys";
 export { type AuditEntry, type AuditTarget, auditInsert, writeAudit } from "./audit";
+export * from "./backup";
 export * from "./campaigns";
 export {
   adapterContext,
@@ -89,21 +90,26 @@ export {
 export {
   type ActorType,
   apiKeyPrincipal,
+  hasRecentSignIn,
   hasScope,
   type Principal,
   type PrincipalSurface,
   principalKey,
+  RECENT_SIGN_IN_MS,
+  SESSION_NOT_FRESH,
   sessionPrincipal,
 } from "./principal";
 export * from "./registry";
 export * from "./scopes";
 export {
+  type BackupJob,
   type BatchPointer,
   type CampaignJob,
   type EmailHasher,
   type FileLinkRequest,
   type ImportJob,
   type ImportJobMode,
+  type KeyDerivationJob,
   type PlatformLimit,
   requireService,
   type SendQueue,

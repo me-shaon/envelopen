@@ -24,6 +24,13 @@ export function betterAuthSessionResolver(
     });
     for (const cookie of headers.getSetCookie()) c.header("Set-Cookie", cookie, { append: true });
     if (!response) return null;
-    return resolveSessionPrincipal(c.var.db, response.user.id, c.req.header(WORKSPACE_HEADER));
+    // The session row is created at sign-in, so its creation time is the sign-in time.
+    const signedInAt = new Date(response.session.createdAt).getTime();
+    return resolveSessionPrincipal(
+      c.var.db,
+      response.user.id,
+      c.req.header(WORKSPACE_HEADER),
+      Number.isFinite(signedInAt) ? signedInAt : null,
+    );
   };
 }

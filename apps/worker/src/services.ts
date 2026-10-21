@@ -1,4 +1,5 @@
 import {
+  type BackupJob,
   type BatchPointer,
   type CampaignJob,
   type CredentialCipher,
@@ -8,6 +9,7 @@ import {
   type EmailHasher,
   type FileLinkSigner,
   type ImportJob,
+  type KeyDerivationJob,
   type SendQueue,
   type Services,
   type SettingsCache,
@@ -178,6 +180,25 @@ export function importInstanceId(job: ImportJob): string {
   return `import-${job.workspaceId}-${job.importId}-${job.mode}-${job.generation}`;
 }
 
+/** The Workflow instance id of a backup run. */
+export function backupInstanceId(job: BackupJob): string {
+  return `backup-${job.backupId}`;
+}
+
+/** Starts the backup Workflow of one run (U4). */
+export function backupStarter(env: Pick<Env, "BACKUP_WORKFLOW">) {
+  return async (job: BackupJob): Promise<void> => {
+    await env.BACKUP_WORKFLOW.create({ id: backupInstanceId(job), params: job });
+  };
+}
+
+/** Starts the key derivation Workflow of one passphrase (U4). */
+export function keyDerivationStarter(env: Pick<Env, "KEY_DERIVATION_WORKFLOW">) {
+  return async (job: KeyDerivationJob): Promise<void> => {
+    await env.KEY_DERIVATION_WORKFLOW.create({ id: `key-${job.derivationId}`, params: job });
+  };
+}
+
 /** KV keys of the settings cache start with this prefix. */
 const SETTINGS_PREFIX = "settings:";
 /** How long an edge location keeps a read in its local cache. */
@@ -205,6 +226,8 @@ export function createServices(
     | "BUCKET"
     | "IMPORT_WORKFLOW"
     | "CAMPAIGN_WORKFLOW"
+    | "BACKUP_WORKFLOW"
+    | "KEY_DERIVATION_WORKFLOW"
     | "SEND_QUEUE"
     | "USAGE_METER"
     | "DB"
@@ -223,6 +246,8 @@ export function createServices(
     },
     outboundFetch: outboundFetch(env),
     startCampaignJob: campaignStarter(env),
+    startBackupJob: backupStarter(env),
+    startKeyDerivation: keyDerivationStarter(env),
     sendQueue: sendQueue(env),
     usage: usageReader(env),
   };

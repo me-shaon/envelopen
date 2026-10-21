@@ -17,6 +17,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 - License: GNU Affero General Public License v3.0.
 - A source code link with the version in the admin footer and on each subscriber page. The owner can change it in Settings.
 - Scheduled sends have a timezone. The owner picks an IANA timezone, and the app shows the send time in that zone.
+- Encrypted backups of all data to R2, daily and on demand, with an optional copy to an S3-compatible store and a retention period. Only the owner's passphrase opens a backup.
 
 ### Changed
 

@@ -1,15 +1,25 @@
 import {
+  applyRetention,
+  BACKUP_HOUR,
+  BACKUP_MINUTE,
+  type BackupJobStarter,
+  type CredentialCipher,
   cleanupExpiredFiles,
+  expireKeyDerivations,
   expireLeases,
   finalizeIdle,
+  isOperationError,
+  keyMaterialOf,
   purgeExpiredEvents,
   type RetentionResult,
+  readBackupSettings,
   redispatchWaiting,
   repairAllCounts,
   rescueSnapshots,
   resealLegacyConnections,
   resumeAfterPlatformLimit,
   type SweepDeps,
+  startBackup,
   startDueCampaigns,
   unappliedProviderEvents,
 } from "@envelopen/core";
@@ -23,7 +33,7 @@ import {
   unsubscribeLedger,
 } from "./do/unsubscribes";
 import { usageMeter, usageSink } from "./do/usage";
-import { campaignStarter, createServices, sendQueue } from "./services";
+import { backupStarter, campaignStarter, createServices, sendQueue } from "./services";
 
 // The per-minute cron (U9, KTD19, KTD24). In order:
 //
@@ -41,9 +51,12 @@ import { campaignStarter, createServices, sendQueue } from "./services";
 //    from before the connection-bound format are encrypted again (a few per run).
 // 5. The event pipeline (U10): provider events that no flush applied go to their
 //    EventBuffer again, and once an hour raw events past the workspace's retention
-//    period are deleted (R51). Rollups stay.
+//    period are deleted (R51). Rollups stay. In the same run, backup key derivations
+//    that stopped are failed and their sealed secrets are cleared (U4).
 // 6. Once a day, the stored member counts of lists and tags are recounted
 //    (lists/counts.ts). Triggers keep them, so the recount normally writes nothing.
+// 7. Once a day, backups past their retention period are removed, and the encrypted
+//    backup starts (U4). It is skipped when no passphrase is set or backups are off.
 //
 // Each job runs on its own, so one failure does not stop the others. Every job bounds
 // its work, so one run stays inside the Free limits.
@@ -201,6 +214,10 @@ export async function runEventCron(
     } catch (error) {
       console.error("Cron job event retention failed", error);
     }
+    // Backup key derivations that stopped: fail them and clear their sealed secrets.
+    await expireKeyDerivations(db, now).catch((error) =>
+      console.error("Cron job key derivation expiry failed", error),
+    );
   }
   return report;
 }
@@ -212,6 +229,64 @@ export const RECOUNT_MINUTE = 41;
 function isRecountTime(now: number): boolean {
   const date = new Date(now);
   return date.getUTCHours() === RECOUNT_HOUR && date.getUTCMinutes() === RECOUNT_MINUTE;
+}
+
+/** The UTC hour and minute of the daily backup (packages/core/src/backup/model.ts). */
+export { BACKUP_HOUR, BACKUP_MINUTE };
+
+function isBackupTime(now: number): boolean {
+  const date = new Date(now);
+  return date.getUTCHours() === BACKUP_HOUR && date.getUTCMinutes() === BACKUP_MINUTE;
+}
+
+export interface BackupCronDeps {
+  db: DbConnection;
+  bucket: R2Bucket;
+  credentials?: CredentialCipher | undefined;
+  outboundFetch: typeof fetch;
+  startBackupJob: BackupJobStarter;
+}
+
+export interface BackupCronReport {
+  /** Backup ids that retention removed. */
+  removed: string[];
+  /** The backup id that started, or null. */
+  started: string | null;
+  /** Why no backup started, or null. */
+  skipped: "no passphrase" | "disabled" | "running" | null;
+}
+
+/**
+ * The daily backup job. Retention runs first, so a failed start still removes old
+ * backups. Retention never removes the newest backup that R2 holds.
+ */
+export async function runBackupCron(deps: BackupCronDeps, now: number): Promise<BackupCronReport> {
+  const report: BackupCronReport = { removed: [], started: null, skipped: null };
+  try {
+    report.removed = await applyRetention(deps, now);
+  } catch (error) {
+    console.error("Cron job backup retention failed", error);
+  }
+  const settings = await readBackupSettings(deps.db);
+  if (!keyMaterialOf(settings)) {
+    report.skipped = "no passphrase";
+    return report;
+  }
+  if (settings?.enabled === 0) {
+    report.skipped = "disabled";
+    return report;
+  }
+  try {
+    const run = await startBackup(deps.db, deps.startBackupJob, "schedule", now);
+    report.started = run.backup_id;
+  } catch (error) {
+    if (isOperationError(error) && error.code === "conflict") {
+      report.skipped = "running";
+      return report;
+    }
+    throw error;
+  }
+  return report;
 }
 
 /** The `scheduled()` handler. */
@@ -240,6 +315,19 @@ export async function runCron(
       await repairAllCounts(db).catch((error) =>
         console.error("Cron job recount of member counts failed", error),
       );
+    }
+    if (!report.limited && isBackupTime(now)) {
+      const services = createServices(env);
+      await runBackupCron(
+        {
+          db,
+          bucket: env.BUCKET,
+          credentials: services.credentials,
+          outboundFetch: services.outboundFetch ?? fetch,
+          startBackupJob: backupStarter(env),
+        },
+        now,
+      ).catch((error) => console.error("Cron job daily backup failed", error));
     }
     return report;
   } finally {

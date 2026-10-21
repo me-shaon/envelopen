@@ -18,6 +18,7 @@ import { ENVELOPEN_VERSION } from "./version";
 export { AuthRateLimiter } from "./auth/rate-limit-do";
 export { EventBuffer } from "./do/event-buffer";
 export { RateLimiter } from "./do/rate-limiter";
+export { UnsubscribeLedger } from "./do/unsubscribe-ledger";
 export { UsageMeter } from "./do/usage-meter";
 export { CampaignWorkflow } from "./workflows/campaign-workflow";
 export { ImportWorkflow } from "./workflows/import-workflow";

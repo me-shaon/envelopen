@@ -16,6 +16,7 @@ import {
   T0,
   testDeps,
   testKeys,
+  testLedger,
 } from "./campaign-helpers";
 
 // Shared setup of the tracking, unsubscribe, and EventBuffer tests: a campaign that the
@@ -58,6 +59,9 @@ export async function sentCampaign(options: SeedOptions = {}): Promise<SentCampa
 export interface RecordingDeps extends TrackingDeps {
   events: { workspaceId: number; event: BufferedEvent }[];
   clock: { now: number };
+  ledger: ReturnType<typeof testLedger>;
+  /** Ledger writes that the IP limit refuses from now on. */
+  ledgerRefused: { value: boolean };
 }
 
 /** Tracking dependencies with a sink that records the events instead of buffering them. */
@@ -65,6 +69,7 @@ export async function recordingDeps(db: DbConnection, now = LATER): Promise<Reco
   const { signer } = await testKeys();
   const events: RecordingDeps["events"] = [];
   const clock = { now };
+  const ledgerRefused = { value: false };
   return {
     db,
     signer: async () => signer,
@@ -74,8 +79,11 @@ export async function recordingDeps(db: DbConnection, now = LATER): Promise<Reco
     formToken: (token) => formToken(SIGNING_KEY, token),
     sourceUrl: () => readSourceUrl(db, settingsCache(env)),
     now: () => clock.now,
+    ledger: testLedger(),
+    allowLedgerWrite: async () => !ledgerRefused.value,
     events,
     clock,
+    ledgerRefused,
   };
 }
 

@@ -32,6 +32,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ### Fixed
 
+- One-click unsubscribe and preference saves succeed at the D1 daily limit. Sends skip the contact until the unsubscribe is written to D1 after the reset.
 - A contact page of 100, and adding 100 contacts to a list, stay within the D1 limit of 100 bound parameters.
 
 ### Security

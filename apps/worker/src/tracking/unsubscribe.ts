@@ -4,10 +4,15 @@ import {
   type Subscription,
   savePreferences,
   type TrackingEvent,
+  type UnsubscribeSource,
   unsubscribeAll,
 } from "@envelopen/core";
+import { isD1DailyLimitError } from "@envelopen/db";
+import type { VerifiedToken } from "@envelopen/email-render";
 import { type Context, Hono } from "hono";
+import { clientIp } from "../auth/rate-limit-do";
 import { readBodyLimited } from "../body";
+import { type IntentInput, settleUnsubscribes } from "../do/unsubscribes";
 import { isSameOriginPost, sameToken } from "./csrf";
 import { type TrackingDeps, type TrackingDepsFactory, trackingDeps } from "./deps";
 import { type PageNotice, publicPage } from "./preferences";
@@ -28,6 +33,18 @@ import { type PageNotice, publicPage } from "./preferences";
 // The change is written to D1 before the response (R25: immediately). The raw
 // `unsubscribe` event and its rollup go through the EventBuffer afterwards.
 //
+// At the D1 daily limit (KTD1, AE1), D1 rejects the read or the write. The routes then
+// keep the unsubscribe in the UnsubscribeLedger and answer as if D1 had it:
+// - The one-click POST and "unsubscribe from all" keep an intent for every list. When
+//   the read failed, the intent has only the recipient of the verified token.
+// - A save keeps an intent for each list that the subscriber cleared. The form lists
+//   the lists that it showed (`shown`), so this needs no D1 read.
+// - The page GET shows a short page that offers only "Unsubscribe from all".
+// - A resubscribe needs D1, so it shows the error page.
+// Ledger writes are limited per IP. A full ledger or another D1 error shows the error
+// page with status 503. While D1 works, the page first writes the waiting intents of
+// its contact to D1 (`settleUnsubscribes`), so it shows the real state.
+//
 // An invalid, forged, or unknown token gets one generic page with status 404 and
 // changes nothing. The test link `/u/test` of test sends lands there too.
 
@@ -44,13 +61,85 @@ function preferencesPath(token: string): string {
   return `/u/${encodeURIComponent(token)}/preferences`;
 }
 
-async function verifiedSubscription(
-  deps: TrackingDeps,
-  token: string,
-): Promise<Subscription | null> {
-  const verified = await (await deps.signer()).verify(token);
-  if (!verified) return null;
-  return loadSubscription(deps.db, verified);
+type Loaded =
+  | { kind: "ok"; ref: VerifiedToken; sub: Subscription }
+  | { kind: "limited"; ref: VerifiedToken }
+  | { kind: "invalid" }
+  | { kind: "error" };
+
+async function verifiedToken(deps: TrackingDeps, token: string): Promise<VerifiedToken | null> {
+  return (await deps.signer()).verify(token);
+}
+
+/** The contact of a verified token. D1 reads it, so it can meet the daily limit. */
+async function loadVerified(deps: TrackingDeps, ref: VerifiedToken | null): Promise<Loaded> {
+  if (!ref) return { kind: "invalid" };
+  try {
+    const sub = await loadSubscription(deps.db, ref);
+    return sub ? { kind: "ok", ref, sub } : { kind: "invalid" };
+  } catch (error) {
+    if (isD1DailyLimitError(error)) return { kind: "limited", ref };
+    console.error("Subscription lookup failed", error);
+    return { kind: "error" };
+  }
+}
+
+/**
+ * Writes the waiting ledger intents of the contact to D1, then reads the contact again.
+ * A ledger error leaves the page as D1 has it.
+ */
+async function settled(deps: TrackingDeps, loaded: Loaded): Promise<Loaded> {
+  if (loaded.kind !== "ok") return loaded;
+  const { sub, ref } = loaded;
+  try {
+    const changed = await settleUnsubscribes(
+      deps.db,
+      deps.ledger,
+      deps.sink,
+      { workspaceId: sub.workspaceId, contactId: sub.contactId, recipientId: sub.recipientId },
+      deps.now(),
+    );
+    return changed ? loadVerified(deps, ref) : loaded;
+  } catch (error) {
+    if (isD1DailyLimitError(error)) return { kind: "limited", ref };
+    console.error("Unsubscribe ledger check failed", error);
+    return loaded;
+  }
+}
+
+/** One intent per list in `listIds`, or one for every list when it is null. */
+function intents(
+  ref: VerifiedToken,
+  sub: Subscription | null,
+  listIds: readonly number[] | null,
+  source: UnsubscribeSource,
+  at: number,
+): IntentInput[] {
+  const base = {
+    campaignId: ref.campaignId,
+    recipientId: ref.recipientId,
+    workspaceId: sub?.workspaceId ?? null,
+    contactId: sub?.contactId ?? null,
+    source,
+    at,
+  };
+  if (listIds === null) return [{ ...base, listId: null }];
+  return listIds.map((listId) => ({ ...base, listId }));
+}
+
+/** Keeps the intents in the UnsubscribeLedger. False when they were not stored. */
+async function keep(c: AppContext, deps: TrackingDeps, list: IntentInput[]): Promise<boolean> {
+  if (list.length === 0) return true;
+  try {
+    if (!(await deps.allowLedgerWrite(clientIp(c.req.raw)))) {
+      console.error("Unsubscribe ledger write refused: too many requests from one IP");
+      return false;
+    }
+    return (await deps.ledger.record(list)).stored;
+  } catch (error) {
+    console.error("Unsubscribe ledger write failed", error);
+    return false;
+  }
 }
 
 function unsubscribeEvent(sub: Subscription, now: number): TrackingEvent {
@@ -108,6 +197,16 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+/** The positive list ids in a form field. */
+function listIds(raw: unknown): Set<number> {
+  const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+  return new Set(
+    values
+      .map((value) => Number(text(value)))
+      .filter((value) => Number.isSafeInteger(value) && value > 0),
+  );
+}
+
 export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) {
   const makeDeps = options.deps ?? trackingDeps;
   const app = new Hono<{ Bindings: Env }>();
@@ -116,11 +215,28 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
     const deps = makeDeps(c.env);
     const token = c.req.param("token") ?? "";
     try {
-      const sub = await verifiedSubscription(deps, token);
-      if (!sub) return publicPage(deps, { kind: "invalid" }, 404);
+      const loaded = await settled(
+        deps,
+        await loadVerified(deps, await verifiedToken(deps, token)),
+      );
+      if (loaded.kind === "invalid") return publicPage(deps, { kind: "invalid" }, 404);
+      if (loaded.kind === "error") return publicPage(deps, { kind: "error" }, 503);
       const action = preferencesPath(token);
       const csrf = await deps.formToken(token);
       const state = c.req.query("state");
+      if (loaded.kind === "limited") {
+        const waiting = await deps.ledger
+          .find({ recipientId: loaded.ref.recipientId })
+          .catch(() => []);
+        return publicPage(deps, {
+          kind: "limited",
+          csrf,
+          action,
+          unsubscribed: waiting.some((intent) => intent.listId === null),
+          notice: state === "saved" ? "saved" : null,
+        });
+      }
+      const { sub } = loaded;
       if (sub.unsubscribedAt !== null) {
         return publicPage(deps, {
           kind: "unsubscribed",
@@ -158,13 +274,28 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
       if (!form || text(form["List-Unsubscribe"]) !== "One-Click") {
         return publicPage(deps, { kind: "invalid" }, 400);
       }
-      const sub = await verifiedSubscription(deps, c.req.param("token"));
-      if (!sub) return publicPage(deps, { kind: "invalid" }, 404);
+      // The signature first: an invalid token never reaches D1 or the ledger.
+      const loaded = await loadVerified(deps, await verifiedToken(deps, c.req.param("token")));
+      if (loaded.kind === "invalid") return publicPage(deps, { kind: "invalid" }, 404);
+      if (loaded.kind === "error") return publicPage(deps, { kind: "error" }, 503);
       const now = deps.now();
+      if (loaded.kind === "limited") {
+        const kept = await keep(c, deps, intents(loaded.ref, null, null, "one_click", now));
+        return kept
+          ? publicPage(deps, { kind: "one_click_done" })
+          : publicPage(deps, { kind: "error" }, 503);
+      }
+      const { sub, ref } = loaded;
       let changed: boolean;
       try {
         changed = await unsubscribeAll(deps.db, sub, "one_click", now);
       } catch (error) {
+        if (
+          isD1DailyLimitError(error) &&
+          (await keep(c, deps, intents(ref, sub, null, "one_click", now)))
+        ) {
+          return publicPage(deps, { kind: "one_click_done" });
+        }
         console.error("One-click unsubscribe failed", error);
         return publicPage(deps, { kind: "error" }, 503);
       }
@@ -183,14 +314,45 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
       if (!isSameOriginPost(c.req.raw)) return publicPage(deps, { kind: "invalid" }, 403);
       const form = await readForm(c);
       if (!form) return publicPage(deps, { kind: "invalid" }, 400);
-      const sub = await verifiedSubscription(deps, token);
-      if (!sub) return publicPage(deps, { kind: "invalid" }, 404);
+      const ref = await verifiedToken(deps, token);
+      if (!ref) return publicPage(deps, { kind: "invalid" }, 404);
       if (!sameToken(text(form.csrf), await deps.formToken(token))) {
         return publicPage(deps, { kind: "invalid" }, 403);
       }
+      const loaded = await settled(deps, await loadVerified(deps, ref));
+      if (loaded.kind === "invalid") return publicPage(deps, { kind: "invalid" }, 404);
+      if (loaded.kind === "error") return publicPage(deps, { kind: "error" }, 503);
       const action = text(form.action);
       const now = deps.now();
       const back = preferencesPath(token);
+      const checked = listIds(form.list);
+      const sub = loaded.kind === "ok" ? loaded.sub : null;
+
+      // At the daily limit: keep the unsubscribes in the ledger (KTD1).
+      const atLimit = async () => {
+        if (action === "unsubscribe_all") {
+          if (await keep(c, deps, intents(ref, sub, null, "preference_page", now))) {
+            return c.redirect(`${back}?state=unsubscribed`, 303);
+          }
+        } else if (action === "save") {
+          const leave = sub
+            ? sub.lists
+                .filter((list) => list.status === "subscribed" && !checked.has(list.id))
+                .map((list) => list.id)
+            : [...listIds(form.shown)].filter((id) => !checked.has(id));
+          if (await keep(c, deps, intents(ref, sub, leave, "preference_page", now))) {
+            return c.redirect(`${back}?state=saved`, 303);
+          }
+        }
+        return publicPage(deps, { kind: "error" }, 503);
+      };
+
+      if (!sub) {
+        if (action !== "unsubscribe_all" && action !== "save" && action !== "resubscribe") {
+          return publicPage(deps, { kind: "invalid" }, 400);
+        }
+        return atLimit();
+      }
       try {
         if (action === "unsubscribe_all") {
           if (await unsubscribeAll(deps.db, sub, "preference_page", now)) {
@@ -203,20 +365,14 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
           return c.redirect(`${back}?state=resubscribed`, 303);
         }
         if (action === "save") {
-          const raw = form.list;
-          const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
-          const ids = new Set(
-            values
-              .map((value) => Number(text(value)))
-              .filter((value) => Number.isSafeInteger(value) && value > 0),
-          );
-          const result = await savePreferences(deps.db, sub, ids, now);
+          const result = await savePreferences(deps.db, sub, checked, now);
           if (result.unsubscribed > 0) {
             background(c, deps.sink(sub.workspaceId, [unsubscribeEvent(sub, now)]));
           }
           return c.redirect(`${back}?state=saved`, 303);
         }
       } catch (error) {
+        if (isD1DailyLimitError(error)) return atLimit();
         console.error("Preference change failed", error);
         return publicPage(deps, { kind: "error" }, 503);
       }

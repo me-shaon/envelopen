@@ -12,6 +12,15 @@ import { D1_DAILY_WRITE_LIMIT } from "./usage";
 //   reads it before each claim and drops the message without a write. The campaign
 //   view reads it to show the pause. After 00:00 UTC the cron resumes the campaigns
 //   and clears the flag.
+// - The `unsubscribes` flag says that the UnsubscribeLedger holds unsubscribes that D1
+//   rejected (KTD1). It lives here because the send consumer reads `status` before each
+//   batch anyway, so the check costs no extra call while the ledger is empty. The
+//   ledger sets and clears it with a version, so an older report cannot undo a newer one.
+
+interface LedgerFlag {
+  pending: boolean;
+  version: number;
+}
 
 interface DayCount {
   day: string;
@@ -30,16 +39,29 @@ export class UsageMeter extends DurableObject<Env> {
   }
 
   async status(now = Date.now()): Promise<UsageStatus> {
-    const [count, limit] = await Promise.all([
+    const [count, limit, ledger] = await Promise.all([
       this.today(now),
       this.ctx.storage.get<PlatformLimit>("platform_limit"),
+      this.ctx.storage.get<LedgerFlag>("unsubscribes"),
     ]);
     return {
       day: count.day,
       rowsWritten: count.rows,
       dailyLimit: D1_DAILY_WRITE_LIMIT,
       platformLimit: limit ?? null,
+      unsubscribesPending: ledger?.pending ?? false,
     };
+  }
+
+  /**
+   * The UnsubscribeLedger reports whether it holds intents. A report with a version
+   * lower than the stored one is ignored. Returns the stored flag.
+   */
+  async setUnsubscribesPending(pending: boolean, version: number): Promise<boolean> {
+    const current = await this.ctx.storage.get<LedgerFlag>("unsubscribes");
+    if (current && current.version > version) return current.pending;
+    await this.ctx.storage.put("unsubscribes", { pending, version });
+    return pending;
   }
 
   /** Adds the rows that one invocation wrote. */

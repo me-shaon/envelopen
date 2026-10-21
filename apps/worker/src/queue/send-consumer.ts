@@ -40,6 +40,7 @@ import {
   sendBatch,
 } from "@envelopen/providers";
 import { type Grant, type RateRule, rateLimiterFor, rateRule } from "../do/rate-limiter";
+import { pendingUnsubscribedContacts, unsubscribeLedger } from "../do/unsubscribes";
 import { activeLimit, usageMeter, usageSink } from "../do/usage";
 import { createServices, tokenSigner } from "../services";
 
@@ -47,11 +48,14 @@ import { createServices, tokenSigner } from "../services";
 // per invocation (`max_batch_size` 1). For each pointer:
 //
 // 1. The platform_limit flag (UsageMeter): while D1 rejects writes, drop the message.
-//    The cron dispatches every waiting batch after 00:00 UTC.
+//    The cron dispatches every waiting batch after 00:00 UTC. The same call says whether
+//    the UnsubscribeLedger holds unsubscribes that D1 does not have yet (KTD1).
 // 2. Load the batch and the campaign. Drop the message, with no write, when the
 //    generation is stale, the batch is not enqueued, or the campaign does not send.
-// 3. On the first claim, the send-time check builds the frozen recipient set. A retry
-//    of an idempotent provider reuses the stored set.
+// 3. On the first claim, the send-time check builds the frozen recipient set. While the
+//    ledger holds unsubscribes, it skips those contacts as `unsubscribed`. A retry of an
+//    idempotent provider reuses the stored set: the provider may have it already, and a
+//    changed payload under the same key fails.
 // 4. Reserve rate tokens. A long wait retries the message later, with no write.
 // 5. Claim with a compare-and-set. A second delivery of the message loses here, so two
 //    messages for one batch make one provider call.
@@ -64,7 +68,8 @@ import { createServices, tokenSigner } from "../services";
 //    - some results are unknown: the batch stays claimed. When the lease expires, the
 //      sweep retries an idempotent provider and marks any other batch uncertain (R38).
 //
-// Budget per invocation on Free (KTD20): at most 12 D1 queries, 3 Durable Object calls,
+// Budget per invocation on Free (KTD20): at most 12 D1 queries (13 while the ledger
+// holds unsubscribes), 3 Durable Object calls (4 while it does),
 // and one provider request per recipient for SES (25) or one per batch otherwise.
 
 /** The longest a consumer waits for rate tokens before it retries the message instead. */
@@ -85,12 +90,24 @@ export interface ConsumerDeps {
   services: Pick<Services, "credentials" | "outboundFetch">;
   signer: TokenSigner;
   usage: {
-    platformLimit(): Promise<PlatformLimit | null>;
+    /** The platform_limit flag in force, and the ledger flag. One UsageMeter call. */
+    gate(): Promise<UsageGate>;
     setPlatformLimit(since: number, until: number): Promise<unknown>;
   };
+  /** The contacts with an unsubscribe in the UnsubscribeLedger (KTD1). */
+  pendingUnsubscribes(
+    db: DbConnection,
+    workspaceId: number,
+    contactIds: readonly number[],
+  ): Promise<Set<number>>;
   rateLimiter(connectionId: number): RateLimiterClient;
   sleep(ms: number): Promise<void>;
   now(): number;
+}
+
+export interface UsageGate {
+  limit: PlatformLimit | null;
+  unsubscribesPending: boolean;
 }
 
 export type ConsumerOutcome =
@@ -156,8 +173,9 @@ async function freeze(
   deps: ConsumerDeps,
   pointer: BatchPointer,
   campaign: NonNullable<Awaited<ReturnType<typeof loadBatchContext>>>["campaign"],
+  unsubscribesPending: boolean,
 ): Promise<FrozenSet> {
-  const checked = await checkBatchRecipients(
+  let checked = await checkBatchRecipients(
     deps.db,
     pointer.workspaceId,
     pointer.campaignId,
@@ -165,6 +183,18 @@ async function freeze(
     campaignAudience(campaign),
     campaign.type,
   );
+  if (unsubscribesPending) {
+    const waiting = await deps.pendingUnsubscribes(
+      deps.db,
+      pointer.workspaceId,
+      checked.flatMap((row) => (row.skipReason === null && row.contactId ? [row.contactId] : [])),
+    );
+    checked = checked.map((row) =>
+      row.contactId !== null && waiting.has(row.contactId)
+        ? { ...row, skipReason: "unsubscribed" }
+        : row,
+    );
+  }
   const sendable = checked.filter((row) => row.skipReason === null && row.email && row.contactId);
   const keys = customKeys(campaign.html ?? "", campaign.subject ?? "", campaign.text ?? "");
   const custom = await customFieldValues(
@@ -203,11 +233,11 @@ export async function processPointer(deps: ConsumerDeps, body: unknown): Promise
   if (!isPointer(body)) return ack("invalid");
   const pointer = body;
   const start = deps.now();
-  const limit = await deps.usage.platformLimit();
-  if (limit && limit.until > start) return ack("platform_limit");
+  const gate = await deps.usage.gate();
+  if (gate.limit && gate.limit.until > start) return ack("platform_limit");
 
   try {
-    return await handlePointer(deps, pointer);
+    return await handlePointer(deps, pointer, gate.unsubscribesPending);
   } catch (error) {
     if (isD1DailyLimitError(error)) {
       const now = deps.now();
@@ -218,7 +248,11 @@ export async function processPointer(deps: ConsumerDeps, body: unknown): Promise
   }
 }
 
-async function handlePointer(deps: ConsumerDeps, pointer: BatchPointer): Promise<ConsumerOutcome> {
+async function handlePointer(
+  deps: ConsumerDeps,
+  pointer: BatchPointer,
+  unsubscribesPending: boolean,
+): Promise<ConsumerOutcome> {
   const context = await loadBatchContext(deps.db, pointer);
   if (!context) return ack("missing");
   const { batch, campaign, connection } = context;
@@ -239,7 +273,7 @@ async function handlePointer(deps: ConsumerDeps, pointer: BatchPointer): Promise
 
   // A retry of an idempotent provider sends the stored set again, with no second check.
   const stored = parseFrozenSet(batch.recipient_set);
-  const frozen = stored ?? (await freeze(deps, pointer, campaign));
+  const frozen = stored ?? (await freeze(deps, pointer, campaign, unsubscribesPending));
   const refs = refsOf(connection);
   const units =
     adapter.capabilities.rateUnit === "recipient"
@@ -456,9 +490,17 @@ export async function consumerDeps(env: Env, db: DbConnection): Promise<Consumer
     services: { credentials: services.credentials, outboundFetch: services.outboundFetch ?? fetch },
     signer: await tokenSigner(env),
     usage: {
-      platformLimit: async () => activeLimit(await meter.status(), Date.now()),
+      gate: async () => {
+        const status = await meter.status();
+        return {
+          limit: activeLimit(status, Date.now()),
+          unsubscribesPending: status.unsubscribesPending === true,
+        };
+      },
       setPlatformLimit: (since, until) => meter.setPlatformLimit(since, until),
     },
+    pendingUnsubscribes: (db, workspaceId, contactIds) =>
+      pendingUnsubscribedContacts(unsubscribeLedger(env), db, workspaceId, contactIds),
     rateLimiter: (connectionId) => {
       const stub = rateLimiterFor(env, connectionId);
       return {

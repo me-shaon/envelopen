@@ -28,11 +28,15 @@ export {
   unappliedProviderEvents,
 } from "./retention";
 export {
+  applyUnsubscribeIntent,
   loadSubscription,
+  type RecipientTarget,
+  recipientTargets,
   resubscribe,
   type Subscription,
   type SubscriptionList,
   savePreferences,
+  type UnsubscribeIntent,
   type UnsubscribeSource,
   unsubscribeAll,
 } from "./subscription";

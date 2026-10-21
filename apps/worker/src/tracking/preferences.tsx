@@ -13,6 +13,9 @@ import { ENVELOPEN_VERSION } from "../version";
 // (just now, or already) with a resubscribe form, an invalid or forged link (one
 // generic message), and an error when the change could not be saved.
 //
+// At the D1 daily limit, the page cannot read the contact. It then shows a short page
+// that offers only "Unsubscribe from all", which the UnsubscribeLedger keeps (KTD1).
+//
 // The footer links to the source code of this deployment with the running version
 // (AGPL section 13, KTD16). The owner sets the link in Settings. Hono JSX escapes it.
 //
@@ -35,6 +38,14 @@ export type PageView =
       notice: PageNotice;
     }
   | { kind: "confirm_all"; sub: Subscription; csrf: string; action: string; backHref: string }
+  | {
+      kind: "limited";
+      csrf: string;
+      action: string;
+      /** True when the ledger holds an unsubscribe from all for this link. */
+      unsubscribed: boolean;
+      notice: PageNotice;
+    }
   | {
       kind: "unsubscribed";
       sub: Subscription;
@@ -182,6 +193,9 @@ function Preferences({ view }: { view: Extract<PageView, { kind: "preferences" }
         <form method="post" action={action}>
           <Csrf value={csrf} />
           <input type="hidden" name="action" value="save" />
+          {sub.lists.map((list) => (
+            <input type="hidden" name="shown" value={String(list.id)} />
+          ))}
           <fieldset>
             <legend>Lists</legend>
             <ul class="lists">
@@ -259,6 +273,39 @@ function Unsubscribed({ view }: { view: Extract<PageView, { kind: "unsubscribed"
   );
 }
 
+function Limited({ view }: { view: Extract<PageView, { kind: "limited" }> }) {
+  const { csrf, action, unsubscribed, notice } = view;
+  if (unsubscribed) {
+    return (
+      <>
+        <h1>You are unsubscribed</h1>
+        <p class="muted">You will get no more emails from this sender.</p>
+      </>
+    );
+  }
+  return (
+    <>
+      <h1>Email preferences</h1>
+      <p class="muted">
+        Your list choices are not available now. You can still unsubscribe from all emails from this
+        sender.
+      </p>
+      {notice === "saved" ? (
+        <p class="notice" role="status">
+          Your choices are saved.
+        </p>
+      ) : null}
+      <form method="post" action={action}>
+        <Csrf value={csrf} />
+        <input type="hidden" name="action" value="unsubscribe_all" />
+        <div class="actions">
+          <button type="submit">Unsubscribe from all</button>
+        </div>
+      </form>
+    </>
+  );
+}
+
 function Message({ title, text }: { title: string; text: string }) {
   return (
     <>
@@ -274,6 +321,8 @@ function titleOf(view: PageView): string {
       return "Email preferences";
     case "confirm_all":
       return "Unsubscribe from all emails";
+    case "limited":
+      return view.unsubscribed ? "Unsubscribed" : "Email preferences";
     case "unsubscribed":
     case "one_click_done":
       return "Unsubscribed";
@@ -292,6 +341,8 @@ function Body({ view }: { view: PageView }) {
       return <ConfirmAll view={view} />;
     case "unsubscribed":
       return <Unsubscribed view={view} />;
+    case "limited":
+      return <Limited view={view} />;
     case "one_click_done":
       return (
         <Message

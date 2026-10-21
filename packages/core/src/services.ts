@@ -59,6 +59,11 @@ export interface UsageStatus {
   /** The Workers Free daily limit of D1 rows written. */
   dailyLimit: number;
   platformLimit: PlatformLimit | null;
+  /**
+   * True while the UnsubscribeLedger holds unsubscribes that D1 rejected at its daily
+   * limit (KTD1). Send paths then ask the ledger which contacts to skip.
+   */
+  unsubscribesPending?: boolean;
 }
 
 /** Reads the UsageMeter Durable Object. */

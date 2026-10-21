@@ -18,6 +18,7 @@ import { createProviderMock, type ProviderMock } from "@envelopen/core/testing/p
 import { createDb, type DbConnection } from "@envelopen/db";
 import { createTokenSigner, type TokenSigner } from "@envelopen/email-render";
 import type { Grant } from "../src/do/rate-limiter";
+import { type LedgerClient, ledgerMeterName, unsubscribeLedger } from "../src/do/unsubscribes";
 import type { ConsumerDeps, RateLimiterClient } from "../src/queue/send-consumer";
 
 // Shared setup of the campaign engine tests: a sendable workspace, a sending campaign
@@ -142,6 +143,8 @@ export interface TestDeps extends ConsumerDeps {
   clock: { now: number };
   sleeps: number[];
   limit: { value: PlatformLimit | null };
+  /** The UsageMeter flag and the contacts that the fake ledger reports. */
+  ledger: { pending: boolean; contacts: Set<number> };
   backoffs: number[];
   /** Calls to the Durable Objects, for the subrequest budget. */
   objectCalls: { count: number };
@@ -159,6 +162,7 @@ export async function testDeps(
   const backoffs: number[] = [];
   const limit: { value: PlatformLimit | null } = { value: null };
   const objectCalls = { count: 0 };
+  const ledger = { pending: false, contacts: new Set<number>() };
   const limiter: RateLimiterClient = {
     async acquire(): Promise<Grant> {
       objectCalls.count++;
@@ -174,14 +178,21 @@ export async function testDeps(
     services: { credentials, outboundFetch: mock.fetch },
     signer,
     usage: {
-      async platformLimit() {
+      async gate() {
         objectCalls.count++;
-        return limit.value && limit.value.until > clock.now ? limit.value : null;
+        return {
+          limit: limit.value && limit.value.until > clock.now ? limit.value : null,
+          unsubscribesPending: ledger.pending,
+        };
       },
       async setPlatformLimit(since, until) {
         objectCalls.count++;
         limit.value = { since, until };
       },
+    },
+    pendingUnsubscribes: async (_db, _workspaceId, contactIds) => {
+      objectCalls.count++;
+      return new Set(contactIds.filter((id) => ledger.contacts.has(id)));
     },
     rateLimiter: () => limiter,
     sleep: async (ms) => {
@@ -192,6 +203,7 @@ export async function testDeps(
     clock,
     sleeps,
     limit,
+    ledger,
     backoffs,
     objectCalls,
     ...overrides,
@@ -263,17 +275,24 @@ export function countingD1(inner: D1Database): { d1: D1Database; statements: { c
   return { d1, statements };
 }
 
-/** A D1 binding that rejects every write with the Free-plan daily-limit error. */
-export function limitedD1(inner: D1Database): D1Database {
-  const error = () =>
-    new Error(
-      "D1_ERROR: Your account's daily limits have been exceeded and will reset at 00:00 UTC.",
-    );
+export const DAILY_LIMIT_MESSAGE =
+  "D1_ERROR: Your account's daily limits have been exceeded and will reset at 00:00 UTC.";
+
+/**
+ * A D1 binding that rejects every write with the Free-plan daily-limit error. With
+ * `reads`, it rejects reads too, as D1 does at its daily read limit. `message` sets
+ * another error, for a failure that is not the daily limit.
+ */
+export function limitedD1(
+  inner: D1Database,
+  options: { reads?: boolean; message?: string } = {},
+): D1Database {
+  const error = () => new Error(options.message ?? DAILY_LIMIT_MESSAGE);
   const isWrite = (sql: string) => /^\s*(insert|update|delete|with)\b/i.test(sql);
   return {
     prepare(query: string) {
       const statement = inner.prepare(query);
-      if (!isWrite(query)) return statement;
+      if (!options.reads && !isWrite(query)) return statement;
       const failing = {
         bind: () => failing,
         run: async () => Promise.reject(error()),
@@ -293,6 +312,26 @@ export function limitedD1(inner: D1Database): D1Database {
 /** A metered connection over a given binding, with the scope check on. */
 export function dbOver(d1: D1Database): DbConnection {
   return createDb({ DB: d1 }, { enforceWorkspaceScope: true });
+}
+
+/**
+ * An UnsubscribeLedger of its own for one test, with the UsageMeter that holds its flag.
+ * The deployment's ledger and meter are shared by every test.
+ */
+export function testLedger(name = `test:${crypto.randomUUID()}`): LedgerClient & {
+  name: string;
+  pending(): Promise<boolean>;
+} {
+  const ledger = unsubscribeLedger(env, name);
+  const meter = env.USAGE_METER.getByName(ledgerMeterName(name));
+  return {
+    name,
+    record: (intents) => ledger.record(intents),
+    list: (limit) => ledger.list(limit),
+    find: (ref) => ledger.find(ref),
+    remove: (entries) => ledger.remove(entries),
+    pending: async () => (await meter.status()).unsubscribesPending === true,
+  };
 }
 
 export { createProviderMock };

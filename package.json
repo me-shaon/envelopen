@@ -67,6 +67,9 @@
       "EVENT_BUFFER": {
         "description": "Durable Object per workspace that collects opens, clicks, unsubscribes, and provider events, and writes them to D1 in groups."
       },
+      "UNSUBSCRIBE_LEDGER": {
+        "description": "Durable Object that keeps unsubscribes that D1 rejected at its daily limit. Sends skip these contacts, and the cron writes the unsubscribes to D1 after the reset."
+      },
       "SIGNING_KEYS_RETIRED": {
         "description": "Optional. Earlier SIGNING_KEY values, comma-separated, so links in old emails keep working and suppressions keep matching after a key rotation. Do not remove a retired key."
       }

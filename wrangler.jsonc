@@ -57,14 +57,17 @@
       // A token bucket per provider connection (KTD25).
       { "name": "RATE_LIMITER", "class_name": "RateLimiter" },
       // Tracking and provider events on their way to D1, one instance per workspace (KTD31).
-      { "name": "EVENT_BUFFER", "class_name": "EventBuffer" }
+      { "name": "EVENT_BUFFER", "class_name": "EventBuffer" },
+      // Unsubscribes that D1 rejected at its daily limit, until the cron writes them (KTD1).
+      { "name": "UNSUBSCRIBE_LEDGER", "class_name": "UnsubscribeLedger" }
     ]
   },
   // Free plan Durable Objects need the SQLite backend.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["AuthRateLimiter"] },
     { "tag": "v2", "new_sqlite_classes": ["UsageMeter", "RateLimiter"] },
-    { "tag": "v3", "new_sqlite_classes": ["EventBuffer"] }
+    { "tag": "v3", "new_sqlite_classes": ["EventBuffer"] },
+    { "tag": "v4", "new_sqlite_classes": ["UnsubscribeLedger"] }
   ],
   // Workflows run classes that the entry module exports.
   "workflows": [

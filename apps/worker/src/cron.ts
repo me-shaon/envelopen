@@ -16,12 +16,21 @@ import {
 import { createDb, type DbConnection, isD1DailyLimitError, nextUtcMidnight } from "@envelopen/db";
 import { purgeExpiredIdempotencyKeys } from "./api/idempotency";
 import { type EventSink, eventSink } from "./do/events";
+import {
+  type DrainReport,
+  drainUnsubscribes,
+  type LedgerClient,
+  unsubscribeLedger,
+} from "./do/unsubscribes";
 import { usageMeter, usageSink } from "./do/usage";
 import { campaignStarter, createServices, sendQueue } from "./services";
 
 // The per-minute cron (U9, KTD19, KTD24). In order:
 //
-// 1. After a D1 daily-limit stop, once 00:00 UTC has passed: resume the campaigns,
+// 1. While the UnsubscribeLedger holds unsubscribes that D1 rejected (KTD1), write them
+//    to D1, oldest first, a group per run. While some wait, platform_limit stays: the
+//    campaigns resume only after D1 has every unsubscribe.
+//    After a D1 daily-limit stop, once 00:00 UTC has passed: resume the campaigns,
 //    dispatch every waiting batch again, and clear the platform_limit flag. While the
 //    flag is in force, the campaign jobs wait: D1 would reject their writes.
 // 2. Start due scheduled campaigns.
@@ -43,6 +52,8 @@ export interface CronDeps {
   db: DbConnection;
   sweep: SweepDeps;
   meter: ReturnType<typeof usageMeter>;
+  /** The UnsubscribeLedger and the event sink of its drain. */
+  unsubscribes: { ledger: LedgerClient; sink: EventSink };
 }
 
 export interface CronReport {
@@ -54,6 +65,10 @@ export interface CronReport {
   redispatched: number;
   finished: { id: number; status: string }[];
   limited: boolean;
+  /** The drain of the UnsubscribeLedger, when it ran. */
+  unsubscribes: DrainReport | null;
+  /** True when platform_limit stays because unsubscribes still wait for D1. */
+  held: boolean;
 }
 
 export async function runCampaignCron(deps: CronDeps): Promise<CronReport> {
@@ -66,6 +81,8 @@ export async function runCampaignCron(deps: CronDeps): Promise<CronReport> {
     redispatched: 0,
     finished: [],
     limited: false,
+    unsubscribes: null,
+    held: false,
   };
   const { sweep, meter } = deps;
   const status = await meter.status(sweep.now);
@@ -87,6 +104,23 @@ export async function runCampaignCron(deps: CronDeps): Promise<CronReport> {
       console.error(`Cron job ${name} failed`, error);
     }
   };
+
+  if (status.unsubscribesPending) {
+    await job("drain unsubscribes", async () => {
+      report.unsubscribes = await drainUnsubscribes(
+        deps.db,
+        deps.unsubscribes.ledger,
+        deps.unsubscribes.sink,
+        sweep.now,
+      );
+    });
+    if (report.limited) return report;
+    // A failed drain or a drain with intents left keeps the flag until a later run.
+    if (limit && (report.unsubscribes === null || report.unsubscribes.left > 0)) {
+      report.held = true;
+      return report;
+    }
+  }
 
   if (limit) {
     await job("resume after the daily limit", async () => {
@@ -191,6 +225,7 @@ export async function runCron(
     const report = await runCampaignCron({
       db,
       meter: usageMeter(env),
+      unsubscribes: { ledger: unsubscribeLedger(env), sink: eventSink(env) },
       sweep: { db, queue: sendQueue(env), startCampaignJob: campaignStarter(env), now },
     });
     await purgeExpiredIdempotencyKeys(db);

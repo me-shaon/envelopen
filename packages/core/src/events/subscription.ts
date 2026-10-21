@@ -12,6 +12,11 @@ import { sql } from "kysely";
 // with the status unsubscribed (F3).
 //
 // Sources: `one_click` for the RFC 8058 POST, `preference_page` for the page forms.
+//
+// At the D1 daily limit, the Worker keeps the unsubscribe in the UnsubscribeLedger
+// Durable Object (KTD1). After the reset, `applyUnsubscribeIntent` writes it here with
+// the time of the subscriber's click. The newest action wins: a membership whose status
+// changed after that time stays as it is.
 
 export type UnsubscribeSource = "one_click" | "preference_page";
 
@@ -201,4 +206,89 @@ RETURNING list_id`.compile(db.db);
     unsubscribed: leave.length > 0 ? (changes[0] ?? 0) : 0,
     resubscribed: join.length > 0 ? (changes.at(-1) ?? 0) : 0,
   };
+}
+
+/** An unsubscribe that D1 rejected at its daily limit, as the ledger kept it (KTD1). */
+export interface UnsubscribeIntent {
+  workspaceId: number;
+  contactId: number;
+  campaignId: number;
+  /** The list to leave, or null for every list (an unsubscribe from all). */
+  listId: number | null;
+  source: UnsubscribeSource;
+  /** When the subscriber asked, Unix milliseconds. */
+  at: number;
+}
+
+/**
+ * Writes an unsubscribe from the ledger with the time of the request. The newest action
+ * wins: a membership whose status changed after `at` (for example a resubscribe after the
+ * reset) is not changed. For an unsubscribe from all, the contact is marked unsubscribed
+ * only when no list was subscribed again after `at`. An edit of other contact fields does
+ * not count as a newer action. Returns true when something changed.
+ */
+export async function applyUnsubscribeIntent(
+  db: DbConnection,
+  intent: UnsubscribeIntent,
+  now: number,
+): Promise<boolean> {
+  const { workspaceId, contactId, campaignId, listId, source, at } = intent;
+  const members =
+    sql`UPDATE list_members SET status = 'unsubscribed', status_source = ${source}, status_at = ${at}, status_campaign_id = ${campaignId}
+WHERE workspace_id = ${workspaceId} AND contact_id = ${contactId} AND status = 'subscribed'
+  AND status_at <= ${at}${listId === null ? sql`` : sql` AND list_id = ${listId}`}
+RETURNING list_id`.compile(db.db);
+  if (listId !== null) {
+    const [result] = await db.atomic([members]);
+    // The returned rows, not meta.changes: the member count trigger adds its own rows.
+    return (result?.results?.length ?? 0) > 0;
+  }
+  const contact =
+    sql`UPDATE contacts SET unsubscribed_at = ${at}, unsubscribe_source = ${source}, unsubscribe_campaign_id = ${campaignId}, updated_at = ${now}
+WHERE workspace_id = ${workspaceId} AND id = ${contactId} AND unsubscribed_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM list_members m WHERE m.workspace_id = ${workspaceId}
+    AND m.contact_id = ${contactId} AND m.status = 'subscribed' AND m.status_at > ${at})
+RETURNING id`.compile(db.db);
+  // The contact first, so its check sees the memberships before this change.
+  const [changedContact, changedMembers] = await db.atomic([contact, members]);
+  return (changedContact?.results?.length ?? 0) > 0 || (changedMembers?.results?.length ?? 0) > 0;
+}
+
+/** The workspace and contact behind a recipient of an unsubscribe link. */
+export interface RecipientTarget {
+  workspaceId: number;
+  contactId: number;
+}
+
+/**
+ * The workspace and contact of each recipient, keyed by recipient id, from D1. Each ref
+ * names the campaign of the token too: a recipient of another campaign does not match.
+ * With `workspaceId`, only the recipients of that workspace. Without it, the lookup is
+ * the deliberate cross-workspace read of a verified token (KTD4). A recipient whose
+ * contact is gone is left out.
+ */
+export async function recipientTargets(
+  db: DbConnection,
+  refs: readonly { campaignId: number; recipientId: number }[],
+  workspaceId?: number,
+): Promise<Map<number, RecipientTarget>> {
+  const targets = new Map<number, RecipientTarget>();
+  if (refs.length === 0) return targets;
+  const ids = JSON.stringify([...new Set(refs.map((ref) => ref.recipientId))]);
+  const scope = workspaceId === undefined ? sql`` : sql` AND workspace_id = ${workspaceId}`;
+  const { rows } = await sql<{
+    id: number;
+    campaign_id: number;
+    workspace_id: number;
+    contact_id: number | null;
+  }>`SELECT id, campaign_id, workspace_id, contact_id FROM campaign_recipients
+WHERE id IN (SELECT value FROM json_each(${ids}))${scope}`.execute(
+    workspaceId === undefined ? unscoped(db.db) : db.db,
+  );
+  const campaignOf = new Map(refs.map((ref) => [ref.recipientId, ref.campaignId]));
+  for (const row of rows) {
+    if (row.contact_id === null || campaignOf.get(row.id) !== row.campaign_id) continue;
+    targets.set(row.id, { workspaceId: row.workspace_id, contactId: row.contact_id });
+  }
+  return targets;
 }

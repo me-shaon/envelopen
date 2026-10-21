@@ -26,9 +26,16 @@ import {
   T0,
   testDeps,
   testKeys,
+  testLedger,
 } from "../../test/campaign-helpers";
 import { runCampaignCron } from "../cron";
 import { rateLimiterFor, rateRule, reserve } from "../do/rate-limiter";
+import {
+  DRAIN_BATCH,
+  type IntentInput,
+  ledgerMeterName,
+  pendingUnsubscribedContacts,
+} from "../do/unsubscribes";
 import { usageMeter, usageReader } from "../do/usage";
 import { MAX_RATE_WAIT_MS, processPointer } from "./send-consumer";
 
@@ -458,11 +465,12 @@ describe("Workers Free limits", () => {
     const pointer = pointers[0] as (typeof pointers)[number];
     const meter = usageMeter(env);
     await meter.clearPlatformLimit();
+    const unsubscribes = { ledger: testLedger(), sink: async () => undefined };
     // Every D1 write fails now. The flag goes to the real UsageMeter.
     const limitedDb = dbOver(limitedD1(env.DB));
     const deps = await testDeps(limitedDb, {
       usage: {
-        platformLimit: async () => null,
+        gate: async () => ({ limit: null, unsubscribesPending: false }),
         setPlatformLimit: (since, until) => meter.setPlatformLimit(since, until),
       },
     });
@@ -493,10 +501,10 @@ describe("Workers Free limits", () => {
 
     // Before the reset the cron does nothing. After it, the cron resumes and clears the flag.
     const before = sweepDeps(db, T0 + 60_000);
-    expect((await runCampaignCron({ db, meter, sweep: before })).limited).toBe(true);
+    expect((await runCampaignCron({ db, meter, unsubscribes, sweep: before })).limited).toBe(true);
     expect(before.queue.sent).toEqual([]);
     const after = sweepDeps(db, Date.UTC(2026, 9, 20, 0, 1));
-    const report = await runCampaignCron({ db, meter, sweep: after });
+    const report = await runCampaignCron({ db, meter, unsubscribes, sweep: after });
     expect(report.resumed).toContain(campaignId);
     expect((await meter.status()).platformLimit).toBeNull();
     const redispatched = after.queue.sent.find((item) => item.batchId === pointer.batchId);
@@ -504,6 +512,92 @@ describe("Workers Free limits", () => {
     const resumedDeps = await testDeps(db);
     expect((await processPointer(resumedDeps, redispatched)).result).toBe("sent");
     expect((await campaignRow(db, seeded.workspaceId, campaignId)).status).toBe("sent");
+  });
+
+  it("covers AE1: a batch that resumes after the reset but before the drain skips a contact with a waiting unsubscribe", async () => {
+    const { db, seeded, campaignId, pointers } = await sendingCampaign({ contacts: 2 });
+    const [first] = await recipientRows(db, seeded.workspaceId, campaignId);
+    const ledger = testLedger();
+    // The D1 read failed too, so the intent has only the recipient of the token.
+    await ledger.record([
+      {
+        campaignId,
+        recipientId: first?.id ?? 0,
+        workspaceId: null,
+        contactId: null,
+        listId: null,
+        source: "one_click",
+        at: T0,
+      },
+    ]);
+    const deps = await testDeps(db, {
+      pendingUnsubscribes: (conn, workspaceId, contactIds) =>
+        pendingUnsubscribedContacts(ledger, conn, workspaceId, contactIds),
+    });
+    deps.ledger.pending = await ledger.pending();
+    expect(deps.ledger.pending).toBe(true);
+    for (const pointer of pointers) await processPointer(deps, pointer);
+    const rows = await recipientRows(db, seeded.workspaceId, campaignId);
+    expect(rows.map((row) => [row.status, row.skip_reason])).toEqual([
+      ["skipped", "unsubscribed"],
+      ["sent", null],
+    ]);
+    const sentTo = deps.mock.calls.flatMap(
+      (item) => JSON.parse(item.body || "[]") as { to: string[] }[],
+    );
+    expect(sentTo.flatMap((item) => item.to)).toEqual([rows[1]?.email]);
+  });
+
+  it("does not ask the ledger while the UsageMeter flag is clear", async () => {
+    const { db, seeded, campaignId, pointers } = await sendingCampaign({ contacts: 2 });
+    const deps = await testDeps(db, {
+      pendingUnsubscribes: async () => {
+        throw new Error("The ledger was asked.");
+      },
+    });
+    for (const pointer of pointers) await processPointer(deps, pointer);
+    const rows = await recipientRows(db, seeded.workspaceId, campaignId);
+    expect(rows.map((row) => row.status)).toEqual(["sent", "sent"]);
+  });
+
+  it("the cron keeps platform_limit while unsubscribes wait in the ledger, and lifts it after the drain", async () => {
+    const db = campaignDb();
+    const ledger = testLedger();
+    const meter = env.USAGE_METER.getByName(ledgerMeterName(ledger.name));
+    await meter.setPlatformLimit(T0, Date.UTC(2026, 9, 20));
+    const intents: IntentInput[] = Array.from({ length: DRAIN_BATCH + 1 }, (_, i) => ({
+      campaignId: 1,
+      recipientId: 900_000_000 + i,
+      workspaceId: null,
+      contactId: null,
+      listId: null,
+      source: "one_click",
+      at: T0 + i,
+    }));
+    await ledger.record(intents);
+    const unsubscribes = { ledger, sink: async () => undefined };
+    const first = await runCampaignCron({
+      db,
+      meter,
+      unsubscribes,
+      sweep: sweepDeps(db, Date.UTC(2026, 9, 20, 0, 1)),
+    });
+    expect(first.held).toBe(true);
+    expect(first.unsubscribes).toEqual({ applied: 0, dropped: DRAIN_BATCH, left: 1 });
+    expect(first.resumed).toEqual([]);
+    expect((await meter.status()).platformLimit).not.toBeNull();
+
+    const second = await runCampaignCron({
+      db,
+      meter,
+      unsubscribes,
+      sweep: sweepDeps(db, Date.UTC(2026, 9, 20, 0, 2)),
+    });
+    expect(second.held).toBe(false);
+    expect(second.unsubscribes).toEqual({ applied: 0, dropped: 1, left: 0 });
+    const status = await meter.status();
+    expect(status.platformLimit).toBeNull();
+    expect(status.unsubscribesPending).toBe(false);
   });
 
   it("drops a message without a write while the platform_limit flag is set", async () => {

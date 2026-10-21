@@ -1,5 +1,6 @@
 import { type DbConnection, isD1DailyLimitError, nextUtcMidnight, type Row } from "@envelopen/db";
 import { normalizeEmail } from "../contacts/email";
+import { type FieldDef, loadFieldDefs, storedFieldValue } from "../contacts/fields";
 import {
   changeConsent,
   chunk,
@@ -13,6 +14,7 @@ import {
   tagContacts,
   updateNames,
 } from "../contacts/writes";
+import { isOperationError } from "../errors";
 import type { ImportJob, Services } from "../services";
 import { csvLine, parseCsv } from "./csv";
 import {
@@ -187,6 +189,17 @@ async function runChunk(
     target.startsWith("field:") ? [{ key: target.slice("field:".length), index }] : [],
   );
 
+  // Choice fields map each cell by option label, without regard to case (R13). A cell
+  // with an unknown option fails its row, and the other rows go on.
+  const fieldDefs =
+    fieldColumns.length === 0
+      ? new Map<string, FieldDef>()
+      : await loadFieldDefs(
+          db.db,
+          workspaceId,
+          fieldColumns.map((column) => column.key),
+        );
+
   const counts: ImportCounts = { ...emptyCounts(), total: dataRows.length };
   const errors: Array<[number, string]> = [];
   const valid: ValidRow[] = [];
@@ -200,6 +213,28 @@ async function runChunk(
       counts.invalid += 1;
       const reason = raw === null ? "No email address" : "Not a valid email address";
       errors.push([line, csvLine([line, raw, reason])]);
+      continue;
+    }
+    const fields = new Map<string, string | null>();
+    let fieldError: string | null = null;
+    for (const { key: field, index } of fieldColumns) {
+      const value = cell(cells, index);
+      const def = fieldDefs.get(field);
+      if (value === null || !def?.kind) {
+        fields.set(field, value);
+        continue;
+      }
+      try {
+        fields.set(field, storedFieldValue(def, value, { labelsOnly: true }));
+      } catch (error) {
+        if (!isOperationError(error)) throw error;
+        fieldError = error.message;
+        break;
+      }
+    }
+    if (fieldError !== null) {
+      counts.invalid += 1;
+      errors.push([line, csvLine([line, raw, fieldError])]);
       continue;
     }
     const hash = await deps.services.hashEmail(email);
@@ -216,7 +251,7 @@ async function runChunk(
       emailHash: hash,
       firstName: name(cells, firstIndex),
       lastName: name(cells, lastIndex),
-      fields: new Map(fieldColumns.map(({ key: field, index }) => [field, cell(cells, index)])),
+      fields,
     });
   }
 

@@ -39,6 +39,14 @@ export {
 export { receiveProviderWebhook, type WebhookOutcome } from "./connections/webhooks";
 export { CONSENT_UPGRADE_BLOCKED, consentDecision } from "./consent/rules";
 export { normalizeEmail } from "./contacts/email";
+export {
+  ContactFieldSchema,
+  FIELD_TYPES,
+  type FieldInput,
+  fieldText,
+  loadFieldDefs,
+  storedFieldValue,
+} from "./contacts/fields";
 export { CONSENT_BASES, CONTACT_STATUSES, ContactSchema, loadContacts } from "./contacts/model";
 export { type UpsertContactInput, upsertContact } from "./contacts/upsert";
 export {

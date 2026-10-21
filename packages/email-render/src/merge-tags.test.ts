@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  choiceIds,
+  choiceText,
   compile,
   fill,
   mergeTagNames,
@@ -71,5 +73,25 @@ describe("merge tags (R29)", () => {
       '{{ first_name | default: "x" }} {{ course }} {{ @open }} {{ course }} {{ email }}';
     expect(mergeTagNames(html)).toEqual(["first_name", "course", "email"]);
     expect(missingMergeTags(html, { email: "a@x.io" })).toEqual(["course"]);
+  });
+
+  it("prints the labels of a choice value in option order, joined with commas", () => {
+    const options = [
+      { id: 7, label: "Design" },
+      { id: 3, label: "Data & AI" },
+      { id: 9, label: "Writing" },
+    ];
+    expect(choiceIds("[9,7]")).toEqual([9, 7]);
+    expect(choiceIds("3")).toEqual([3]);
+    expect(choiceIds("not json")).toEqual([]);
+    expect(choiceText("[9,7]", options)).toBe("Design, Writing");
+    expect(choiceText("3", options)).toBe("Data & AI");
+    // A deleted option is left out. No option left gives no value, so the fallback shows.
+    expect(choiceText("[4]", options)).toBeNull();
+    const interests = choiceText("[3,9]", options);
+    expect(renderMergeTags('{{ interests | default: "none" }}', { interests }, "html")).toBe(
+      "Data &amp; AI, Writing",
+    );
+    expect(renderMergeTags('{{ interests | default: "none" }}', {}, "text")).toBe("none");
   });
 });

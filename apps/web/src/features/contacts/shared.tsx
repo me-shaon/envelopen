@@ -84,10 +84,11 @@ const TABS = [
   { to: "/contacts", label: "All contacts" },
   { to: "/contacts/lists", label: "Lists" },
   { to: "/contacts/tags", label: "Tags" },
+  { to: "/contacts/fields", label: "Fields" },
   { to: "/contacts/suppressions", label: "Suppression list" },
 ] as const;
 
-/** The audience pages: contacts, lists, tags, and the suppression list. */
+/** The audience pages: contacts, lists, tags, custom fields, and the suppression list. */
 export function ContactsNav() {
   return (
     <nav aria-label="Audience" className="flex flex-wrap gap-1 border-b border-hairline">

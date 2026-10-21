@@ -7,6 +7,7 @@ import {
   type TestServices,
   testServices,
 } from "../../test/fixtures";
+import { fieldsCreate } from "../contacts/fields";
 import {
   contactsDelete,
   contactsGet,
@@ -238,6 +239,73 @@ describe("CSV import", () => {
         csvLine([6, null, "No email address"]),
         csvLine([7, "ana@example.com", "Duplicate of an earlier row"]),
         csvLine([8, '=HYPERLINK("http://x")', "Not a valid email address"]),
+      ].join(""),
+    );
+  });
+
+  it("maps choice values by label without regard to case, and reports an unknown option", async () => {
+    const { conn, principal, workspaceId } = await owner();
+    const field = await run<{ id: number; options: { id: number; label: string }[] }>(
+      conn,
+      principal,
+      fieldsCreate,
+      {
+        key: "interests",
+        label: "Interests",
+        type: "multi",
+        options: ["Design", "Data", "Writing"],
+      },
+    );
+    await run(conn, principal, fieldsCreate, {
+      key: "plan",
+      label: "Plan",
+      type: "choice",
+      options: ["Free", "Pro"],
+    });
+    const [design, data, writing] = field.options.map((option) => option.id);
+    const csv =
+      "email,interests,plan\r\n" +
+      'ana@example.com,"design, WRITING",pro\r\n' +
+      "ben@example.com,Data,Gold\r\n" +
+      "chen@example.com,Cooking,\r\n" +
+      "dee@example.com,,FREE\r\n";
+    const { previewed, done } = await importCsv(conn, principal, csv, {
+      mapping: ["email", "field:interests", "field:plan"],
+      consentBasis: "explicit_opt_in",
+    });
+    expect(previewed.preview).toMatchObject({ total: 4, new: 2, invalid: 2 });
+    expect(done).toMatchObject({ status: "completed", errorCount: 2 });
+
+    const contacts = await run<{ items: { email: string; fields: Record<string, string> }[] }>(
+      conn,
+      principal,
+      contactsList,
+      {},
+    );
+    const byEmail = new Map(contacts.items.map((contact) => [contact.email, contact.fields]));
+    const plan = await conn.db
+      .selectFrom("contact_field_options")
+      .select(["id", "label"])
+      .where("workspace_id", "=", workspaceId)
+      .where("label", "in", ["Free", "Pro"])
+      .orderBy("label")
+      .execute();
+    expect(byEmail.get("ana@example.com")).toEqual({
+      interests: JSON.stringify([design, writing].sort((a, b) => (a ?? 0) - (b ?? 0))),
+      plan: String(plan[1]?.id),
+    });
+    expect(byEmail.get("dee@example.com")).toEqual({ plan: String(plan[0]?.id) });
+    expect(byEmail.has("ben@example.com")).toBe(false);
+    expect(byEmail.has("chen@example.com")).toBe(false);
+    expect(data).toBeGreaterThan(0);
+
+    const row = await importRow(conn, workspaceId, done.id);
+    const errorFile = await (await env.BUCKET.get(row.error_file_key as string))?.text();
+    expect(errorFile).toBe(
+      [
+        csvLine(["row", "email", "reason"]),
+        csvLine([2, "ben@example.com", '"Gold" is not an option of the field plan.']),
+        csvLine([3, "chen@example.com", '"Cooking" is not an option of the field interests.']),
       ].join(""),
     );
   });

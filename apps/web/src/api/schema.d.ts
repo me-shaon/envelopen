@@ -658,6 +658,98 @@ export interface paths {
         patch: operations["tags.rename"];
         trace?: never;
     };
+    "/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List custom fields
+         * @description Returns the custom fields with their types and, for choice fields, the options in order. A contact's value of a choice field is an option id. A multiple choice value is a JSON array of option ids, for example `[12,15]`.
+         */
+        get: operations["fields.list"];
+        put?: never;
+        /**
+         * Create a custom field
+         * @description Creates a field. A `choice` field takes one option, and a `multi` field takes any number. Give the options of a choice field in order. Option labels are unique in a field without regard to case, and cannot contain a comma.
+         */
+        post: operations["fields.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fields/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Rename a custom field
+         * @description Changes the label. The key and the type stay.
+         */
+        patch: operations["fields.update"];
+        trace?: never;
+    };
+    "/fields/{id}/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reorder the options of a choice field
+         * @description Sets the order of the options. Give every option id of the field once.
+         */
+        put: operations["fields.reorder_options"];
+        /**
+         * Add an option to a choice field
+         * @description Adds the option at the end of the list.
+         */
+        post: operations["fields.add_option"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fields/{id}/options/{optionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an option
+         * @description Deletes an option that no contact holds. When contacts hold it, the call fails with `conflict` and the count of contacts in `details.contacts`, unless `mergeInto` names another option of the field. The contacts then get that option, and the delete goes on.
+         */
+        delete: operations["fields.delete_option"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename an option
+         * @description Changes the label of an option. Contacts keep the option, because values store the option id. Merge tags and forms show the new label.
+         */
+        patch: operations["fields.update_option"];
+        trace?: never;
+    };
     "/suppressions": {
         parameters: {
             query?: never;
@@ -1871,7 +1963,7 @@ export interface components {
             suppressedAt: number | null;
             tags: components["schemas"]["TagRef"][];
             lists: components["schemas"]["ListMembership"][];
-            /** @description Custom field values by field key. */
+            /** @description Custom field values by field key. A choice field gives the option id, and a multiple choice field a JSON array of option ids, for example `[12,15]`. `fields.list` has the labels. */
             fields: {
                 [key: string]: string | null;
             };
@@ -1934,7 +2026,7 @@ export interface components {
                 suppressedAt: number | null;
                 tags: components["schemas"]["TagRef"][];
                 lists: components["schemas"]["ListMembership"][];
-                /** @description Custom field values by field key. */
+                /** @description Custom field values by field key. A choice field gives the option id, and a multiple choice field a JSON array of option ids, for example `[12,15]`. `fields.list` has the labels. */
                 fields: {
                     [key: string]: string | null;
                 };
@@ -2017,6 +2109,26 @@ export interface components {
             name: string;
             contacts: number;
             createdAt: number;
+        };
+        ContactField: {
+            id: number;
+            /** @description The merge tag name, for example `interests`. */
+            key: string;
+            label: string;
+            /**
+             * @description `choice` takes one option. `multi` takes any number of options.
+             * @enum {string}
+             */
+            type: "text" | "number" | "date" | "boolean" | "choice" | "multi";
+            /** @description The options of a choice field, in order. Empty for other types. */
+            options: components["schemas"]["FieldOption"][];
+            createdAt: number;
+        };
+        FieldOption: {
+            id: number;
+            label: string;
+            /** @description The order of the option, from 0. */
+            position: number;
         };
         Suppression: {
             id: number;
@@ -4901,9 +5013,9 @@ export interface operations {
                     /** @description Tag names. Missing tags are created. */
                     tags?: string[];
                     listIds?: number[];
-                    /** @description Custom field values by key (lowercase letters, digits, underscores). Missing fields are created. Null clears a value. */
+                    /** @description Custom field values by key (lowercase letters, digits, underscores). Missing fields are created as text fields. Null clears a value. A choice field takes an option id or an option label (labels match without regard to case). A multiple choice field takes a list of option ids or labels, or one text with labels separated by commas. An unknown option, or an option of another field, fails with `invalid_input`. Reads return option ids: see `fields.list`. */
                     fields?: {
-                        [key: string]: string | null;
+                        [key: string]: string | number | (string | number)[] | null;
                     };
                 };
             };
@@ -5241,9 +5353,9 @@ export interface operations {
                 "application/json": {
                     firstName?: string | null;
                     lastName?: string | null;
-                    /** @description Custom field values by key (lowercase letters, digits, underscores). Missing fields are created. Null clears a value. */
+                    /** @description Custom field values by key (lowercase letters, digits, underscores). Missing fields are created as text fields. Null clears a value. A choice field takes an option id or an option label (labels match without regard to case). A multiple choice field takes a list of option ids or labels, or one text with labels separated by commas. An unknown option, or an option of another field, fails with `invalid_input`. Reads return option ids: see `fields.list`. */
                     fields?: {
-                        [key: string]: string | null;
+                        [key: string]: string | number | (string | number)[] | null;
                     };
                     /** @enum {boolean} */
                     unsubscribe?: true;
@@ -6691,6 +6803,626 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Tag"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "fields.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ContactField"][];
+                    };
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "fields.create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Lowercase letters, digits, and underscores. It is the merge tag name. */
+                    key: string;
+                    label: string;
+                    /** @enum {string} */
+                    type: "text" | "number" | "date" | "boolean" | "choice" | "multi";
+                    options?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactField"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different path or body. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "fields.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    label: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactField"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "fields.reorder_options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    optionIds: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactField"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "fields.add_option": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    label: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactField"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different path or body. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "fields.delete_option": {
+        parameters: {
+            query?: {
+                mergeInto?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+                optionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: number;
+                        /** @description The merge tag name, for example `interests`. */
+                        key: string;
+                        label: string;
+                        /**
+                         * @description `choice` takes one option. `multi` takes any number of options.
+                         * @enum {string}
+                         */
+                        type: "text" | "number" | "date" | "boolean" | "choice" | "multi";
+                        /** @description The options of a choice field, in order. Empty for other types. */
+                        options: components["schemas"]["FieldOption"][];
+                        createdAt: number;
+                        /** @description Contacts moved to `mergeInto`. */
+                        merged: number;
+                    };
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "fields.update_option": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                optionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    label: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactField"];
                 };
             };
             /** @description The input is not valid. */

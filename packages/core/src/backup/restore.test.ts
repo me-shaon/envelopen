@@ -55,7 +55,13 @@ import {
   restoreSteps,
 } from "./restore";
 import { RESTORE_ACK_SETTING, readRestoreAck } from "./restore-ack";
-import { DEFERRED_REFERENCES, FOREIGN_KEYS, RESTORE_ORDER, schemaProblem } from "./restore-plan";
+import {
+  DEFERRED_REFERENCES,
+  FOREIGN_KEYS,
+  RESTORE_ORDER,
+  schemaProblem,
+  upgradeRow,
+} from "./restore-plan";
 import { type BackupDeps, backupSteps, driveBackup, startBackup } from "./run";
 import { readImportedSigningKeys } from "./signing-keys";
 
@@ -130,6 +136,43 @@ function seedSource(): Promise<Seeded> {
         .values({ workspace_id: workspace.workspaceId, contact_id: contact.id, tag_id: tag.id })
         .execute();
     }
+    // A multiple choice field (U7) with options and one contact's value.
+    await conn.db
+      .insertInto("contact_fields")
+      .values({
+        workspace_id: workspace.workspaceId,
+        key: "interests",
+        label: "Interests",
+        kind: "multi",
+      })
+      .execute();
+    const field = await conn.db
+      .selectFrom("contact_fields")
+      .select("id")
+      .where("workspace_id", "=", workspace.workspaceId)
+      .where("key", "=", "interests")
+      .executeTakeFirstOrThrow();
+    const options = await conn.db
+      .insertInto("contact_field_options")
+      .values(
+        ["Design", "Data", "Writing"].map((label, position) => ({
+          workspace_id: workspace.workspaceId,
+          field_id: field.id,
+          label,
+          position,
+        })),
+      )
+      .returning("id")
+      .execute();
+    await conn.db
+      .insertInto("contact_field_values")
+      .values({
+        workspace_id: workspace.workspaceId,
+        contact_id: contacts[0]?.id as number,
+        field_id: field.id,
+        value: JSON.stringify([options[0]?.id, options[2]?.id]),
+      })
+      .execute();
     const suppressionHash = await hasher(normalizeEmail(SUPPRESSED) as string);
     await conn.db
       .insertInto("suppressions")
@@ -359,6 +402,9 @@ const COMPARED = [
   "list_members",
   "tags",
   "contact_tags",
+  "contact_fields",
+  "contact_field_options",
+  "contact_field_values",
   "templates",
   "campaigns",
   "campaign_recipients",
@@ -427,6 +473,14 @@ describe("restore plan", () => {
     expect(schemaProblem(BACKUP_SCHEMA_VERSION)).toBeNull();
     // 16 is the U4 schema. 0017 adds only the restore tables, so the upgrade is identity.
     expect(schemaProblem(16)).toBeNull();
+    // 0018 adds contact_fields.kind: a field of an older backup is a plain field.
+    expect(schemaProblem(17)).toBeNull();
+    expect(upgradeRow("contact_fields", { id: 1, key: "course" }, 17)).toEqual({
+      id: 1,
+      key: "course",
+      kind: null,
+    });
+    expect(upgradeRow("contacts", { id: 1 }, 16)).toEqual({ id: 1 });
     expect(schemaProblem(BACKUP_SCHEMA_VERSION + 1)).toContain("newer Envelopen");
     expect(schemaProblem(15)).toContain("too old");
   });
@@ -472,6 +526,19 @@ describe("restore into a fresh deployment", () => {
       contact_count: number;
     }>();
     expect(tag?.contact_count).toBe(3);
+    // Choice fields keep their kind, their options, and the option ids in the values.
+    const options = await env.RESTORE_DB.prepare(
+      "SELECT o.id, o.label, o.position, f.kind FROM contact_field_options o JOIN contact_fields f ON f.id = o.field_id ORDER BY o.position",
+    ).all<{ id: number; label: string; position: number; kind: string }>();
+    expect(options.results.map((option) => [option.label, option.position, option.kind])).toEqual([
+      ["Design", 0, "multi"],
+      ["Data", 1, "multi"],
+      ["Writing", 2, "multi"],
+    ]);
+    const value = await env.RESTORE_DB.prepare(
+      "SELECT v.value FROM contact_field_values v JOIN contact_fields f ON f.id = v.field_id WHERE f.key = 'interests'",
+    ).first<{ value: string }>();
+    expect(value?.value).toBe(JSON.stringify([options.results[0]?.id, options.results[2]?.id]));
     // The deferred reference is set after the connections.
     const workspace = await env.RESTORE_DB.prepare(
       "SELECT sending_connection_id FROM workspaces WHERE id = ?",

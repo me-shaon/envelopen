@@ -32,7 +32,7 @@ export const SCOPE_DESCRIPTIONS: Readonly<Record<Scope, string>> = {
   "contacts:write": "Upsert contacts, tags, and list membership. No consent upgrade from unknown.",
   "contacts:export": "Export contacts.",
   "contacts:delete": "Erase contacts.",
-  "lists:write": "Manage lists and tags.",
+  "lists:write": "Manage lists, tags, and custom fields.",
   "templates:write": "Manage templates.",
   "campaigns:read": "Read campaign drafts, previews, and checklists.",
   "campaigns:write": "Edit campaign drafts and send test emails.",

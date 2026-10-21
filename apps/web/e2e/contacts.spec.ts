@@ -197,6 +197,74 @@ test.describe("contacts", () => {
     await expect(page.getByRole("button", { name: "Remove tag Intro to Data" })).toBeVisible();
   });
 
+  test("edits choice fields: options, contact answers, rename, and delete with merge", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto("/contacts/fields");
+    await expect(page.getByRole("link", { name: "Fields" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    // Create a multiple choice field with three options. The key follows the label.
+    await page.getByLabel("Label").fill("Interests");
+    await expect(page.getByLabel("Merge tag")).toHaveValue("interests");
+    await page.getByLabel("Type").selectOption("multi");
+    await page.getByLabel("Options").fill("Design\nData\nWriting");
+    await page.getByRole("button", { name: "Create field" }).click();
+    const card = page.getByTestId("field-card").filter({ hasText: "Interests" });
+    await expect(card.getByTestId("option-row")).toHaveCount(3);
+    await expect(card).toContainText("Multiple choice");
+
+    // Add an option and move it to the top.
+    await card.getByLabel("New option for Interests").fill("Music");
+    await card.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(card.getByTestId("option-row")).toHaveCount(4);
+    for (let i = 0; i < 3; i++) {
+      await card.getByRole("button", { name: "Move Music up" }).click();
+      await expect(card.getByTestId("option-row").nth(2 - i)).toContainText("Music");
+    }
+    await expect(card.getByTestId("option-row").first()).toContainText("Music");
+    await expectNoSeriousViolations(page);
+    await screenshot(page, "fields-editor");
+
+    // Answer on a contact with checkboxes.
+    await page.goto("/contacts");
+    await page.getByRole("link", { name: /ana\.silva@example\.com/ }).click();
+    await page.getByRole("button", { name: "Edit fields" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("checkbox", { name: "Design" }).check();
+    await dialog.getByRole("checkbox", { name: "Writing" }).check();
+    await expectNoSeriousViolations(page);
+    await dialog.getByRole("button", { name: "Save" }).click();
+    const details = page.getByRole("region", { name: "Custom fields" });
+    await expect(details).toContainText("Design, Writing");
+
+    // A rename changes the label that the contact shows. The contact keeps the option.
+    await page.goto("/contacts/fields");
+    await card.getByRole("button", { name: "Rename Design" }).click();
+    await page.getByRole("dialog").getByLabel("Label").fill("Product design");
+    await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+    await expect(card.getByTestId("option-row").nth(1)).toContainText("Product design");
+
+    // Deleting an option in use is refused with the count, then a merge deletes it.
+    await card.getByRole("button", { name: "Delete Writing" }).click();
+    const remove = page.getByRole("dialog");
+    await remove.getByRole("button", { name: "Delete option" }).click();
+    await expect(remove.getByRole("alert")).toContainText('1 contact holds the option "Writing"');
+    await remove.getByLabel("Move its contacts to").selectOption({ label: "Data" });
+    await remove.getByRole("button", { name: "Merge and delete" }).click();
+    await expect(
+      page.getByTestId("toast").filter({ hasText: '1 contact moved to "Data"' }),
+    ).toBeVisible();
+    await expect(card.getByTestId("option-row")).toHaveCount(3);
+
+    await page.goto("/contacts");
+    await page.getByRole("link", { name: /ana\.silva@example\.com/ }).click();
+    await expect(details).toContainText("Product design, Data");
+  });
+
   // Motion on: the loading skeleton, its replacement by content, and a toast.
   test.describe("with motion", () => {
     test.use({ reducedMotion: "no-preference" });

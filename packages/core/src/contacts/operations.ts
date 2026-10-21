@@ -4,6 +4,7 @@ import { encodeCursor, pageInputShape, pageOf, pageParams } from "../pagination"
 import { defineOperation, type OperationContext } from "../registry/operation";
 import { requireService } from "../services";
 import { normalizeEmail } from "./email";
+import { FieldValueSchema, prepareFieldValues } from "./fields";
 import { actorSource, ConsentBasisSchema, ContactSchema, loadContacts } from "./model";
 import { contactFilterShape, filteredContacts, hasContactFilters } from "./query";
 import { upsertContact } from "./upsert";
@@ -15,11 +16,16 @@ import { checkTags, ensureFields, ensureTags, setFieldValues, tagContacts } from
 const ContactId = z.coerce.number().int().positive();
 const Name = z.string().trim().max(100);
 const FieldsInput = z
-  .record(z.string(), z.string().max(1000).nullable())
+  .record(z.string(), FieldValueSchema)
   .refine((fields) => Object.keys(fields).length <= 20, "At most 20 fields.")
   .meta({
     description:
-      "Custom field values by key (lowercase letters, digits, underscores). Missing fields are created. Null clears a value.",
+      "Custom field values by key (lowercase letters, digits, underscores). Missing fields " +
+      "are created as text fields. Null clears a value. A choice field takes an option id " +
+      "or an option label (labels match without regard to case). A multiple choice field " +
+      "takes a list of option ids or labels, or one text with labels separated by commas. " +
+      "An unknown option, or an option of another field, fails with `invalid_input`. " +
+      "Reads return option ids: see `fields.list`.",
   });
 const TagNames = z.array(z.string()).max(20);
 
@@ -216,12 +222,8 @@ export const contactsUpdate = defineOperation({
     const workspaceId = principal.workspaceId;
     const contact = await requireContact(ctx, input.id);
     const source = actorSource(principal);
-    const fieldEntries = Object.entries(input.fields ?? {});
-    const fieldIds = await ensureFields(
-      db.db,
-      workspaceId,
-      fieldEntries.map(([key]) => key),
-    );
+    const fieldValues = await prepareFieldValues(db.db, workspaceId, input.fields);
+    const fieldIds = await ensureFields(db.db, workspaceId, [...fieldValues.keys()]);
 
     const writes = [];
     const names: { first_name?: string | null; last_name?: string | null } = {};
@@ -236,7 +238,7 @@ export const contactsUpdate = defineOperation({
           .where("id", "=", contact.id),
       );
     }
-    for (const [key, value] of fieldEntries) {
+    for (const [key, value] of fieldValues) {
       const fieldId = fieldIds.get(key);
       if (fieldId !== undefined) {
         writes.push(

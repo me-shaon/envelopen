@@ -4,6 +4,7 @@ import { OperationError } from "../errors";
 import type { OperationContext } from "../registry/operation";
 import { requireService } from "../services";
 import { normalizeEmail } from "./email";
+import { type FieldInput, prepareFieldValues } from "./fields";
 import { actorSource } from "./model";
 import {
   changeConsent,
@@ -28,7 +29,7 @@ export interface UpsertContactInput {
   consentNote?: string | undefined;
   tags?: readonly string[] | undefined;
   listIds?: readonly number[] | undefined;
-  fields?: Readonly<Record<string, string | null>> | undefined;
+  fields?: Readonly<Record<string, FieldInput>> | undefined;
 }
 
 export interface UpsertContactResult {
@@ -66,12 +67,10 @@ export async function upsertContact(
 
   const tags = await ensureTags(db.db, workspaceId, input.tags ?? [], now);
   const listIds = await checkLists(db.db, workspaceId, input.listIds ?? []);
-  const fieldEntries = Object.entries(input.fields ?? {});
-  const fieldIds = await ensureFields(
-    db.db,
-    workspaceId,
-    fieldEntries.map(([key]) => key),
-  );
+  // Checks every value first (choice fields take only their own options), then creates
+  // the missing fields as text fields.
+  const fieldValues = await prepareFieldValues(db.db, workspaceId, input.fields);
+  const fieldIds = await ensureFields(db.db, workspaceId, [...fieldValues.keys()]);
 
   const warnings: string[] = [];
   const consentEvent = {
@@ -161,7 +160,7 @@ export async function upsertContact(
     ),
     ...subscribeContacts(db.db, workspaceId, [email], listIds, { source, now }),
   );
-  for (const [key, value] of fieldEntries) {
+  for (const [key, value] of fieldValues) {
     const fieldId = fieldIds.get(key);
     if (fieldId !== undefined) {
       writes.push(...setFieldValues(db.db, workspaceId, fieldId, [{ email, value }], now));

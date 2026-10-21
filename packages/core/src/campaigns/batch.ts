@@ -1,4 +1,5 @@
 import type { Database, DbConnection } from "@envelopen/db";
+import { choiceText } from "@envelopen/email-render";
 import { type CompiledQuery, type Kysely, sql } from "kysely";
 import type { ConnectionRow } from "../connections/model";
 import { chunk } from "../contacts/writes";
@@ -96,7 +97,10 @@ export async function loadBatchContext(
   return { batch, campaign, connection };
 }
 
-/** Values of the custom fields that the content uses, by contact id. */
+/**
+ * Values of the custom fields that the content uses, by contact id. A choice field gives
+ * its option labels in option order, joined with ", " (R13).
+ */
 export async function customFieldValues(
   db: DbConnection,
   workspaceId: number,
@@ -110,14 +114,31 @@ export async function customFieldValues(
     .innerJoin("contact_fields as f", (join) =>
       join.onRef("f.id", "=", "v.field_id").on("f.workspace_id", "=", workspaceId),
     )
-    .select(["v.contact_id", "f.key", "v.value"])
+    .select(["v.contact_id", "v.field_id", "f.key", "f.kind", "v.value"])
     .where("v.workspace_id", "=", workspaceId)
     .where("v.contact_id", "in", [...contactIds])
     .where("f.key", "in", [...keys])
     .execute();
+  const choiceFields = [...new Set(rows.filter((row) => row.kind).map((row) => row.field_id))];
+  const options =
+    choiceFields.length === 0
+      ? []
+      : await db.db
+          .selectFrom("contact_field_options")
+          .select(["id", "field_id", "label"])
+          .where("workspace_id", "=", workspaceId)
+          .where("field_id", "in", choiceFields)
+          .orderBy("position")
+          .orderBy("id")
+          .execute();
   for (const row of rows) {
     const record = values.get(row.contact_id) ?? {};
-    record[row.key] = row.value;
+    record[row.key] = row.kind
+      ? choiceText(
+          row.value,
+          options.filter((option) => option.field_id === row.field_id),
+        )
+      : row.value;
     values.set(row.contact_id, record);
   }
   return values;

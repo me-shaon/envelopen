@@ -96,6 +96,15 @@ const ACTIONS: Record<string, ActionText> = {
   "tags.create": { label: counted("Tag created", "tags created"), notable: true },
   "tags.rename": { label: counted("Tag renamed", "tags renamed") },
   "tags.delete": { label: counted("Tag deleted", "tags deleted"), notable: true },
+  "fields.create": { label: counted("Custom field created", "custom fields created") },
+  "fields.update": { label: counted("Custom field renamed", "custom fields renamed") },
+  "fields.add_option": { label: counted("Field option added", "field options added") },
+  "fields.update_option": { label: counted("Field option renamed", "field options renamed") },
+  "fields.reorder_options": { label: counted("Field options reordered", "field changes") },
+  "fields.delete_option": {
+    label: counted("Field option deleted", "field options deleted"),
+    notable: true,
+  },
   "suppressions.add": {
     label: counted("Address suppressed", "addresses suppressed"),
     notable: true,

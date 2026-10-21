@@ -12,6 +12,7 @@ type Immutable<T> = ColumnType<T, T, never>;
 
 export type Bool = 0 | 1;
 export type ConsentBasis = "existing_customer" | "explicit_opt_in" | "unknown";
+export type ContactFieldKind = "choice" | "multi";
 export type ListMemberStatus = "subscribed" | "unsubscribed";
 export type CampaignType = "regular" | "re-permission";
 export type CampaignStatus =
@@ -236,6 +237,18 @@ export interface ContactFieldsTable {
   key: string;
   label: string;
   type: Defaulted<"text" | "number" | "date" | "boolean">;
+  /** Null for a plain field. A choice field keeps `type` 'text' (migration 0018). */
+  kind: Defaulted<ContactFieldKind | null>;
+  created_at: Generated<number>;
+}
+
+/** The options of a choice field. Values store the option id (migration 0018). */
+export interface ContactFieldOptionsTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  field_id: Immutable<number>;
+  label: string;
+  position: number;
   created_at: Generated<number>;
 }
 
@@ -805,6 +818,7 @@ export interface Database {
   contacts: ContactsTable;
   contact_fields: ContactFieldsTable;
   contact_field_values: ContactFieldValuesTable;
+  contact_field_options: ContactFieldOptionsTable;
   lists: ListsTable;
   list_members: ListMembersTable;
   tags: TagsTable;
@@ -860,6 +874,7 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   contacts: "tenant",
   contact_fields: "tenant",
   contact_field_values: "tenant",
+  contact_field_options: "tenant",
   lists: "tenant",
   list_members: "tenant",
   tags: "tenant",

@@ -65,6 +65,7 @@ export const RESTORE_ORDER: readonly TableName[] = [
   "campaigns",
   "contacts",
   "contact_fields",
+  "contact_field_options",
   "contact_field_values",
   "lists",
   "list_members",
@@ -109,6 +110,7 @@ export const FOREIGN_KEYS: Readonly<Partial<Record<TableName, readonly ForeignKe
   ],
   contacts: [ws(), ref("unsubscribe_campaign_id", "campaigns", "clear")],
   contact_fields: [ws()],
+  contact_field_options: [ws(), ref("field_id", "contact_fields", "skip")],
   contact_field_values: [
     ws(),
     ref("contact_id", "contacts", "skip"),
@@ -177,9 +179,15 @@ export const OLDEST_RESTORABLE_SCHEMA = 16;
 type Upgrade = (table: TableName, row: BackupRow) => BackupRow;
 const identity: Upgrade = (_table, row) => row;
 
-/** Row upgrades by target schema version. 0017 adds only the restore tables. */
+/**
+ * Row upgrades by target schema version.
+ * - 0017 adds only the restore tables.
+ * - 0018 adds `contact_fields.kind` and the options table. A field of an older backup is
+ *   a plain field, so its kind is null. An older backup has no options.
+ */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
+  18: (table, row) => (table === "contact_fields" ? { kind: null, ...row } : row),
 };
 
 /** Returns why a backup of `schemaVersion` cannot be restored here, or null. */

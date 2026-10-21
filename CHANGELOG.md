@@ -12,6 +12,10 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+### Added
+
+- Single-choice and multiple-choice custom fields with options that you can add, rename, reorder, and merge.
+
 ## [0.2.0] - 2026-10-21
 
 ### Added

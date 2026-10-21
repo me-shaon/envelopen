@@ -148,3 +148,45 @@ export function mergeTagText(field: string, fallback: string): string {
   const clean = fallback.replaceAll('"', "");
   return clean ? `{{ ${field} | default: "${clean}" }}` : `{{ ${field} }}`;
 }
+
+// Choice fields (R13) ---------------------------------------------------------------------
+//
+// A choice field stores option ids, so a renamed option prints its new label. A single
+// choice stores one id as text (`12`). A multiple choice stores a JSON array of ids
+// (`[12,15]`). The send path turns the ids into labels before `fill`.
+
+export interface ChoiceOption {
+  id: number;
+  label: string;
+}
+
+/** The option ids in a stored choice value. A value that is not a choice value gives none. */
+export function choiceIds(value: string | null | undefined): number[] {
+  if (!value) return [];
+  const text = value.trim();
+  if (/^\d+$/.test(text)) return [Number(text)];
+  if (!text.startsWith("[")) return [];
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is number => Number.isSafeInteger(item) && item > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The text that a merge tag prints for a choice value: the labels of the chosen options
+ * in option order, joined with ", ". `options` comes in option order. Ids of deleted
+ * options are left out. Returns null when no option is chosen.
+ */
+export function choiceText(
+  value: string | null | undefined,
+  options: readonly ChoiceOption[],
+): string | null {
+  const ids = new Set(choiceIds(value));
+  if (ids.size === 0) return null;
+  const labels = options.filter((option) => ids.has(option.id)).map((option) => option.label);
+  return labels.length === 0 ? null : labels.join(", ");
+}

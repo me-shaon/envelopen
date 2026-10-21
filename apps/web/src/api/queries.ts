@@ -165,6 +165,14 @@ export function tagsQuery(workspaceId: number) {
   });
 }
 
+/** The custom fields with the options of choice fields (R13). */
+export function fieldsQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "fields"],
+    queryFn: () => unwrap(api.GET("/fields")),
+  });
+}
+
 export function suppressionsQuery(workspaceId: number, email: string) {
   return infiniteQueryOptions({
     queryKey: ["ws", workspaceId, "suppressions", email],

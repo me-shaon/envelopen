@@ -52,7 +52,10 @@ export const ContactSchema = z
     tags: z.array(TagRefSchema),
     lists: z.array(ListMembershipSchema),
     fields: z.record(z.string(), z.string().nullable()).meta({
-      description: "Custom field values by field key.",
+      description:
+        "Custom field values by field key. A choice field gives the option id, and a " +
+        "multiple choice field a JSON array of option ids, for example `[12,15]`. " +
+        "`fields.list` has the labels.",
     }),
     createdAt: z.number().int(),
     updatedAt: z.number().int(),

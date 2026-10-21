@@ -1,5 +1,6 @@
 import type { DbConnection } from "@envelopen/db";
 import { missingMergeTags, previewValues, renderMergeTags } from "@envelopen/email-render";
+import { fieldTexts } from "../contacts/fields";
 import { loadContacts } from "../contacts/model";
 import { OperationError } from "../errors";
 
@@ -76,7 +77,8 @@ export async function contactValues(
   const [contact] = await loadContacts(db.db, workspaceId, [contactId]);
   if (!contact) throw new OperationError("not_found", "The contact does not exist.");
   return {
-    ...contact.fields,
+    // Choice fields print their option labels (R13).
+    ...(await fieldTexts(db.db, workspaceId, contact.fields)),
     email: contact.email,
     first_name: contact.firstName,
     last_name: contact.lastName,

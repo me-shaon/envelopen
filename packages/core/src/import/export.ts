@@ -1,6 +1,7 @@
 import type { Database, Row } from "@envelopen/db";
 import { type Kysely, sql } from "kysely";
 import { z } from "zod";
+import { fieldText, loadFieldDefs } from "../contacts/fields";
 import { contactStatus } from "../contacts/model";
 import { type ContactFilters, contactFilterShape, filteredContacts } from "../contacts/query";
 import { pageInputShape, pageOf, pageParams, toPage } from "../pagination";
@@ -41,12 +42,9 @@ export async function buildContactsCsv(
   workspaceId: number,
   filters: ContactFilters,
 ): Promise<{ csv: string; rows: number }> {
-  const fields = await db
-    .selectFrom("contact_fields")
-    .select(["id", "key"])
-    .where("workspace_id", "=", workspaceId)
-    .orderBy("id")
-    .execute();
+  // Choice fields print their option labels, joined with ", " (R13). An import maps the
+  // labels back.
+  const fields = [...(await loadFieldDefs(db, workspaceId)).values()];
   const lines = [csvLine([...EXPORT_COLUMNS, ...fields.map((field) => field.key)])];
   let afterId = 0;
   let count = 0;
@@ -115,7 +113,9 @@ export async function buildContactsCsv(
           row.lists_unsubscribed,
           iso(row.unsubscribed_at),
           iso(row.created_at),
-          ...fields.map((field) => fieldValues.get(`${row.id}:${field.id}`) ?? null),
+          ...fields.map((field) =>
+            fieldText(field, fieldValues.get(`${row.id}:${field.id}`) ?? null),
+          ),
         ]),
       );
     }

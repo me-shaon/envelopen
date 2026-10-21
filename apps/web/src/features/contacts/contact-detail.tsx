@@ -20,6 +20,7 @@ import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { presenceClass, usePresence } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { ContactFieldsSection } from "./contact-fields";
 import {
   CONSENT,
   type ConsentBasis,
@@ -514,7 +515,6 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
   }
 
   const name = [data.firstName, data.lastName].filter(Boolean).join(" ");
-  const fields = Object.entries(data.fields);
 
   return (
     <div className="flex flex-col gap-10">
@@ -569,13 +569,10 @@ export function ContactDetailPage({ contactId }: { contactId: number }) {
               <Detail label="Updated">
                 <span className="figure">{formatDateTime(data.updatedAt)}</span>
               </Detail>
-              {fields.map(([key, value]) => (
-                <Detail key={key} label={key}>
-                  {value ?? <span className="text-muted-foreground">Empty</span>}
-                </Detail>
-              ))}
             </dl>
           </section>
+
+          <ContactFieldsSection contact={data} />
 
           <section aria-labelledby="lists-title" className="flex flex-col gap-4">
             <SectionHeader id="lists-title" title="List memberships" />

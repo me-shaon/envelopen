@@ -12,7 +12,10 @@ export { DARK_MEDIA, EMAIL_CSS, forceDarkMode } from "./layout";
 export { extractLinks, isTrackableHref, rewriteLinks } from "./links";
 export { markdownToFragment, markdownToHtml } from "./markdown";
 export {
+  type ChoiceOption,
   type CompiledTemplate,
+  choiceIds,
+  choiceText,
   compile,
   decodeEntities,
   escapeHtml,

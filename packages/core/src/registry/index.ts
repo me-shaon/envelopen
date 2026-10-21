@@ -47,6 +47,15 @@ import {
 } from "../connections/test-send";
 import { consentList, consentRecord } from "../consent/operations";
 import {
+  fieldsAddOption,
+  fieldsCreate,
+  fieldsDeleteOption,
+  fieldsList,
+  fieldsReorderOptions,
+  fieldsUpdate,
+  fieldsUpdateOption,
+} from "../contacts/fields";
+import {
   contactsAddTags,
   contactsCount,
   contactsDelete,
@@ -220,6 +229,14 @@ export const registry = createRegistry([
   tagsCreate,
   tagsRename,
   tagsDelete,
+  // Custom fields and the options of choice fields (U7, R13).
+  fieldsList,
+  fieldsCreate,
+  fieldsUpdate,
+  fieldsAddOption,
+  fieldsReorderOptions,
+  fieldsUpdateOption,
+  fieldsDeleteOption,
   suppressionsList,
   suppressionsAdd,
   suppressionsRemove,

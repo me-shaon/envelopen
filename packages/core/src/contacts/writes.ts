@@ -28,7 +28,7 @@ function valuesClause(rows: ReadonlyArray<ReadonlyArray<SqlValue>>) {
 }
 
 export const TAG_NAME_MAX = 60;
-const FIELD_KEY_PATTERN = /^[a-z][a-z0-9_]{0,39}$/;
+export const FIELD_KEY_PATTERN = /^[a-z][a-z0-9_]{0,39}$/;
 
 /** Trimmed tag names without duplicates. Throws for an empty or too long name. */
 export function cleanTagNames(names: readonly string[]): string[] {

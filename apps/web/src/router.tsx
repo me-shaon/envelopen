@@ -17,6 +17,7 @@ import { CampaignPage, NewCampaignPage } from "./features/campaigns/campaign-pag
 import { CampaignsPage } from "./features/campaigns/campaigns-page";
 import { ContactDetailPage } from "./features/contacts/contact-detail";
 import { ContactsPage } from "./features/contacts/contacts-page";
+import { FieldsPage } from "./features/contacts/fields-page";
 import { ListsPage, TagsPage } from "./features/contacts/lists-tags";
 import { SuppressionsPage } from "./features/contacts/suppressions-page";
 import { TemplatesPage } from "./features/editor/templates-page";
@@ -173,6 +174,11 @@ const tagsRoute = createRoute({
   path: "/contacts/tags",
   component: TagsPage,
 });
+const fieldsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/contacts/fields",
+  component: FieldsPage,
+});
 const suppressionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/contacts/suppressions",
@@ -238,6 +244,7 @@ const routeTree = rootRoute.addChildren([
     importRoute,
     listsRoute,
     tagsRoute,
+    fieldsRoute,
     suppressionsRoute,
     templatesRoute,
     templateRoute,

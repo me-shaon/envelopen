@@ -208,3 +208,10 @@ All guides are in [docs/guides](docs/guides/README.md):
 - [Connect an MCP client](docs/guides/mcp.md)
 - [Write a provider adapter](docs/guides/adapter-authoring.md)
 - [Release checklist](docs/guides/release-checklist.md)
+
+## License
+
+Envelopen is free software under the [GNU Affero General Public License v3.0](LICENSE).
+
+You can use, change, and share Envelopen. If you change the code and other people use your changed version over a network, you must offer them its source code. This includes the subscribers who open your unsubscribe and preference pages. Changes that you keep in your own deployment repository satisfy this rule when you make that repository public, or when you give the source to people who ask for it.
+

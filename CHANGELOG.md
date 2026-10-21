@@ -12,6 +12,10 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+### Added
+
+- License: GNU Affero General Public License v3.0.
+
 ### Changed
 
 - Faster contact pages, list and tag counts, and audit log on large workspaces.

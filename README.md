@@ -44,6 +44,8 @@ npx wrangler secret put SIGNING_KEY
 
 Wrangler asks for the value. The Worker uses the new value at once.
 
+Signup forms need two more secrets, `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET`, from a Cloudflare Turnstile widget. They are optional. Without them, forms refuse submissions. See [Signup forms](docs/guides/signup-forms.md#set-up-turnstile).
+
 Keep `SIGNING_KEY` stable. A new value signs everyone out. If you must replace it, put the old value in `SIGNING_KEYS_RETIRED`. Unsubscribe links in emails that you already sent then keep working. Suppressions keep matching too, because Envelopen hashes addresses with the key of the first use and finds that key in `SIGNING_KEYS_RETIRED`. Do not remove a retired key. Without it, every operation that checks suppressions fails until you add the key back.
 
 The `PBKDF2_ITERATIONS` variable in `wrangler.jsonc` sets the password hash cost (at most 100,000). Below 100,000, the owner signs in with a passkey. The [release checklist](docs/guides/release-checklist.md) shows how to measure the cost on your account.
@@ -130,6 +132,12 @@ The REST API has the same actions: `POST /api/contacts/{id}/export` and `POST /a
 
 Envelopen records every change with the actor, the surface (UI, API, or MCP), and the target. Exports and erases are in it too. Open **Settings**, then select **Open the audit log**. You can filter by surface and by action.
 
+## Signup forms and welcome series
+
+A signup form is a hosted page that you can also embed on your website in an iframe. Each signup gets a Turnstile check and a confirmation email. The contact joins your lists only after it confirms. See [Signup forms](docs/guides/signup-forms.md).
+
+A welcome series sends 1 to 5 emails, with a wait before each, to each new subscriber of a list. See [Welcome series](docs/guides/welcome-series.md).
+
 ## Backups
 
 Envelopen backs up all data every day at 02:23 UTC to the R2 bucket of the deployment. Each backup is encrypted with a passphrase that only you hold. You can add a copy to an S3-compatible store, and download a backup as one `.envbak` file. Set the passphrase in **Settings** > **Backups** to turn backups on. A restore works on a new deployment, from the first-run screen. See [Back up and restore](docs/guides/backup-and-restore.md).
@@ -208,6 +216,8 @@ All guides are in [docs/guides](docs/guides/README.md):
 - [Provider guides](docs/guides/README.md#email-providers)
 - [Set up a sending domain](docs/guides/sending-domain.md)
 - [Import contacts](docs/guides/import-contacts.md)
+- [Signup forms](docs/guides/signup-forms.md)
+- [Welcome series](docs/guides/welcome-series.md)
 - [Send a test email](docs/guides/test-send.md)
 - [Connect an MCP client](docs/guides/mcp.md)
 - [Update Envelopen](docs/guides/updating.md)

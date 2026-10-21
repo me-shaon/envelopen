@@ -12,17 +12,39 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+
 ### Added
 
-- Single-choice and multiple-choice custom fields with options that you can add, rename, reorder, and merge.
-- Signup forms as a hosted page and an iframe embed, with Turnstile and a confirmation email before each subscription.
-- Custom fields on signup forms with required answers, and on the preference page, where subscribers can see or change their own answers.
-- Welcome series: 1 to 5 emails with a wait before each, sent once to each new subscriber of a list after a confirmed form signup or an add with the start option.
-- A Workers plan setting (Free or Paid). On Free, welcome emails wait after 70% of the daily D1 writes until 00:00 UTC, so campaigns and unsubscribes keep the rest. The usage view shows this threshold and the writes of welcome emails.
+- Single-choice and multiple-choice custom fields, with options that you can rename, reorder, and merge.
+- Signup forms as a hosted page and an iframe embed, with Turnstile and double opt-in.
+- Consent records for form signups: the form, the consent text version, an IP hash, and the user agent.
+- Required fields on forms.
+- Custom fields on the preference page, hidden, read only, or editable by the subscriber.
+- Welcome series: 1 to 5 emails with a wait before each, for new subscribers of a list.
+- A Workers plan setting (Free or Paid) in Settings.
+- Guides for signup forms and welcome series.
+
+### Changed
+
+- Imports map choice fields by option label, without regard to case. Unknown labels go to the error file.
+- Exports and merge tags print the labels of choice fields.
+- On Workers Free, welcome emails wait after 70% of the daily D1 writes until 00:00 UTC.
+- The usage view shows the welcome threshold and the D1 writes of welcome emails.
+- Unsubscribes, suppressions, and erases stop the welcome series of the contact.
+
+### Security
+
+- Every form submission gets the same response, and suppressed addresses get no email.
+- Rate limits on form submissions and confirmation emails, for each IP, address, form, and workspace.
+- A confirmation link confirms only with a button press, so mail scanners cannot confirm.
+- Embed origins must be bare https origins before they enter `frame-ancestors`.
+- Turnstile tokens must match the hostname of the form page and the action of the widget.
 
 ### Manual steps
 
 - To use signup forms, create a Turnstile widget for the hostname of your deployment in the Cloudflare dashboard. Then set the Worker secrets `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET`.
+- If your account is on Workers Paid, set **Settings** > **Workers plan** to **Workers Paid**.
 
 ## [0.2.0] - 2026-10-21
 
@@ -81,6 +103,7 @@ The first release of Envelopen: self-hosted email campaigns on Cloudflare Worker
 - Erase also removes the contact from stored batch data.
 - Unsubscribe links use the tracking domain only after it is verified.
 
-[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/me-shaon/envelopen/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/me-shaon/envelopen/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/me-shaon/envelopen/releases/tag/v0.1.0

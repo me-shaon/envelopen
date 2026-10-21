@@ -51,6 +51,15 @@ If no import starts, Envelopen deletes the uploaded file after 24 hours.
 
 Envelopen trims and lowercases each address before the import.
 
+If a column maps to a single-choice or a multiple-choice field, each cell must hold option labels:
+
+- Envelopen matches a label without regard to case. For example, `design` matches the option **Design**.
+- In a multiple-choice field, separate the labels with commas, for example `Design, Data`. A label cannot contain a comma.
+- A single-choice field takes one label.
+- If a label is not an option of the field, the row is not imported. The row goes to the error file. The other rows continue.
+
+To create a choice field and its options, open **Contacts** > **Fields** before the import. See [Signup forms](signup-forms.md#custom-fields-on-a-form).
+
 ### Set the consent basis, tags, and lists
 
 1. Under **Why may you email these contacts?**, select one consent basis. It is required.
@@ -103,6 +112,8 @@ The reasons in the error file:
 | Duplicate of an earlier row | An earlier row has the same address. |
 | Suppressed | The address is on the suppression list. |
 | Unsubscribed | The contact unsubscribed earlier. |
+| "`<label>`" is not an option of the field `<key>`. | A cell of a choice field holds a label that the field does not have. |
+| The field `<key>` takes one option. | A cell of a single-choice field holds more than one label. |
 
 ### Suppress addresses
 
@@ -122,7 +133,7 @@ An address that is suppressed already keeps its first reason. A contact with a s
 4. In the dialog, select **Create export**.
 5. Select **Download CSV**.
 
-The export holds the contacts that match the filters. Its columns are `email`, `first_name`, `last_name`, `status`, `consent_basis`, `consent_source`, `consent_at`, `source`, `tags`, `lists_subscribed`, `lists_unsubscribed`, `unsubscribed_at`, `created_at`, and one column for each custom field. A cell that starts with `=`, `+`, `-`, `@`, a tab, or a carriage return gets a leading quote, so spreadsheets show it as text. The download link works for 24 hours. Then Envelopen deletes the file.
+The export holds the contacts that match the filters. Its columns are `email`, `first_name`, `last_name`, `status`, `consent_basis`, `consent_source`, `consent_at`, `source`, `tags`, `lists_subscribed`, `lists_unsubscribed`, `unsubscribed_at`, `created_at`, and one column for each custom field. A choice field shows its option labels, separated by ", ". You can import the file again with the same labels. A cell that starts with `=`, `+`, `-`, `@`, a tab, or a carriage return gets a leading quote, so spreadsheets show it as text. The download link works for 24 hours. Then Envelopen deletes the file.
 
 ### Import through the API
 
@@ -141,6 +152,7 @@ The REST API has the same steps: `POST /api/imports`, `POST /api/imports/{id}/pr
 | "A row is longer than 64 KB." | One row is too long, often from a missing closing quote. | Fix the quotes in the file. |
 | The upload expired. | No import started within 24 hours. | Upload the file again. |
 | The import waits until 00:00 UTC. | The D1 daily write limit on Workers Free. | Wait for the reset, or upgrade to Workers Paid. |
+| A row with a choice field is in the error file. | The label is not an option of the field. | Add the option in **Contacts** > **Fields**, or correct the label. Then import the rows again. |
 | A contact did not get the new consent basis. | Envelopen does not lower a basis, and an API key cannot raise **Unknown**. | Open the contact, and select **Record consent**. |
 
 ## Related guides

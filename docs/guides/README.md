@@ -11,7 +11,9 @@ Vendors change their limits and prices often. Each guide shows the date of the l
 | [README](../../README.md) | Deploy, secrets, first-run setup, and the first campaign. |
 | [Run Envelopen locally](local-development.md) | Local secrets, the local database, the cron, and the provider mock. |
 | [Set up a sending domain](sending-domain.md) | DNS records, verification, and the tracking domain. |
-| [Import contacts](import-contacts.md) | CSV files, column mapping, consent basis, tags, lists, and export. |
+| [Import contacts](import-contacts.md) | CSV files, column mapping, choice fields, consent basis, tags, lists, and export. |
+| [Signup forms](signup-forms.md) | Turnstile, the hosted page, the iframe embed, double opt-in, consent records, custom fields, and the preference page. |
+| [Welcome series](welcome-series.md) | Steps and waits, what starts and stops a series, test sends, and the reserved D1 budget. |
 | [Send a test email](test-send.md) | Test addresses, test sends, and the unsubscribe headers in Gmail. |
 | [Connect an MCP client](mcp.md) | API keys, scope presets, and the confirm flow for agents. |
 | [Update Envelopen](updating.md) | The update workflow, update modes, manual updates, backups, and rollback. |

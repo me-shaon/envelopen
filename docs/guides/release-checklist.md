@@ -190,6 +190,59 @@ Expected result: the backup key is ready within about 30 seconds, and no Workflo
 5. Do the same for the passphrase check at the start of a restore (check 13).
 6. Record the times. If a step is near 10 ms of CPU, lower `PBKDF2_SEGMENT_ITERATIONS` in `packages/core/src/backup/crypto.ts`.
 
+## 15. Turnstile on a real hostname and in an iframe (v0.3)
+
+Expected result: a signup passes Turnstile on the hosted page and in an iframe on a real website, and an iframe on another website is blocked.
+
+1. Create a Turnstile widget with the hostname of the deployment. Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET`. See [Signup forms](signup-forms.md#set-up-turnstile).
+2. Create a form with one list, one single-choice field, and one multiple-choice field.
+3. Open the hosted page. Submit one of your own addresses, and check that the page shows **Check your inbox**.
+4. Add the origin of a website that you control to **Websites that can embed the form**, and save the form.
+5. Paste the **Iframe snippet** into a page of that website. Publish the page over https.
+6. Submit another of your own addresses in the iframe. Check that the widget passes and that the page shows **Check your inbox**.
+7. Check that the recommended height shows every state without a scroll bar. Look at the error summary and **Check your inbox**.
+8. Paste the snippet into a page on a website that is not in the list. Check that the browser blocks the iframe.
+9. In the browser console of each page, check that there is no Content-Security-Policy violation.
+10. Run `npx wrangler tail --format json`. Check that no siteverify call fails with `hostname-mismatch` or `action-mismatch`.
+
+## 16. Confirmation email through a real provider (v0.3)
+
+Expected result: the confirmation email arrives in an inbox that you own, and the confirm adds the contact with the consent record.
+
+1. Connect a real provider, and verify a sending domain.
+2. Submit the form with an address that you own.
+3. Check that the email "Confirm your subscription to `<form name>`" arrives. Check the From address, and check that SPF, DKIM, and DMARC pass.
+4. Open the link. Check that the page shows **Confirm** and that the contact does not exist yet.
+5. Select **Confirm**. Check that the page shows the success message.
+6. Open the contact. Check the list, the answers, the basis **Explicit opt-in**, and the consent history entry of the form.
+7. Submit the same address again within one hour. Check that the page shows **Check your inbox** and that no second email arrives.
+8. Record the provider and the time from the submission to the email.
+
+## 17. Welcome step through a real provider (v0.3)
+
+Expected result: each step arrives once, after its wait, with working unsubscribe headers.
+
+1. Create a series for the list of the form with two emails. Set a wait of 1 minute for email 1 and 5 minutes for email 2.
+2. Turn the series on.
+3. Confirm a signup with an address that you own.
+4. Check that email 1 arrives after about 1 minute and email 2 after about 5 more minutes.
+5. In Gmail, check `List-Unsubscribe` and `List-Unsubscribe-Post` with **Show original**.
+6. Confirm a second address. After email 1, unsubscribe with the link in the email. Check that email 2 does not arrive.
+7. On the **Welcome series** page, check the counts of **Contacts** and **Sent**.
+
+## 18. The Workers plan setting (v0.3)
+
+Expected result: on Free, welcome emails wait past 70% of the daily D1 writes, and campaigns and unsubscribes keep working.
+
+1. On the Free deployment, open **Settings** > **Workers plan**. Check that **Workers Free** is selected.
+2. Bring D1 past 70,000 rows written for the day. For example, import test addresses.
+3. Confirm a signup to a list with a series that has a wait of 1 minute.
+4. Check that the usage view shows the threshold and that the welcome email waits.
+5. Send a campaign to one of your own addresses. Check that it sends.
+6. Unsubscribe from the campaign. Check that the unsubscribe works.
+7. After 00:00 UTC, check that the welcome email arrives.
+8. Select **Workers Paid**, and select **Save plan**. Check that the usage view shows the plan as Paid. Set the plan back to **Workers Free**.
+
 ## Release process
 
 A release is a `vX.Y.Z` tag on `main`. The release workflow (`.github/workflows/release.yml`) checks the tag, runs the checks, and creates the GitHub release. The update workflow in each copy then finds the release.
@@ -226,5 +279,6 @@ The plan leaves these questions for a deployed check. Record the answers here:
 - The sweep timeout for `enqueued` batches, compared with the normal queue backlog on Free.
 - Whether the Deploy button provisions the dead-letter queue on a Free account (check 1), and the Queues operation count for a 5,000-recipient campaign.
 - The time and the CPU of the passphrase derivation on Free (check 14).
+- Whether Turnstile in an iframe needs the hostname of the embedding website in the widget (check 15).
 
 Last checked: 2026-10-21

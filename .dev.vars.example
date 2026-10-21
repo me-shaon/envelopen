@@ -17,3 +17,8 @@ SIGNING_KEY=replace-with-base64-32-byte-key
 # Optional. After you replace SIGNING_KEY, put the old value here (comma-separated for
 # several), so unsubscribe links in emails that were already sent keep working.
 # SIGNING_KEYS_RETIRED=
+
+# Optional. Cloudflare Turnstile keys for signup forms. Without them, forms refuse
+# submissions. For local development, use the test keys of Cloudflare: they always pass.
+# TURNSTILE_SITE_KEY=1x00000000000000000000AA
+# TURNSTILE_SECRET=1x0000000000000000000000000000000AA

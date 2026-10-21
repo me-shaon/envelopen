@@ -159,6 +159,7 @@ export async function testServices(options: { fetch?: typeof fetch } = {}): Prom
       status: async () => services.usageStatus,
     },
     settingsCache: memorySettingsCache(),
+    turnstileConfigured: true,
   };
   return services;
 }

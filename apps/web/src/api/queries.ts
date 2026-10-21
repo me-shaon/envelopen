@@ -245,6 +245,24 @@ export function testAddressesQuery(workspaceId: number) {
 
 // Templates and saved blocks (U8) --------------------------------------------------------
 
+/** The signup forms, and whether the deployment has Turnstile keys (U8). */
+export function formsQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "forms", "list"],
+    queryFn: () => unwrap(api.GET("/forms")),
+  });
+}
+
+export function formQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "forms", "one", id],
+    queryFn: () => unwrap(api.GET("/forms/{id}", { params: { path: { id } } })),
+    // The editor owns the draft after the first load. A refetch would reset it.
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function templatesQuery(workspaceId: number) {
   return queryOptions({
     queryKey: ["ws", workspaceId, "templates", "list"],

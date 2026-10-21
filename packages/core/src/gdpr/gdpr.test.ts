@@ -144,6 +144,33 @@ async function addTraces(
       ip: null,
     })
     .execute();
+  // A pending signup for the address on a form (U8), with an answer in its values.
+  const form = await db.db
+    .insertInto("forms")
+    .values({
+      workspace_id: workspaceId,
+      public_id: crypto.randomUUID().replaceAll("-", "").slice(0, 20),
+      name: "Course news",
+      consent_text: "I agree.",
+      success_message: "Thanks.",
+    })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+  await db.db
+    .insertInto("signups")
+    .values({
+      workspace_id: workspaceId,
+      form_id: form.id,
+      email: EMAIL,
+      email_hash: emailHash,
+      field_values: JSON.stringify({ note: `${SURNAME} fan` }),
+      consent_version: 1,
+      ip_hash: null,
+      user_agent: null,
+      token_hash: crypto.randomUUID(),
+      expires_at: LATER + 86_400_000,
+    })
+    .execute();
 }
 
 /**
@@ -329,6 +356,7 @@ describe("contact erase", () => {
     const markers = [EMAIL, SURNAME];
     const before = await plaintextHits(markers);
     expect(before).toContain(`campaign_batches.recipient_set has "${EMAIL}"`);
+    expect(before).toContain(`signups.email has "${EMAIL}"`);
 
     const result = await run<{ id: number; removed: Record<string, number> }>(
       owner,

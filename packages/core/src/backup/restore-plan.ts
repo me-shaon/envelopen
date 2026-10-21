@@ -72,6 +72,9 @@ export const RESTORE_ORDER: readonly TableName[] = [
   "tags",
   "contact_tags",
   "consent_events",
+  "forms",
+  "signups",
+  "form_consents",
   "suppressions",
   "consent_tombstones",
   "imports",
@@ -126,6 +129,13 @@ export const FOREIGN_KEYS: Readonly<Partial<Record<TableName, readonly ForeignKe
   tags: [ws()],
   contact_tags: [ws(), ref("contact_id", "contacts", "skip"), ref("tag_id", "tags", "skip")],
   consent_events: [ws(), ref("contact_id", "contacts", "skip")],
+  forms: [ws()],
+  signups: [ws(), ref("form_id", "forms", "skip")],
+  form_consents: [
+    ws(),
+    ref("consent_event_id", "consent_events", "skip"),
+    ref("form_id", "forms", "clear"),
+  ],
   suppressions: [ws(), ref("campaign_id", "campaigns", "clear")],
   consent_tombstones: [ws()],
   imports: [ws()],
@@ -184,10 +194,12 @@ const identity: Upgrade = (_table, row) => row;
  * - 0017 adds only the restore tables.
  * - 0018 adds `contact_fields.kind` and the options table. A field of an older backup is
  *   a plain field, so its kind is null. An older backup has no options.
+ * - 0019 adds only new tables (forms, signups, form consents). An older backup has none.
  */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
   18: (table, row) => (table === "contact_fields" ? { kind: null, ...row } : row),
+  19: identity,
 };
 
 /** Returns why a backup of `schemaVersion` cannot be restored here, or null. */

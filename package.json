@@ -79,6 +79,12 @@
       "UNSUBSCRIBE_LEDGER": {
         "description": "Durable Object that keeps unsubscribes that D1 rejected at its daily limit. Sends skip these contacts, and the cron writes the unsubscribes to D1 after the reset."
       },
+      "TURNSTILE_SITE_KEY": {
+        "description": "Optional. The site key of a Cloudflare Turnstile widget for signup forms. Create the widget in the Cloudflare dashboard under Turnstile, with the hostname of this deployment. Without it, forms refuse submissions."
+      },
+      "TURNSTILE_SECRET": {
+        "description": "Optional. The secret key of the same Turnstile widget. The Worker sends it to Turnstile to check each form submission."
+      },
       "SIGNING_KEYS_RETIRED": {
         "description": "Optional. Earlier SIGNING_KEY values, comma-separated, so links in old emails keep working and suppressions keep matching after a key rotation. Do not remove a retired key."
       }

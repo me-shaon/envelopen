@@ -10,7 +10,7 @@
     "directory": "apps/web/dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/mcp*", "/t/*", "/u/*", "/hooks/*"]
+    "run_worker_first": ["/api/*", "/mcp*", "/t/*", "/u/*", "/f/*", "/hooks/*"]
   },
   // Resource IDs are omitted. Wrangler and the Deploy button provision them on the first deploy.
   "d1_databases": [

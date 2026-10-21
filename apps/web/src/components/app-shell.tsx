@@ -3,6 +3,7 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   BookOpenIcon,
   CircleAlertIcon,
+  ClipboardListIcon,
   FileTextIcon,
   HouseIcon,
   type LucideIcon,
@@ -35,7 +36,7 @@ import { WorkspaceContext, type WorkspaceContextValue } from "./workspace-contex
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 interface NavItem {
-  to: "/" | "/campaigns" | "/contacts" | "/templates" | "/connections" | "/settings";
+  to: "/" | "/campaigns" | "/contacts" | "/templates" | "/forms" | "/connections" | "/settings";
   label: string;
   icon: LucideIcon;
 }
@@ -45,6 +46,7 @@ const MAIN_NAV: NavItem[] = [
   { to: "/campaigns", label: "Campaigns", icon: SendIcon },
   { to: "/contacts", label: "Contacts", icon: UsersIcon },
   { to: "/templates", label: "Templates", icon: FileTextIcon },
+  { to: "/forms", label: "Forms", icon: ClipboardListIcon },
 ];
 
 const WORKSPACE_NAV: NavItem[] = [{ to: "/connections", label: "Connections", icon: PlugIcon }];

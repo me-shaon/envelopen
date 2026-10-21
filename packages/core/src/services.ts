@@ -140,6 +140,8 @@ export interface Services {
   startBackupJob(job: BackupJob): Promise<void>;
   /** Starts the key derivation Workflow for one passphrase (U4). */
   startKeyDerivation(job: KeyDerivationJob): Promise<void>;
+  /** True when TURNSTILE_SITE_KEY and TURNSTILE_SECRET are set, so forms take signups (U8). */
+  turnstileConfigured: boolean;
 }
 
 /** Returns the service, or throws when the surface did not provide it. */

@@ -11,6 +11,7 @@
     "./layout": "./src/layout.ts",
     "./merge-tags": "./src/merge-tags.ts",
     "./bench": "./src/bench-fixtures.ts",
+    "./form-page": "./src/form-page.ts",
     "./personalize": "./src/personalize.ts"
   },
   "scripts": {

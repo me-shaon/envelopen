@@ -21,6 +21,7 @@ import { createDb } from "@envelopen/db";
 import { createTokenSigner, type TokenSigner } from "@envelopen/email-render";
 import { isUsableKey } from "./auth/better-auth";
 import { usageReader } from "./do/usage";
+import { turnstileKeys } from "./forms/turnstile";
 
 // Builds the platform services that operations need from the Worker's bindings (see
 // packages/core/src/services.ts). The keyed hasher, the link signer, and the
@@ -291,6 +292,8 @@ export function createServices(
     | "ENCRYPTION_KEY"
     | "OUTBOUND_MOCK_ORIGIN"
     | "KV"
+    | "TURNSTILE_SITE_KEY"
+    | "TURNSTILE_SECRET"
   >,
   request?: Request,
 ): Partial<Services> {
@@ -305,6 +308,7 @@ export function createServices(
     startKeyDerivation: keyDerivationStarter(env),
     sendQueue: sendQueue(env),
     usage: usageReader(env),
+    turnstileConfigured: turnstileKeys(env) !== null,
   };
   const cache = settingsCache(env);
   if (cache) services.settingsCache = cache;

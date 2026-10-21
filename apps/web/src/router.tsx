@@ -21,6 +21,8 @@ import { FieldsPage } from "./features/contacts/fields-page";
 import { ListsPage, TagsPage } from "./features/contacts/lists-tags";
 import { SuppressionsPage } from "./features/contacts/suppressions-page";
 import { TemplatesPage } from "./features/editor/templates-page";
+import { FormEditorPage } from "./features/forms/form-editor";
+import { FormsPage } from "./features/forms/forms-page";
 import { ImportPage } from "./features/import/import-page";
 import { ConnectionsPage } from "./features/providers/connections-page";
 import { DomainDetailPage, DomainsPage } from "./features/providers/domains-page";
@@ -195,6 +197,19 @@ const templateRoute = createRoute({
   path: "/templates/$templateId",
   component: lazyRouteComponent(() => import("./features/editor/editor-page"), "EditorRoute"),
 });
+const formsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/forms",
+  component: FormsPage,
+});
+const formRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/forms/$formId",
+  component: function Form() {
+    const { formId } = formRoute.useParams();
+    return <FormEditorPage key={formId} formId={formId} />;
+  },
+});
 const connectionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/connections",
@@ -248,6 +263,8 @@ const routeTree = rootRoute.addChildren([
     suppressionsRoute,
     templatesRoute,
     templateRoute,
+    formsRoute,
+    formRoute,
     connectionsRoute,
     domainsRoute,
     domainRoute,

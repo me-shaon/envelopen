@@ -37,6 +37,12 @@ const secrets = ["SETUP_TOKEN", "SIGNING_KEY", "ENCRYPTION_KEY"].map((name) => {
   return `${name}:${value}`;
 });
 
+// Optional secrets: the forms spec sets Cloudflare's Turnstile test keys for its Worker.
+for (const name of ["TURNSTILE_SITE_KEY", "TURNSTILE_SECRET"]) {
+  const value = process.env[`E2E_${name}_${stateKey}`];
+  if (value) secrets.push(`${name}:${value}`);
+}
+
 rmSync(new URL(`../../../${state}`, import.meta.url), { recursive: true, force: true });
 
 const migrate = spawnSync(

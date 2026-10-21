@@ -14,6 +14,13 @@ interface EnvelopenSecrets {
    */
   SIGNING_KEYS_RETIRED?: string;
   /**
+   * The Turnstile widget's site key for signup forms (U8, KTD6). Without it and
+   * TURNSTILE_SECRET, forms show a setup notice and refuse submissions.
+   */
+  TURNSTILE_SITE_KEY?: string;
+  /** The Turnstile widget's secret key, for siteverify. */
+  TURNSTILE_SECRET?: string;
+  /**
    * End-to-end tests only: a localhost origin that receives every outbound provider and
    * DNS request instead of the real host. Never set it on a deployed Worker.
    */

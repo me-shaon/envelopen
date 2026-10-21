@@ -20,6 +20,7 @@ import { sql } from "kysely";
 // - `idempotency_keys` with a stored response that holds the address.
 // - `test_addresses` with the same address.
 // - `consent_tombstones` with the address hash. The suppression is enough.
+// - `signups` (U8): pending and confirmed signups of the address, on any form.
 //
 // Files in R2 (import uploads, error files, and contact exports) can hold the address
 // too. They expire after FILE_TTL_MS, and cleanup deletes them.
@@ -147,6 +148,12 @@ WHERE campaign_batches.workspace_id = ${workspaceId} AND campaign_batches.id = r
       .deleteFrom("test_addresses")
       .where("workspace_id", "=", workspaceId)
       .where("email", "=", target.email),
+    db.db
+      .deleteFrom("signups")
+      .where("workspace_id", "=", workspaceId)
+      .where((eb) =>
+        eb.or([eb("email", "=", target.email), eb("email_hash", "=", target.emailHash)]),
+      ),
     // 5. The contact. Foreign keys cascade to tags, memberships, fields, and consent.
     db.db
       .deleteFrom("contacts")

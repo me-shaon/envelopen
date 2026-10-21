@@ -62,6 +62,50 @@ export { isOperationError, OperationError, type OperationErrorCode } from "./err
 export * from "./events";
 export { type OperationDeps, runOperation } from "./executor";
 export {
+  type ConfirmOutcome,
+  confirmSignup,
+  FORM_CONSENT_BASIS,
+  FORM_SOURCE,
+  purgeExpiredSignups,
+} from "./forms/confirm";
+export {
+  FormSchema,
+  MAX_SIGNUP_RESENDS,
+  normalizeEmbedOrigin,
+  SIGNUP_TOKEN_TTL_MS,
+  textList,
+} from "./forms/model";
+export {
+  formsCreate,
+  formsDelete,
+  formsGet,
+  formsList,
+  formsUpdate,
+} from "./forms/operations";
+export {
+  ADDRESS_EMAIL_RULE,
+  type CountLimiter,
+  type CountRule,
+  canResend,
+  confirmationEmail,
+  confirmPath,
+  FORM_EMAIL_RULE,
+  hashSignupToken,
+  loadPublicForm,
+  type PublicForm,
+  type RawSubmission,
+  type ResendOutcome,
+  resendSignup,
+  type SignupDeps,
+  type SignupOutcome,
+  type SignupState,
+  signupLimitKeys,
+  signupOfToken,
+  submitSignup,
+  validateSubmission,
+  WORKSPACE_EMAIL_RULE,
+} from "./forms/signup";
+export {
   type ContactExport,
   ContactExportSchema,
   MAX_EXPORT_ROWS,

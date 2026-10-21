@@ -30,6 +30,10 @@ const ZONE = {
 const TYPE_CODES = { A: 1, CNAME: 5, MX: 15, TXT: 16 };
 
 const sent = [];
+/** The Turnstile siteverify calls, for the spec to inspect. */
+const siteverify = [];
+/** The token that Cloudflare's always-passing test widget gives. */
+const TEST_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
 
 function json(res, status, body) {
   res.writeHead(status, { "content-type": "application/json" });
@@ -40,6 +44,17 @@ const routes = {
   "GET /health": (_req, res) => json(res, 200, { ok: true }),
   // The emails that the Worker sent through the mock Resend, for the spec to inspect.
   "GET /sent": (_req, res) => json(res, 200, sent),
+  // A website page with a form embed, for the forms spec: an iframe of `?src=`.
+  "GET /embed": (req, res) => {
+    const src = new URL(req.url, "http://mock").searchParams.get("src") ?? "";
+    if (!/^http:\/\/localhost:\d+\/f\/[0-9a-f]{20}\?embed=1$/.test(src)) {
+      return json(res, 400, { message: "Pass a form URL as src." });
+    }
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(
+      `<!doctype html><title>Site</title><h1>Our course</h1><iframe src="${src}" title="Signup" width="100%" height="640" style="border:0"></iframe>`,
+    );
+  },
   "GET /api.resend.com/domains": (_req, res) =>
     json(res, 200, { data: [{ id: "d91cd9bd", name: DOMAIN }] }),
   "GET /api.resend.com/domains/d91cd9bd": (_req, res) =>
@@ -70,6 +85,30 @@ const routes = {
     const records = emails.map((email, index) => ({ ...email, id: `e2e-${end}-${index}` }));
     sent.push(...records);
     json(res, 200, { data: records.map((record) => ({ id: record.id })) });
+  },
+  // Turnstile siteverify, as Cloudflare answers for its test secrets: the 1x secret
+  // passes the test token, and the 2x secret fails every token. Like the real test
+  // secrets, the answer has the hostname example.com and no action.
+  "GET /siteverify": (_req, res) => json(res, 200, siteverify),
+  "POST /challenges.cloudflare.com/turnstile/v0/siteverify": (_req, res, body) => {
+    const form = new URLSearchParams(body);
+    const secret = form.get("secret") ?? "";
+    const response = form.get("response") ?? "";
+    siteverify.push({ secret: secret.slice(0, 2), response, remoteip: form.get("remoteip") });
+    if (secret.startsWith("1x") && response === TEST_TOKEN) {
+      return json(res, 200, {
+        success: true,
+        challenge_ts: new Date().toISOString(),
+        hostname: "example.com",
+        "error-codes": [],
+        metadata: { result_with_testing_key: true },
+      });
+    }
+    return json(res, 200, {
+      success: false,
+      "error-codes": ["invalid-input-response"],
+      metadata: { result_with_testing_key: true },
+    });
   },
   "GET /api.tosend.com/v2/info": (_req, res) =>
     json(res, 200, {

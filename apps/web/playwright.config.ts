@@ -2,10 +2,10 @@ import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 
 // End-to-end tests of the admin app against `wrangler dev` with a local D1.
-// Nine Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
-// one each for the contacts, providers, editor, campaigns, and first-campaign specs,
-// so their owners and data start fresh, and two for the backup spec: the source and
-// the restore target, which has its own keys. The providers, editor, campaigns, and
+// Ten Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
+// one each for the contacts, providers, editor, campaigns, first-campaign, and forms
+// specs, so their owners and data start fresh, and two for the backup spec: the source
+// and the restore target, which has its own keys. The providers, editor, campaigns, and
 // first-campaign Workers send their provider and DNS requests to local mock servers
 // (e2e/provider-mock.mjs), one each, so each spec sees only its own sent emails.
 // The secrets are random per run unless E2E_* variables set them. Playwright loads this
@@ -32,6 +32,13 @@ export const FIRST_CAMPAIGN_MOCK_PORT = 8800;
 export const BACKUP_SOURCE_PORT = 8801;
 export const BACKUP_TARGET_PORT = 8802;
 export const BACKUP_MOCK_PORT = 8803;
+export const FORMS_PORT = 8804;
+export const FORMS_MOCK_PORT = 8805;
+
+// The forms Worker uses Cloudflare's documented Turnstile test keys: the site key always
+// passes, and the secret accepts the test token. Siteverify goes to the provider mock.
+process.env.E2E_TURNSTILE_SITE_KEY_FORMS ??= "1x00000000000000000000AA";
+process.env.E2E_TURNSTILE_SECRET_FORMS ??= "1x0000000000000000000000000000000AA";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -151,6 +158,23 @@ export default defineConfig({
     {
       command: `node e2e/serve.mjs ${BACKUP_SOURCE_PORT} backup-source 100000 http://127.0.0.1:${BACKUP_MOCK_PORT}`,
       url: `http://localhost:${BACKUP_SOURCE_PORT}/api/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      // The forms mock serves the DMARC record and answers Turnstile siteverify.
+      command: `node e2e/provider-mock.mjs ${FORMS_MOCK_PORT} --dmarc`,
+      url: `http://127.0.0.1:${FORMS_MOCK_PORT}/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      command: `node e2e/serve.mjs ${FORMS_PORT} forms 100000 http://127.0.0.1:${FORMS_MOCK_PORT}`,
+      url: `http://localhost:${FORMS_PORT}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: "ignore",

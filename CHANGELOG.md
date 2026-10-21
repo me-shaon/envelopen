@@ -15,6 +15,11 @@ The release workflow uses the section of a version as the notes of its GitHub re
 ### Added
 
 - Single-choice and multiple-choice custom fields with options that you can add, rename, reorder, and merge.
+- Signup forms as a hosted page and an iframe embed, with Turnstile and a confirmation email before each subscription.
+
+### Manual steps
+
+- To use signup forms, create a Turnstile widget for the hostname of your deployment in the Cloudflare dashboard. Then set the Worker secrets `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET`.
 
 ## [0.2.0] - 2026-10-21
 

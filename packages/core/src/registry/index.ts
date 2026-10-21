@@ -73,6 +73,7 @@ import {
   domainsList,
   domainsUpdate,
 } from "../domains/operations";
+import { formsCreate, formsDelete, formsGet, formsList, formsUpdate } from "../forms/operations";
 import { contactsErase, contactsExport } from "../gdpr/operations";
 import { exportsCreate, exportsList } from "../import/export";
 import {
@@ -240,6 +241,12 @@ export const registry = createRegistry([
   suppressionsList,
   suppressionsAdd,
   suppressionsRemove,
+  // Signup forms with double opt-in (U8, R10, R11). Changes stay with the owner session.
+  formsList,
+  formsGet,
+  formsCreate,
+  formsUpdate,
+  formsDelete,
   importsList,
   importsCreate,
   importsGet,

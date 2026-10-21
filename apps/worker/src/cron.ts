@@ -11,6 +11,7 @@ import {
   isOperationError,
   keyMaterialOf,
   purgeExpiredEvents,
+  purgeExpiredSignups,
   type RetentionResult,
   readBackupSettings,
   redispatchWaiting,
@@ -53,7 +54,8 @@ import { backupStarter, campaignStarter, createServices, sendQueue } from "./ser
 // 5. The event pipeline (U10): provider events that no flush applied go to their
 //    EventBuffer again, and once an hour raw events past the workspace's retention
 //    period are deleted (R51). Rollups stay. In the same run, backup key derivations
-//    that stopped are failed and their sealed secrets are cleared (U4).
+//    that stopped are failed and their sealed secrets are cleared (U4), and signups
+//    7 days after their creation, with an expired link, are deleted (U8).
 // 6. Once a day, the stored member counts of lists and tags are recounted
 //    (lists/counts.ts). Triggers keep them, so the recount normally writes nothing.
 // 7. Once a day, backups past their retention period are removed, and the encrypted
@@ -224,6 +226,10 @@ export async function runEventCron(
     // Backup key derivations that stopped: fail them and clear their sealed secrets.
     await expireKeyDerivations(db, now).catch((error) =>
       console.error("Cron job key derivation expiry failed", error),
+    );
+    // Signups 7 days after their creation, once their link has expired (U8, KTD7).
+    await purgeExpiredSignups(db, now).catch((error) =>
+      console.error("Cron job signup cleanup failed", error),
     );
   }
   return report;

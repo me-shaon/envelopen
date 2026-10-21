@@ -689,6 +689,69 @@ export interface AuthPasskeyTable {
   aaguid: string | null;
 }
 
+// Signup forms (U8, KTD5, KTD6, KTD7) ------------------------------------------------------
+
+/** A hosted and embeddable signup form (0019_forms_signups.sql). */
+export interface FormsTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  /** The random id in the public URL `/f/<public_id>`. */
+  public_id: Immutable<string>;
+  name: string;
+  /** JSON array of list ids. */
+  list_ids: Defaulted<string>;
+  /** JSON array of the custom field ids that the form asks. */
+  field_ids: Defaulted<string>;
+  consent_text: string;
+  /** Goes up by one when the consent text changes. */
+  consent_version: Defaulted<number>;
+  success_message: string;
+  /** JSON array of bare origins for `frame-ancestors`. */
+  allowed_origins: Defaulted<string>;
+  from_name: string | null;
+  from_email: string | null;
+  enabled: Defaulted<Bool>;
+  created_at: Generated<number>;
+  updated_at: Defaulted<number>;
+}
+
+/** A pending signup until its confirmation (0019_forms_signups.sql). */
+export interface SignupsTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  form_id: Immutable<number>;
+  /** The normalized address. */
+  email: string;
+  /** Keyed hash of the normalized address, as in `suppressions.email_hash`. */
+  email_hash: string;
+  /** JSON object of stored field values by field key. */
+  field_values: string | null;
+  consent_version: number;
+  /** Keyed hash of the IP address. */
+  ip_hash: string | null;
+  user_agent: string | null;
+  /** SHA-256 hex of the confirmation token. */
+  token_hash: string;
+  expires_at: number;
+  resend_count: Defaulted<number>;
+  /** When the last confirmation email went out, or null when none did. */
+  sent_at: Defaulted<number | null>;
+  confirmed_at: Defaulted<number | null>;
+  created_at: Generated<number>;
+}
+
+/** The form evidence of a consent event (0019_forms_signups.sql). Append-only. */
+export interface FormConsentsTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  consent_event_id: Immutable<number>;
+  form_id: number | null;
+  consent_version: Immutable<number>;
+  ip_hash: Immutable<string | null>;
+  user_agent: Immutable<string | null>;
+  created_at: Generated<number>;
+}
+
 // Backups (U4, KTD2) ---------------------------------------------------------------------
 
 export type BackupRunStatus = "running" | "succeeded" | "partial" | "failed";
@@ -850,6 +913,9 @@ export interface Database {
   key_derivations: KeyDerivationsTable;
   restore_runs: RestoreRunsTable;
   restore_tables: RestoreTablesTable;
+  forms: FormsTable;
+  signups: SignupsTable;
+  form_consents: FormConsentsTable;
 }
 
 export type TableName = keyof Database;
@@ -909,6 +975,10 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   // Restores into this deployment (U5).
   restore_runs: "global",
   restore_tables: "global",
+  // Signup forms (U8).
+  forms: "tenant",
+  signups: "tenant",
+  form_consents: "tenant",
 };
 
 export const TENANT_TABLES: ReadonlySet<string> = new Set(

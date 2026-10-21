@@ -7,6 +7,7 @@ import { AUTH_BASE_PATH } from "./auth/better-auth";
 import { createAuthRoutes } from "./auth/routes";
 import { betterAuthSessionResolver } from "./auth/session";
 import { runCron } from "./cron";
+import { createFormRoutes } from "./forms/routes";
 import { createHookRoutes } from "./hooks";
 import { createMcpRoutes, MCP_PATH } from "./mcp/route";
 import { handleSendBatch } from "./queue/send-consumer";
@@ -62,6 +63,8 @@ app.route("/hooks", createHookRoutes());
 app.route("/t", createTrackingRoutes());
 // Unsubscribe and the preference page (U10). One-click POST per RFC 8058.
 app.route("/u", createUnsubscribeRoutes());
+// Signup forms (U8): the hosted and embedded form, and the double opt-in confirmation.
+app.route("/f", createFormRoutes());
 
 export default {
   fetch: app.fetch,

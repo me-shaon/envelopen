@@ -359,4 +359,108 @@ test.describe("campaigns", () => {
     await expect(page.getByText(/to non-openers of campaign #\d+/)).toBeVisible();
     await expect(page.getByTestId("draft-estimate")).toHaveText("0");
   });
+
+  // A schedule in a timezone that is not the browser's (R8). The browser runs in
+  // Europe/London, and the owner schedules 09:00 in Asia/Dhaka (UTC+6, no daylight
+  // saving time), which is 03:00 UTC.
+  test.describe("timezone", () => {
+    test.use({ timezoneId: "Europe/London" });
+
+    test("schedules 09:00 in Asia/Dhaka and shows the time in that zone", async ({ page }) => {
+      await signIn(page);
+      const list = await apiPost(page, "/lists", { name: "Dhaka readers" });
+      await apiPost(page, "/contacts", {
+        email: "reader@example.com",
+        firstName: "Rahim",
+        consentBasis: "existing_customer",
+        listIds: [list.id],
+      });
+      const template = await apiPost(page, "/templates", {
+        name: "Dhaka morning",
+        subject: "Good morning, {{ first_name }}",
+        format: "html",
+        source: TEMPLATE_HTML,
+      });
+      const draft = await apiPost(page, "/campaigns", {
+        name: "Dhaka morning send",
+        templateId: template.id,
+        fromName: "Course Academy",
+        fromEmail: "news@mail.example.com",
+        audience: { listIds: [list.id] },
+      });
+      await page.goto(`/campaigns/${draft.id}`);
+      await page.getByRole("button", { name: "Review and send" }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByLabel("Schedule for later").check();
+
+      // The timezone starts at the browser zone.
+      const zone = dialog.getByRole("combobox", { name: "Timezone" });
+      await expect(zone).toHaveValue("Europe/London");
+      const sendAt = dialog.getByLabel("Send at");
+      const check = dialog.getByRole("button", { name: "Check and continue" });
+
+      // A time in the spring-forward gap does not exist: the dialog says so.
+      await zone.click();
+      await zone.fill("new york");
+      await expect(dialog.getByRole("option", { name: "America/New_York" })).toBeVisible();
+      await zone.press("Enter");
+      await expect(zone).toHaveValue("America/New_York");
+      await sendAt.fill("2027-03-14T02:30");
+      await expect(dialog.getByText(/02:30 does not exist in America\/New_York/)).toBeVisible();
+      await expect(check).toBeDisabled();
+
+      // A time in the fall-back overlap uses the first occurrence, and the dialog says so.
+      await sendAt.fill("2027-11-07T01:30");
+      await expect(dialog.getByText(/Envelopen uses the first one \(UTC-04:00\)/)).toBeVisible();
+      await expect(check).toBeEnabled();
+
+      // The keyboard picks a zone: type to filter, then Enter. Escape closes only the list.
+      await zone.focus();
+      await zone.fill("dhak");
+      await expect(zone).toHaveAttribute("aria-expanded", "true");
+      await expectNoSeriousViolations(page);
+      await zone.press("Escape");
+      await expect(zone).toHaveAttribute("aria-expanded", "false");
+      await expect(dialog).toBeVisible();
+      await zone.fill("dhak");
+      await zone.press("ArrowDown");
+      await zone.press("ArrowUp");
+      await zone.press("Enter");
+      await expect(zone).toHaveValue("Asia/Dhaka");
+      await sendAt.fill("2027-01-05T09:00");
+      await screenshot(page, "schedule-timezone");
+
+      const when = /Jan 5(, 2027)?, 09:00 Asia\/Dhaka/;
+      await check.click();
+      await expect(dialog.getByRole("heading", { name: "Confirm the send" })).toBeVisible();
+      const confirm = dialog.getByRole("button", { name: when });
+      await expect(confirm).toBeVisible();
+      await confirm.click();
+      await expect(dialog).toBeHidden();
+      await expect(page.getByTestId("send-banner")).toContainText(when);
+      await expect(page.getByText(when).first()).toBeVisible();
+
+      // The API has the UTC instant and the zone.
+      const res = await page.request.get(`${BASE}/api/campaigns/${draft.id}`);
+      expect(await res.json()).toMatchObject({
+        status: "scheduled",
+        scheduledAt: Date.UTC(2027, 0, 5, 3),
+        scheduledTimezone: "Asia/Dhaka",
+        scheduledLocalTime: "2027-01-05T09:00+06:00",
+      });
+
+      // The list shows the time in the zone too.
+      await page.getByRole("link", { name: "Campaigns", exact: true }).first().click();
+      await expect(
+        page.getByTestId("campaign-row").filter({ hasText: "Dhaka morning send" }),
+      ).toContainText(when);
+
+      // The dialog remembers the last zone in this workspace.
+      await apiPost(page, `/campaigns/${draft.id}/unschedule`, {});
+      await page.goto(`/campaigns/${draft.id}`);
+      await page.getByRole("button", { name: "Review and send" }).click();
+      await dialog.getByLabel("Schedule for later").check();
+      await expect(dialog.getByRole("combobox", { name: "Timezone" })).toHaveValue("Asia/Dhaka");
+    });
+  });
 });

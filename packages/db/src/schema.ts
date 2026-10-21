@@ -465,6 +465,10 @@ export interface CampaignsTable {
    */
   send_tracking_opens: Defaulted<Bool | null>;
   send_tracking_clicks: Defaulted<Bool | null>;
+  /** The IANA timezone that the owner scheduled in (KTD4). Null means UTC only. */
+  scheduled_tz: Defaulted<string | null>;
+  /** The wall-clock time in `scheduled_tz` with its UTC offset, e.g. `2026-10-21T09:00+06:00`. */
+  scheduled_local: Defaulted<string | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -525,6 +529,8 @@ export interface ConfirmTokensTable {
   actor_id: Immutable<string>;
   mode: Immutable<"send_now" | "schedule">;
   scheduled_at: number | null;
+  /** The IANA timezone from prepare, for a schedule. Null means UTC only. */
+  scheduled_tz: Defaulted<string | null>;
   estimated_recipients: number | null;
   expires_at: Immutable<number>;
   used_at: number | null;

@@ -2227,6 +2227,10 @@ export interface components {
             trackOpens: boolean;
             trackClicks: boolean;
             scheduledAt: number | null;
+            /** @description The IANA timezone that the send was scheduled in, for example Asia/Dhaka. Null when the schedule gave only the UTC time. */
+            scheduledTimezone: string | null;
+            /** @description The wall-clock time of scheduledAt in scheduledTimezone, with its UTC offset, for example 2026-10-21T09:00+06:00. Null when scheduledTimezone is null. */
+            scheduledLocalTime: string | null;
             startedAt: number | null;
             completedAt: number | null;
             recipientCount: number | null;
@@ -2295,6 +2299,10 @@ export interface components {
             trackOpens: boolean;
             trackClicks: boolean;
             scheduledAt: number | null;
+            /** @description The IANA timezone that the send was scheduled in, for example Asia/Dhaka. Null when the schedule gave only the UTC time. */
+            scheduledTimezone: string | null;
+            /** @description The wall-clock time of scheduledAt in scheduledTimezone, with its UTC offset, for example 2026-10-21T09:00+06:00. Null when scheduledTimezone is null. */
+            scheduledLocalTime: string | null;
             startedAt: number | null;
             completedAt: number | null;
             recipientCount: number | null;
@@ -2334,6 +2342,10 @@ export interface components {
             trackOpens: boolean;
             trackClicks: boolean;
             scheduledAt: number | null;
+            /** @description The IANA timezone that the send was scheduled in, for example Asia/Dhaka. Null when the schedule gave only the UTC time. */
+            scheduledTimezone: string | null;
+            /** @description The wall-clock time of scheduledAt in scheduledTimezone, with its UTC offset, for example 2026-10-21T09:00+06:00. Null when scheduledTimezone is null. */
+            scheduledLocalTime: string | null;
             startedAt: number | null;
             completedAt: number | null;
             recipientCount: number | null;
@@ -2411,6 +2423,10 @@ export interface components {
             /** @enum {string} */
             mode: "send_now" | "schedule";
             scheduledAt: number | null;
+            /** @description The IANA timezone of the schedule. Null for UTC only. */
+            timezone: string | null;
+            /** @description The wall-clock time of scheduledAt in timezone, with its UTC offset. */
+            scheduledLocalTime: string | null;
             blocked: boolean;
             checklist: components["schemas"]["ChecklistItem"][];
             estimate: components["schemas"]["CampaignEstimate"];
@@ -10308,6 +10324,8 @@ export interface operations {
                     mode: "send_now" | "schedule";
                     /** @description For mode schedule: Unix milliseconds, at least one minute ahead. */
                     scheduledAt?: number;
+                    /** @description For mode schedule: the IANA timezone that the owner picked the time in, for example Asia/Dhaka. It changes only how the time shows, not when the send starts. Without it, the schedule has only the UTC time. */
+                    timezone?: string;
                 };
             };
         };

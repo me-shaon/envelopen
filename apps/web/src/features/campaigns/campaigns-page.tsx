@@ -10,7 +10,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, Figure, PageTop } from "@/features/contacts/shared";
-import { CampaignStatusPill, formatWhen } from "./shared";
+import { CampaignStatusPill, formatScheduled, formatWhen } from "./shared";
 
 // The campaigns of the workspace, newest first (R31 to R34).
 
@@ -94,7 +94,9 @@ export function CampaignTable({ items }: { items: Schemas["CampaignSummary"][] }
               <Figure value={campaign.sent} />
             </TableCell>
             <TableCell className="figure text-muted-foreground">
-              {formatWhen(campaign.startedAt ?? campaign.scheduledAt ?? campaign.updatedAt)}
+              {campaign.startedAt === null && campaign.scheduledAt !== null
+                ? formatScheduled(campaign.scheduledAt, campaign.scheduledTimezone)
+                : formatWhen(campaign.startedAt ?? campaign.updatedAt)}
             </TableCell>
           </TableRow>
         ))}

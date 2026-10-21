@@ -162,6 +162,22 @@ export const CampaignSchema = z
     trackOpens: z.boolean(),
     trackClicks: z.boolean(),
     scheduledAt: z.number().int().nullable(),
+    scheduledTimezone: z
+      .string()
+      .nullable()
+      .meta({
+        description:
+          "The IANA timezone that the send was scheduled in, for example Asia/Dhaka. Null " +
+          "when the schedule gave only the UTC time.",
+      }),
+    scheduledLocalTime: z
+      .string()
+      .nullable()
+      .meta({
+        description:
+          "The wall-clock time of scheduledAt in scheduledTimezone, with its UTC offset, for " +
+          "example 2026-10-21T09:00+06:00. Null when scheduledTimezone is null.",
+      }),
     startedAt: z.number().int().nullable(),
     completedAt: z.number().int().nullable(),
     recipientCount: z.number().int().nullable(),
@@ -204,6 +220,8 @@ export function toCampaign(row: CampaignRow): Campaign {
     trackOpens: row.tracking_opens === 1,
     trackClicks: row.tracking_clicks === 1,
     scheduledAt: row.scheduled_at,
+    scheduledTimezone: row.scheduled_tz,
+    scheduledLocalTime: row.scheduled_local,
     startedAt: row.started_at,
     completedAt: row.completed_at,
     recipientCount: row.recipient_count,

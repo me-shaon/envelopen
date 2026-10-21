@@ -1,5 +1,6 @@
 import type { Schemas } from "@/api/client";
 import { Pill, type Tone } from "@/components/ui/pill";
+import { formatInZone } from "@/lib/timezone";
 
 // Labels that the campaign pages share.
 
@@ -57,12 +58,25 @@ export function formatWhen(ms: number | null | undefined): string {
   return ms == null ? "-" : dateTime.format(new Date(ms));
 }
 
-export function formatUtc(ms: number): string {
-  return `${utcTime.format(new Date(ms))} UTC`;
+/**
+ * The time of a schedule. With the timezone that the owner picked, it shows in that
+ * zone with its name: "Oct 21, 09:00 Asia/Dhaka". Without one (a schedule from the API
+ * that gave only the UTC time), it shows in the browser's time as before.
+ */
+export function formatScheduled(
+  ms: number | null | undefined,
+  timezone: string | null | undefined,
+): string {
+  if (ms == null) return "-";
+  if (!timezone) return formatWhen(ms);
+  try {
+    return formatInZone(ms, timezone);
+  } catch {
+    // The browser does not know the zone. The browser's time is still correct.
+    return formatWhen(ms);
+  }
 }
 
-/** The value for a datetime-local input, in local time. */
-export function toLocalInput(ms: number): string {
-  const date = new Date(ms - new Date(ms).getTimezoneOffset() * 60_000);
-  return date.toISOString().slice(0, 16);
+export function formatUtc(ms: number): string {
+  return `${utcTime.format(new Date(ms))} UTC`;
 }

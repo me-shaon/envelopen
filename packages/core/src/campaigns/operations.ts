@@ -36,6 +36,7 @@ import {
   toCampaign,
 } from "./model";
 import { campaignSources, transitionCampaign } from "./state-machine";
+import { canonicalTimeZone, localTime } from "./timezone";
 
 // Campaign operations (R31 to R34, R38, R39, R68). Scopes follow the plan's table:
 // campaigns:read reads, campaigns:write edits drafts, and campaigns:send prepares,
@@ -475,6 +476,13 @@ const PrepareSchema = z
     campaignVersion: z.number().int(),
     mode: ModeSchema,
     scheduledAt: z.number().int().nullable(),
+    timezone: z
+      .string()
+      .nullable()
+      .meta({ description: "The IANA timezone of the schedule. Null for UTC only." }),
+    scheduledLocalTime: z.string().nullable().meta({
+      description: "The wall-clock time of scheduledAt in timezone, with its UTC offset.",
+    }),
     blocked: z.boolean(),
     checklist: z.array(ChecklistItemSchema),
     estimate: EstimateSchema,
@@ -511,6 +519,17 @@ export const campaignsPrepare = defineOperation({
     scheduledAt: z.number().int().positive().optional().meta({
       description: "For mode schedule: Unix milliseconds, at least one minute ahead.",
     }),
+    timezone: z
+      .string()
+      .min(1)
+      .max(64)
+      .optional()
+      .meta({
+        description:
+          "For mode schedule: the IANA timezone that the owner picked the time in, for " +
+          "example Asia/Dhaka. It changes only how the time shows, not when the send " +
+          "starts. Without it, the schedule has only the UTC time.",
+      }),
   }),
   output: PrepareSchema,
   async handler(input, ctx) {
@@ -518,11 +537,21 @@ export const campaignsPrepare = defineOperation({
     const campaign = await loadCampaign(db, principal.workspaceId, input.id);
     requireStatus(campaign, ["draft"], "be sent. Only a draft can be prepared");
     let scheduledAt: number | null = null;
+    let timezone: string | null = null;
     if (input.mode === "schedule") {
       if (input.scheduledAt === undefined || input.scheduledAt < now + 60_000) {
         throw new OperationError("invalid_input", "Pick a time at least one minute ahead.");
       }
       scheduledAt = input.scheduledAt;
+      if (input.timezone !== undefined) {
+        timezone = canonicalTimeZone(input.timezone);
+        if (timezone === null) {
+          throw new OperationError(
+            "invalid_input",
+            `"${input.timezone}" is not a known IANA timezone. Use a name such as Asia/Dhaka.`,
+          );
+        }
+      }
     }
     const estimate = await estimateAudience(
       db,
@@ -558,6 +587,7 @@ export const campaignsPrepare = defineOperation({
             campaignVersion: campaign.version,
             mode: input.mode,
             scheduledAt,
+            timezone,
             estimatedRecipients: estimate.recipients,
           },
           now,
@@ -567,6 +597,9 @@ export const campaignsPrepare = defineOperation({
       campaignVersion: campaign.version,
       mode: input.mode,
       scheduledAt,
+      timezone,
+      scheduledLocalTime:
+        scheduledAt !== null && timezone !== null ? localTime(scheduledAt, timezone) : null,
       blocked: checklist.blocked,
       checklist: checklist.items,
       estimate: { ...estimate, isEstimate: true as const },
@@ -630,6 +663,11 @@ export const campaignsConfirm = defineOperation({
       link_origin: origin,
       ...combineTracking(campaign, workspace),
       scheduled_at: sendNow ? null : token.scheduled_at,
+      scheduled_tz: sendNow ? null : token.scheduled_tz,
+      scheduled_local:
+        sendNow || token.scheduled_at === null || token.scheduled_tz === null
+          ? null
+          : localTime(token.scheduled_at, token.scheduled_tz),
       ...(sendNow ? { started_at: now } : {}),
       status: sendNow ? "sending" : "scheduled",
       updated_at: now,
@@ -659,7 +697,12 @@ export const campaignsConfirm = defineOperation({
   auditTarget: (_input, output) => ({
     targetType: "campaign",
     targetId: output.id,
-    metadata: { status: output.status, version: output.version, scheduledAt: output.scheduledAt },
+    metadata: {
+      status: output.status,
+      version: output.version,
+      scheduledAt: output.scheduledAt,
+      scheduledTimezone: output.scheduledTimezone,
+    },
   }),
 });
 
@@ -731,7 +774,7 @@ export const campaignsUnschedule = lifecycleOperation({
       campaign,
       "unschedule",
       "draft",
-      { scheduled_at: null },
+      { scheduled_at: null, scheduled_tz: null, scheduled_local: null },
       "be unscheduled",
     ),
 });

@@ -8,7 +8,7 @@ import {
   SendIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ApiRequestError, api, type Schemas, unwrap } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
@@ -19,8 +19,10 @@ import { Pill } from "@/components/ui/pill";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, Figure } from "@/features/contacts/shared";
+import { ambiguityNote, instantToWallTime, wallTimeToInstant } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
-import { EXCLUSION_LABELS, formatWhen, toLocalInput } from "./shared";
+import { EXCLUSION_LABELS, formatScheduled } from "./shared";
+import { rememberedTimeZone, rememberTimeZone, TimeZonePicker } from "./timezone-picker";
 
 // The send confirmation (R33, R68). Step one picks the mode. Prepare then runs the
 // checklist and returns a short-lived token; Confirm spends it. States:
@@ -39,6 +41,8 @@ export interface SendNotice {
   mode: Mode;
   recipients: number;
   scheduledAt: number | null;
+  /** The IANA timezone of a schedule, or null. */
+  timezone: string | null;
 }
 
 const ICONS: Record<Item["status"], { icon: typeof CheckIcon; className: string; label: string }> =
@@ -129,17 +133,27 @@ export function ConfirmSendDialog({
   const { current } = useCurrentWorkspace();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode>("send_now");
-  const [when, setWhen] = useState(() => toLocalInput(Date.now() + 60 * 60 * 1000));
+  const [timezone, setTimezone] = useState(() => rememberedTimeZone(current.id));
+  // The wall-clock time in `timezone`, as the datetime-local input gives it.
+  const [when, setWhen] = useState(() =>
+    instantToWallTime(Date.now() + 60 * 60 * 1000, rememberedTimeZone(current.id)),
+  );
   const [now, setNow] = useState(() => Date.now());
+  const wall = useMemo(() => wallTimeToInstant(when, timezone), [when, timezone]);
 
   const prepare = useMutation({
-    mutationFn: () =>
-      unwrap(
+    mutationFn: () => {
+      if (mode === "schedule") rememberTimeZone(current.id, timezone);
+      return unwrap(
         api.POST("/campaigns/{id}/prepare", {
           params: { path: { id: campaign.id } },
-          body: { mode, ...(mode === "schedule" ? { scheduledAt: new Date(when).getTime() } : {}) },
+          body: {
+            mode,
+            ...(mode === "schedule" && wall.ok ? { scheduledAt: wall.instant, timezone } : {}),
+          },
         }),
-      ),
+      );
+    },
   });
   const confirm = useMutation({
     mutationFn: (token: string) =>
@@ -157,6 +171,7 @@ export function ConfirmSendDialog({
           mode: done.mode,
           recipients: done.estimate.recipients,
           scheduledAt: done.scheduledAt ?? null,
+          timezone: done.timezone ?? null,
         });
       }
       await queryClient.invalidateQueries({ queryKey: ["ws", current.id] });
@@ -189,7 +204,14 @@ export function ConfirmSendDialog({
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="max-h-[calc(100vh-32px)] max-w-[560px] overflow-y-auto">
+      <DialogContent
+        className="max-h-[calc(100vh-32px)] max-w-[560px] overflow-y-auto"
+        onEscapeKeyDown={(event) => {
+          // Escape in an open timezone list closes the list, not the dialog.
+          const target = event.target as HTMLElement | null;
+          if (target?.getAttribute("aria-expanded") === "true") event.preventDefault();
+        }}
+      >
         <DialogHeader
           title={prepared ? "Confirm the send" : "Send the campaign"}
           description={
@@ -204,6 +226,9 @@ export function ConfirmSendDialog({
             onMode={setMode}
             when={when}
             onWhen={setWhen}
+            timezone={timezone}
+            onTimezone={setTimezone}
+            whenError={wall.ok ? null : wall.reason === "gap" ? wall.message : null}
             error={errorText(prepare.error)}
           />
         ) : (
@@ -239,7 +264,12 @@ export function ConfirmSendDialog({
             Cancel
           </Button>
           {!prepared ? (
-            <Button type="button" pending={prepare.isPending} onClick={() => prepare.mutate()}>
+            <Button
+              type="button"
+              pending={prepare.isPending}
+              disabled={mode === "schedule" && !wall.ok}
+              onClick={() => prepare.mutate()}
+            >
               Check and continue
             </Button>
           ) : stale || expired || prepared.blocked ? (
@@ -257,7 +287,7 @@ export function ConfirmSendDialog({
             >
               <SendIcon className="size-3.5" aria-hidden="true" />
               {prepared.mode === "schedule"
-                ? `Schedule for ${formatWhen(prepared.scheduledAt)}`
+                ? `Schedule for ${formatScheduled(prepared.scheduledAt, prepared.timezone)}`
                 : `Send to about ${prepared.estimate.recipients.toLocaleString()} people`}
             </Button>
           )}
@@ -272,14 +302,21 @@ function PickMode({
   onMode,
   when,
   onWhen,
+  timezone,
+  onTimezone,
+  whenError,
   error,
 }: {
   mode: Mode;
   onMode: (mode: Mode) => void;
   when: string;
   onWhen: (value: string) => void;
+  timezone: string;
+  onTimezone: (zone: string) => void;
+  whenError: string | null;
   error: string | null;
 }) {
+  const note = whenError ? null : ambiguityNote(when, timezone);
   return (
     <div className="flex flex-col gap-4">
       <FormError message={error} />
@@ -302,14 +339,26 @@ function PickMode({
         </div>
       </RadioGroup>
       {mode === "schedule" ? (
-        <Field id="send-at" label="Send at" hint="Your local time.">
-          <Input
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field
             id="send-at"
-            type="datetime-local"
-            value={when}
-            onChange={(event) => onWhen(event.target.value)}
-          />
-        </Field>
+            label="Send at"
+            hint={note ?? "The time in the timezone that you pick."}
+            error={whenError}
+          >
+            <Input
+              id="send-at"
+              type="datetime-local"
+              value={when}
+              aria-invalid={whenError ? true : undefined}
+              aria-describedby={whenError ? "send-at-error" : "send-at-hint"}
+              onChange={(event) => onWhen(event.target.value)}
+            />
+          </Field>
+          <Field id="send-tz" label="Timezone">
+            <TimeZonePicker id="send-tz" value={timezone} onChange={onTimezone} />
+          </Field>
+        </div>
       ) : null}
     </div>
   );
@@ -339,7 +388,7 @@ function Review({ prepared, onNavigate }: { prepared: Prepared; onNavigate: () =
           <dt className="text-xs text-muted-foreground">Mode</dt>
           <dd className="m-0 text-[13px] font-medium">
             {prepared.mode === "schedule"
-              ? `Scheduled, ${formatWhen(prepared.scheduledAt)}`
+              ? `Scheduled, ${formatScheduled(prepared.scheduledAt, prepared.timezone)}`
               : "Send now"}
           </dd>
         </div>

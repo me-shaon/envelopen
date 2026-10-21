@@ -22,6 +22,7 @@ import {
   CAMPAIGN_TYPES,
   CampaignStatusPill,
   EXCLUSION_LABELS,
+  formatScheduled,
   formatUtc,
   formatWhen,
   PAUSE_REASONS,
@@ -75,7 +76,7 @@ function Header({ campaign, actions }: { campaign: Detail; actions?: ReactNode }
             {campaign.provider ? ` through ${campaign.provider.name}` : ""}
             {campaign.startedAt ? `, started ${formatWhen(campaign.startedAt)}` : ""}
             {campaign.status === "scheduled"
-              ? `, scheduled for ${formatWhen(campaign.scheduledAt)}`
+              ? `, scheduled for ${formatScheduled(campaign.scheduledAt, campaign.scheduledTimezone)}`
               : ""}
           </p>
         </div>
@@ -89,7 +90,7 @@ function noticeText(notice: SendNotice): { title: string; body: string } {
   const people = `about ${notice.recipients.toLocaleString()} ${notice.recipients === 1 ? "person" : "people"}`;
   return notice.mode === "schedule"
     ? {
-        title: `Scheduled for ${formatWhen(notice.scheduledAt)}.`,
+        title: `Scheduled for ${formatScheduled(notice.scheduledAt, notice.timezone)}.`,
         body: `Envelopen sends to ${people} at that time. Progress updates here.`,
       }
     : { title: `Sending to ${people}.`, body: "Progress updates here." };
@@ -510,7 +511,7 @@ function CampaignView({
       <Banner
         show={status === "scheduled" && notice === null}
         tone="lavender"
-        title={`Scheduled for ${formatWhen(campaign.scheduledAt)}`}
+        title={`Scheduled for ${formatScheduled(campaign.scheduledAt, campaign.scheduledTimezone)}`}
       >
         Envelopen takes the recipient list and starts sending at that time. Unschedule to edit the
         campaign.

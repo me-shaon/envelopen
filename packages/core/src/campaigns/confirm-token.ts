@@ -8,7 +8,7 @@ import { CONFIRM_TOKEN_TTL_MS } from "./model";
 // - the actor: a token from one API key or session fails for another;
 // - the campaign version, which covers the content and the audience definition: any
 //   edit increments it, so the token goes stale;
-// - the mode (send now or schedule) and the scheduled time.
+// - the mode (send now or schedule), the scheduled time, and its timezone.
 //
 // The token does not bind the recipient list. Contacts that join a targeted list after
 // prepare do not stale it, because the snapshot happens at send time (KTD22).
@@ -49,6 +49,8 @@ export async function issueConfirmToken(
     campaignVersion: number;
     mode: ConfirmMode;
     scheduledAt: number | null;
+    /** The IANA timezone of a schedule, or null for UTC only. */
+    timezone: string | null;
     estimatedRecipients: number;
   },
   now: number,
@@ -66,6 +68,7 @@ export async function issueConfirmToken(
       actor_id: principal.actorId,
       mode: input.mode,
       scheduled_at: input.scheduledAt,
+      scheduled_tz: input.timezone,
       estimated_recipients: input.estimatedRecipients,
       expires_at: expiresAt,
       used_at: null,

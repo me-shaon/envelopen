@@ -4,7 +4,12 @@ import { createApiKey, testDb, testServices } from "../../test/fixtures";
 import { isOperationError } from "../errors";
 import { runOperation } from "../executor";
 import { apiKeyPrincipal, type Principal } from "../principal";
-import { campaignsConfirm, campaignsPrepare, campaignsUpdate } from "./operations";
+import {
+  campaignsConfirm,
+  campaignsPrepare,
+  campaignsUnschedule,
+  campaignsUpdate,
+} from "./operations";
 import { startDueCampaigns } from "./sweep";
 
 // Prepare and confirm (R68): the token is bound to the actor, the campaign version,
@@ -174,5 +179,94 @@ describe("confirm token", () => {
     expect(services.campaignJobs).toEqual([
       { workspaceId: seeded.workspaceId, campaignId, startedAt: at },
     ]);
+  });
+
+  it("stores the timezone and the wall-clock time of a schedule (R8)", async () => {
+    const { run, seeded, campaignId } = await setup();
+    // 09:00 on 2026-10-21 in Asia/Dhaka (UTC+6) is 03:00 UTC.
+    const at = Date.UTC(2026, 9, 21, 3);
+    const prepared = await run<{ token: string; timezone: string; scheduledLocalTime: string }>(
+      seeded.principal,
+      campaignsPrepare,
+      { id: campaignId, mode: "schedule", scheduledAt: at, timezone: "Asia/Dhaka" },
+    );
+    expect(prepared).toMatchObject({
+      timezone: "Asia/Dhaka",
+      scheduledLocalTime: "2026-10-21T09:00+06:00",
+    });
+    const row = await run<Record<string, unknown>>(seeded.principal, campaignsConfirm, {
+      id: campaignId,
+      token: prepared.token,
+    });
+    expect(row).toMatchObject({
+      status: "scheduled",
+      scheduledAt: at,
+      scheduledTimezone: "Asia/Dhaka",
+      scheduledLocalTime: "2026-10-21T09:00+06:00",
+    });
+
+    // Unschedule clears the zone with the time.
+    expect(await run(seeded.principal, campaignsUnschedule, { id: campaignId })).toMatchObject({
+      status: "draft",
+      scheduledAt: null,
+      scheduledTimezone: null,
+      scheduledLocalTime: null,
+    });
+  });
+
+  it("keeps the offset that tells a fall-back hour apart", async () => {
+    const { run, seeded, campaignId } = await setup();
+    // 01:30 EDT on 2026-11-01, the first of the two 01:30s in America/New_York.
+    const at = Date.UTC(2026, 10, 1, 5, 30);
+    const prepared = await run<{ scheduledLocalTime: string }>(seeded.principal, campaignsPrepare, {
+      id: campaignId,
+      mode: "schedule",
+      scheduledAt: at,
+      timezone: "America/New_York",
+    });
+    expect(prepared.scheduledLocalTime).toBe("2026-11-01T01:30-04:00");
+  });
+
+  it("keeps the UTC-only schedule for an API or MCP caller that gives no timezone", async () => {
+    const { db, run, seeded, campaignId } = await setup();
+    const key = await createApiKey(db, seeded.workspaceId, ["campaigns:send"]);
+    const agent = apiKeyPrincipal({
+      workspaceId: seeded.workspaceId,
+      apiKeyId: key.id,
+      scopes: ["campaigns:send"],
+      surface: "mcp",
+    });
+    const at = T0 + 60 * 60 * 1000;
+    const prepared = await run<{ token: string; timezone: string | null }>(
+      agent,
+      campaignsPrepare,
+      { id: campaignId, mode: "schedule", scheduledAt: at },
+    );
+    expect(prepared).toMatchObject({ timezone: null, scheduledLocalTime: null });
+    expect(
+      await run(agent, campaignsConfirm, { id: campaignId, token: prepared.token }),
+    ).toMatchObject({
+      status: "scheduled",
+      scheduledAt: at,
+      scheduledTimezone: null,
+      scheduledLocalTime: null,
+    });
+  });
+
+  it("rejects a timezone that is not a known IANA zone", async () => {
+    const { run, seeded, campaignId } = await setup();
+    const at = T0 + 60 * 60 * 1000;
+    for (const timezone of ["Mars/Olympus_Mons", "+06:00", "Asia/Dhaka; drop"]) {
+      expect(
+        await failure(
+          run(seeded.principal, campaignsPrepare, {
+            id: campaignId,
+            mode: "schedule",
+            scheduledAt: at,
+            timezone,
+          }),
+        ),
+      ).toMatchObject({ code: "invalid_input" });
+    }
   });
 });

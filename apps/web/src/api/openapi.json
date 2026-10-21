@@ -2843,6 +2843,20 @@
               "null"
             ]
           },
+          "scheduledTimezone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The IANA timezone that the send was scheduled in, for example Asia/Dhaka. Null when the schedule gave only the UTC time."
+          },
+          "scheduledLocalTime": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The wall-clock time of scheduledAt in scheduledTimezone, with its UTC offset, for example 2026-10-21T09:00+06:00. Null when scheduledTimezone is null."
+          },
           "startedAt": {
             "type": [
               "integer",
@@ -2900,6 +2914,8 @@
           "trackOpens",
           "trackClicks",
           "scheduledAt",
+          "scheduledTimezone",
+          "scheduledLocalTime",
           "startedAt",
           "completedAt",
           "recipientCount",
@@ -3103,6 +3119,20 @@
               "null"
             ]
           },
+          "scheduledTimezone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The IANA timezone that the send was scheduled in, for example Asia/Dhaka. Null when the schedule gave only the UTC time."
+          },
+          "scheduledLocalTime": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The wall-clock time of scheduledAt in scheduledTimezone, with its UTC offset, for example 2026-10-21T09:00+06:00. Null when scheduledTimezone is null."
+          },
           "startedAt": {
             "type": [
               "integer",
@@ -3156,6 +3186,8 @@
           "trackOpens",
           "trackClicks",
           "scheduledAt",
+          "scheduledTimezone",
+          "scheduledLocalTime",
           "startedAt",
           "completedAt",
           "recipientCount",
@@ -3291,6 +3323,20 @@
               "null"
             ]
           },
+          "scheduledTimezone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The IANA timezone that the send was scheduled in, for example Asia/Dhaka. Null when the schedule gave only the UTC time."
+          },
+          "scheduledLocalTime": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The wall-clock time of scheduledAt in scheduledTimezone, with its UTC offset, for example 2026-10-21T09:00+06:00. Null when scheduledTimezone is null."
+          },
           "startedAt": {
             "type": [
               "integer",
@@ -3369,6 +3415,8 @@
           "trackOpens",
           "trackClicks",
           "scheduledAt",
+          "scheduledTimezone",
+          "scheduledLocalTime",
           "startedAt",
           "completedAt",
           "recipientCount",
@@ -3612,6 +3660,20 @@
               "null"
             ]
           },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The IANA timezone of the schedule. Null for UTC only."
+          },
+          "scheduledLocalTime": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The wall-clock time of scheduledAt in timezone, with its UTC offset."
+          },
           "blocked": {
             "type": "boolean"
           },
@@ -3669,6 +3731,8 @@
           "campaignVersion",
           "mode",
           "scheduledAt",
+          "timezone",
+          "scheduledLocalTime",
           "blocked",
           "checklist",
           "estimate",
@@ -15753,6 +15817,12 @@
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "description": "For mode schedule: Unix milliseconds, at least one minute ahead."
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "For mode schedule: the IANA timezone that the owner picked the time in, for example Asia/Dhaka. It changes only how the time shows, not when the send starts. Without it, the schedule has only the UTC time."
                   }
                 },
                 "required": [

@@ -10,7 +10,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { RecentActivity } from "@/features/audit/recent-activity";
 import { CampaignTable } from "@/features/campaigns/campaigns-page";
-import { formatWhen } from "@/features/campaigns/shared";
+import { formatScheduled, formatWhen } from "@/features/campaigns/shared";
 import { OnboardingChecklist, useOnboarding } from "@/features/onboarding/onboarding-checklist";
 import { LatestCampaign } from "@/features/stats/latest-campaign";
 import { guideUrl } from "@/lib/guides";
@@ -78,7 +78,7 @@ function latestLine(campaign: Schemas["CampaignSummary"] | undefined): string | 
     case "sending":
       return `${name} is sending now.`;
     case "scheduled":
-      return `${name} is scheduled for ${formatWhen(campaign.scheduledAt)}.`;
+      return `${name} is scheduled for ${formatScheduled(campaign.scheduledAt, campaign.scheduledTimezone)}.`;
     case "paused":
       return `${name} is paused.`;
     case "needs_decision":

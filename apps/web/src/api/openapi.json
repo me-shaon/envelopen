@@ -103,6 +103,23 @@
           "createdAt"
         ]
       },
+      "DeploymentSettings": {
+        "type": "object",
+        "properties": {
+          "sourceUrl": {
+            "type": "string",
+            "description": "The link to the source code of this deployment."
+          },
+          "defaultSourceUrl": {
+            "type": "string",
+            "description": "The upstream repository URL."
+          }
+        },
+        "required": [
+          "sourceUrl",
+          "defaultSourceUrl"
+        ]
+      },
       "ApiKey": {
         "type": "object",
         "properties": {
@@ -5350,6 +5367,204 @@
           },
           "422": {
             "description": "The Idempotency-Key was used with a different path or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings": {
+      "get": {
+        "operationId": "settings.get",
+        "summary": "Get the deployment settings",
+        "description": "Returns the settings of the whole deployment: the link to the source code that the admin app and the public subscriber pages show (AGPL section 13).",
+        "tags": [
+          "settings"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "never",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "settings.update",
+        "summary": "Update the deployment settings",
+        "description": "Sets the link to the source code of this deployment. The admin app and every public subscriber page show it. Only https URLs are accepted.",
+        "tags": [
+          "settings"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "never",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sourceUrl": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "sourceUrl"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {

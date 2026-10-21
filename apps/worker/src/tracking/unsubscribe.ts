@@ -10,7 +10,7 @@ import { type Context, Hono } from "hono";
 import { readBodyLimited } from "../body";
 import { isSameOriginPost, sameToken } from "./csrf";
 import { type TrackingDeps, type TrackingDepsFactory, trackingDeps } from "./deps";
-import { type PageNotice, pageResponse } from "./preferences";
+import { type PageNotice, publicPage } from "./preferences";
 
 // Unsubscribe and the preference page (R24, R25, R64, KTD30, F3, AE5). Routes under /u:
 //
@@ -117,12 +117,12 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
     const token = c.req.param("token") ?? "";
     try {
       const sub = await verifiedSubscription(deps, token);
-      if (!sub) return pageResponse({ kind: "invalid" }, 404);
+      if (!sub) return publicPage(deps, { kind: "invalid" }, 404);
       const action = preferencesPath(token);
       const csrf = await deps.formToken(token);
       const state = c.req.query("state");
       if (sub.unsubscribedAt !== null) {
-        return pageResponse({
+        return publicPage(deps, {
           kind: "unsubscribed",
           sub,
           csrf,
@@ -131,10 +131,10 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
         });
       }
       if (c.req.query("step") === "confirm-all") {
-        return pageResponse({ kind: "confirm_all", sub, csrf, action, backHref: action });
+        return publicPage(deps, { kind: "confirm_all", sub, csrf, action, backHref: action });
       }
       const notice: PageNotice = state === "saved" || state === "resubscribed" ? state : null;
-      return pageResponse({
+      return publicPage(deps, {
         kind: "preferences",
         sub,
         csrf,
@@ -156,20 +156,20 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
     try {
       const form = await readForm(c);
       if (!form || text(form["List-Unsubscribe"]) !== "One-Click") {
-        return pageResponse({ kind: "invalid" }, 400);
+        return publicPage(deps, { kind: "invalid" }, 400);
       }
       const sub = await verifiedSubscription(deps, c.req.param("token"));
-      if (!sub) return pageResponse({ kind: "invalid" }, 404);
+      if (!sub) return publicPage(deps, { kind: "invalid" }, 404);
       const now = deps.now();
       let changed: boolean;
       try {
         changed = await unsubscribeAll(deps.db, sub, "one_click", now);
       } catch (error) {
         console.error("One-click unsubscribe failed", error);
-        return pageResponse({ kind: "error" }, 503);
+        return publicPage(deps, { kind: "error" }, 503);
       }
       if (changed) background(c, deps.sink(sub.workspaceId, [unsubscribeEvent(sub, now)]));
-      return pageResponse({ kind: "one_click_done" });
+      return publicPage(deps, { kind: "one_click_done" });
     } finally {
       background(c, deps.db.meter.flush());
     }
@@ -180,13 +180,13 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
     const deps = makeDeps(c.env);
     const token = c.req.param("token");
     try {
-      if (!isSameOriginPost(c.req.raw)) return pageResponse({ kind: "invalid" }, 403);
+      if (!isSameOriginPost(c.req.raw)) return publicPage(deps, { kind: "invalid" }, 403);
       const form = await readForm(c);
-      if (!form) return pageResponse({ kind: "invalid" }, 400);
+      if (!form) return publicPage(deps, { kind: "invalid" }, 400);
       const sub = await verifiedSubscription(deps, token);
-      if (!sub) return pageResponse({ kind: "invalid" }, 404);
+      if (!sub) return publicPage(deps, { kind: "invalid" }, 404);
       if (!sameToken(text(form.csrf), await deps.formToken(token))) {
-        return pageResponse({ kind: "invalid" }, 403);
+        return publicPage(deps, { kind: "invalid" }, 403);
       }
       const action = text(form.action);
       const now = deps.now();
@@ -218,14 +218,14 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
         }
       } catch (error) {
         console.error("Preference change failed", error);
-        return pageResponse({ kind: "error" }, 503);
+        return publicPage(deps, { kind: "error" }, 503);
       }
-      return pageResponse({ kind: "invalid" }, 400);
+      return publicPage(deps, { kind: "invalid" }, 400);
     } finally {
       background(c, deps.db.meter.flush());
     }
   });
 
-  app.all("*", () => pageResponse({ kind: "invalid" }, 404));
+  app.all("*", (c) => publicPage(makeDeps(c.env), { kind: "invalid" }, 404));
   return app;
 }

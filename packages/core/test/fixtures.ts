@@ -4,7 +4,14 @@ import { generateApiKey } from "../src/api-keys";
 import { createCredentialCipher } from "../src/crypto/credentials";
 import { createFileLinkSigner } from "../src/import/file-links";
 import type { ApiKeyScope } from "../src/scopes";
-import type { BatchPointer, CampaignJob, ImportJob, Services, UsageStatus } from "../src/services";
+import type {
+  BatchPointer,
+  CampaignJob,
+  ImportJob,
+  Services,
+  SettingsCache,
+  UsageStatus,
+} from "../src/services";
 import { createEmailHasher } from "../src/suppression/hash";
 
 /** A connection that fails any tenant query without a workspace_id condition. */
@@ -81,6 +88,18 @@ const noNetwork: typeof fetch = async (input) => {
   );
 };
 
+/** A settings cache in memory, in place of KV. `entries` shows what it holds. */
+export function memorySettingsCache(): SettingsCache & { entries: Map<string, string> } {
+  const entries = new Map<string, string>();
+  return {
+    entries,
+    get: async (key) => entries.get(key) ?? null,
+    put: async (key, value) => {
+      entries.set(key, value);
+    },
+  };
+}
+
 export interface TestServices extends Services {
   /** Import runs that operations started, in order. */
   jobs: ImportJob[];
@@ -123,6 +142,7 @@ export async function testServices(options: { fetch?: typeof fetch } = {}): Prom
     usage: {
       status: async () => services.usageStatus,
     },
+    settingsCache: memorySettingsCache(),
   };
   return services;
 }

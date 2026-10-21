@@ -108,9 +108,20 @@ export {
   requireService,
   type SendQueue,
   type Services,
+  type SettingsCache,
   type UsageReader,
   type UsageStatus,
 } from "./services";
+export {
+  DEFAULT_SOURCE_URL,
+  DeploymentSettingsSchema,
+  isHttpsUrl,
+  readSourceUrl,
+  SOURCE_URL_SETTING,
+  SourceUrlSchema,
+  settingsGet,
+  settingsUpdate,
+} from "./settings/operations";
 export {
   annotateClicks,
   type CampaignStats,

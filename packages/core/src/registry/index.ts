@@ -77,6 +77,7 @@ import {
   tagsList,
   tagsRename,
 } from "../lists/operations";
+import { settingsGet, settingsUpdate } from "../settings/operations";
 import { campaignsClickMap, campaignsStats, statsLatest } from "../stats/operations";
 import { suppressionsAdd, suppressionsList, suppressionsRemove } from "../suppression/operations";
 import {
@@ -168,6 +169,9 @@ export const registry = createRegistry([
   workspacesCreate,
   workspacesRename,
   workspacesArchive,
+  // Deployment settings (KTD16): the source link of this deployment.
+  settingsGet,
+  settingsUpdate,
   apiKeysPresets,
   apiKeysList,
   apiKeysCreate,

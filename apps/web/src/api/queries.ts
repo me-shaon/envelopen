@@ -30,6 +30,16 @@ export function workspaceSettingsQuery(workspaceId: number) {
   });
 }
 
+/**
+ * The deployment settings, such as the source link (KTD16). They apply to every
+ * workspace, so the key has no workspace id.
+ */
+export const deploymentSettingsQuery = queryOptions({
+  queryKey: ["deployment-settings"],
+  queryFn: () => unwrap(api.GET("/settings")),
+  staleTime: 5 * 60_000,
+});
+
 export function onboardingQuery(workspaceId: number) {
   return queryOptions({
     queryKey: ["ws", workspaceId, "onboarding"],

@@ -15,6 +15,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 ### Added
 
 - License: GNU Affero General Public License v3.0.
+- A source code link with the version in the admin footer and on each subscriber page. The owner can change it in Settings.
 
 ### Changed
 

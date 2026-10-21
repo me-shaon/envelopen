@@ -3,7 +3,7 @@ import { hitOf } from "./classify";
 import { handleClick, INVALID_LINK_PATH, recordHoneypot } from "./click";
 import { type TrackingDepsFactory, trackingDeps } from "./deps";
 import { pixelResponse, recordOpen } from "./pixel";
-import { pageResponse } from "./preferences";
+import { publicPage } from "./preferences";
 
 // Tracking routes under /t (R40, KTD29). The routes answer at once. The token check
 // for the pixel and the honeypot, and every hand-off to the EventBuffer, run after the
@@ -96,7 +96,7 @@ export function createTrackingRoutes(options: TrackingRoutesOptions = {}) {
     });
   });
 
-  app.get("/invalid", () => pageResponse({ kind: "link_invalid" }, 404));
-  app.all("*", () => pageResponse({ kind: "link_invalid" }, 404));
+  app.get("/invalid", (c) => publicPage(makeDeps(c.env), { kind: "link_invalid" }, 404));
+  app.all("*", (c) => publicPage(makeDeps(c.env), { kind: "link_invalid" }, 404));
   return app;
 }

@@ -192,6 +192,53 @@ test.describe("password mode", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("the owner sets the source link, and the footers show it (AGPL section 13)", async ({
+    page,
+  }) => {
+    const upstream = "https://github.com/me-shaon/envelopen";
+    const custom = "https://git.example.com/acme/envelopen";
+    await signIn(page);
+    const footerLink = page.getByTestId("source-link");
+    await expect(footerLink).toHaveAttribute("href", upstream);
+
+    // The public pages show the default link and the version.
+    const publicLink = (path: string) =>
+      page.request.get(path).then(async (response) => {
+        const html = await response.text();
+        expect(html).toMatch(/Sent with Envelopen \d+\.\d+\.\d+/);
+        return /<a href="([^"]*)"[^>]*>\s*Source code/.exec(html)?.[1];
+      });
+    expect(await publicLink("/u/test")).toBe(upstream);
+
+    await page.goto("/settings");
+    const field = page.getByLabel("Source code URL");
+    await expect(field).toHaveValue(upstream);
+    const save = page.getByRole("button", { name: "Save source link" });
+    for (const bad of ["javascript:alert(1)", "http://git.example.com/acme/envelopen"]) {
+      await field.fill(bad);
+      await field.blur();
+      await expect(page.getByText("Enter a full URL that starts with https://.")).toBeVisible();
+      await expect(save).toBeDisabled();
+    }
+
+    await field.fill(custom);
+    await save.click();
+    await expect(page.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
+    await expect(footerLink).toHaveAttribute("href", custom);
+
+    // The setting survives a reload, and the public pages show it too.
+    await page.reload();
+    await expect(field).toHaveValue(custom);
+    await expect(footerLink).toHaveAttribute("href", custom);
+    expect(await publicLink("/u/test")).toBe(custom);
+    expect(await publicLink("/t/invalid")).toBe(custom);
+
+    // Back to the upstream link.
+    await page.getByRole("button", { name: "Use the default" }).click();
+    await save.click();
+    await expect(footerLink).toHaveAttribute("href", upstream);
+  });
+
   test("the workspace switcher changes the data that a list view loads", async ({ page }) => {
     await signIn(page);
     await page.goto("/settings");

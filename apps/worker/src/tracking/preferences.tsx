@@ -2,6 +2,7 @@
 /** @jsxImportSource hono/jsx */
 import type { Subscription } from "@envelopen/core";
 import type { Child } from "hono/jsx";
+import { ENVELOPEN_VERSION } from "../version";
 
 // The public subscription pages (R24, KTD30): server-rendered Hono JSX with plain HTML
 // forms, so they work without JavaScript and send no script at all. They follow the
@@ -11,6 +12,9 @@ import type { Child } from "hono/jsx";
 // States: the preference page, the "unsubscribe from all" confirmation, unsubscribed
 // (just now, or already) with a resubscribe form, an invalid or forged link (one
 // generic message), and an error when the change could not be saved.
+//
+// The footer links to the source code of this deployment with the running version
+// (AGPL section 13, KTD16). The owner sets the link in Settings. Hono JSX escapes it.
 //
 // Every response sends a strict Content-Security-Policy: no scripts, the one inline
 // style block by nonce, and forms that post only to this origin (KTD27).
@@ -87,6 +91,9 @@ button:focus-visible, .button:focus-visible, input:focus-visible { outline: 2px 
 hr { border: 0; border-top: 1px solid var(--hairline); margin: 28px 0 0; }
 h2 { margin: 24px 0 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 footer { margin-top: 20px; font-size: 12px; color: var(--muted); text-align: center; }
+footer a { color: inherit; text-decoration: underline; text-decoration-color: var(--input); text-underline-offset: 3px; }
+footer a:hover { color: var(--fg); }
+footer a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 2px; }
 @media (max-width: 480px) { body { padding-top: 24px; } .card { padding: 24px 20px; } }
 `;
 
@@ -96,7 +103,17 @@ function formatDay(ms: number): string {
   );
 }
 
-function Layout({ title, nonce, children }: { title: string; nonce: string; children: Child }) {
+function Layout({
+  title,
+  nonce,
+  sourceUrl,
+  children,
+}: {
+  title: string;
+  nonce: string;
+  sourceUrl: string;
+  children: Child;
+}) {
   return (
     <html lang="en">
       <head>
@@ -110,7 +127,12 @@ function Layout({ title, nonce, children }: { title: string; nonce: string; chil
       <body>
         <main>
           <div class="card">{children}</div>
-          <footer>Sent with Envelopen</footer>
+          <footer>
+            Sent with Envelopen {ENVELOPEN_VERSION} ·{" "}
+            <a href={sourceUrl} rel="noreferrer">
+              Source code
+            </a>
+          </footer>
         </main>
       </body>
     </html>
@@ -301,11 +323,17 @@ function Body({ view }: { view: PageView }) {
   }
 }
 
-/** The page as a complete HTML document, and the nonce of its style block. */
-export async function renderPage(view: PageView): Promise<{ html: string; nonce: string }> {
+/**
+ * The page as a complete HTML document, and the nonce of its style block. `sourceUrl` is
+ * the source link of the footer (TrackingDeps.sourceUrl).
+ */
+export async function renderPage(
+  view: PageView,
+  sourceUrl: string,
+): Promise<{ html: string; nonce: string }> {
   const nonce = crypto.randomUUID().replaceAll("-", "");
   const body = (
-    <Layout title={titleOf(view)} nonce={nonce}>
+    <Layout title={titleOf(view)} nonce={nonce} sourceUrl={sourceUrl}>
       <Body view={view} />
     </Layout>
   );
@@ -333,7 +361,20 @@ export function pageHeaders(nonce: string): Record<string, string> {
   };
 }
 
-export async function pageResponse(view: PageView, status = 200): Promise<Response> {
-  const { html, nonce } = await renderPage(view);
+export async function pageResponse(
+  view: PageView,
+  sourceUrl: string,
+  status = 200,
+): Promise<Response> {
+  const { html, nonce } = await renderPage(view, sourceUrl);
   return new Response(html, { status, headers: pageHeaders(nonce) });
+}
+
+/** A public page with the deployment's source link in the footer. */
+export async function publicPage(
+  deps: { sourceUrl(): Promise<string> },
+  view: PageView,
+  status = 200,
+): Promise<Response> {
+  return pageResponse(view, await deps.sourceUrl(), status);
 }

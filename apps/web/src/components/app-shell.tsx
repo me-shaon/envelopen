@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { useEffect, useState } from "react";
-import { sessionQuery, workspacesQuery } from "@/api/queries";
+import { deploymentSettingsQuery, sessionQuery, workspacesQuery } from "@/api/queries";
 import { setWorkspaceId, useWorkspaceId } from "@/api/workspace";
 import type { SessionUser } from "@/auth/auth-client";
 import { UsageCard } from "@/features/usage/usage-card";
@@ -110,6 +110,35 @@ function SidebarContent({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The footer of every signed-in page: the version and the link to the source code of
+ * this deployment (AGPL section 13, KTD16). The owner sets the link in Settings.
+ */
+function AppFooter() {
+  const settings = useQuery(deploymentSettingsQuery);
+  const sourceUrl = settings.data?.sourceUrl;
+  return (
+    <footer className="mx-auto mt-16 flex max-w-[1120px] flex-wrap items-center gap-x-2 gap-y-1 border-t border-hairline pt-5 text-xs text-muted-foreground">
+      <span>Envelopen {__ENVELOPEN_VERSION__}</span>
+      {sourceUrl ? (
+        <>
+          <span aria-hidden="true">·</span>
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            data-testid="source-link"
+            // Underlined, so the link stands out from the footer text without color.
+            className="rounded-sm underline decoration-border underline-offset-[3px] transition-colors duration-(--duration-press) hover:text-foreground"
+          >
+            Source code
+          </a>
+        </>
+      ) : null}
+    </footer>
   );
 }
 
@@ -259,6 +288,7 @@ export function AppShell() {
           <main className="mx-auto max-w-[1120px] pt-10">
             <Outlet />
           </main>
+          <AppFooter />
         </div>
       </div>
     </WorkspaceContext.Provider>

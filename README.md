@@ -209,9 +209,14 @@ All guides are in [docs/guides](docs/guides/README.md):
 - [Write a provider adapter](docs/guides/adapter-authoring.md)
 - [Release checklist](docs/guides/release-checklist.md)
 
+## Contributing
+
+Bug reports and pull requests are welcome on [GitHub](https://github.com/me-shaon/envelopen). Before you open a pull request, run `corepack pnpm lint`, `corepack pnpm typecheck`, and `corepack pnpm test`. A contribution is licensed under the same license as Envelopen.
+
 ## License
 
 Envelopen is free software under the [GNU Affero General Public License v3.0](LICENSE).
 
 You can use, change, and share Envelopen. If you change the code and other people use your changed version over a network, you must offer them its source code. This includes the subscribers who open your unsubscribe and preference pages. Changes that you keep in your own deployment repository satisfy this rule when you make that repository public, or when you give the source to people who ask for it.
 
+The footer of the admin app and of each subscriber page links to the source code, with the running version. The link goes to this repository by default. If you change the code, set the link to your copy in **Settings > Source code**.

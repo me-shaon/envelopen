@@ -75,6 +75,15 @@ export interface FileLinkRequest {
   expiresAt: number;
 }
 
+/**
+ * A read-mostly cache of deployment settings, for the public pages (KTD16). The Worker
+ * backs it with KV. Values expire on their own, so a missed write heals itself.
+ */
+export interface SettingsCache {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+}
+
 export interface Services {
   /** R2 bucket for CSV uploads, error files, and exports. */
   bucket: R2Bucket;
@@ -96,6 +105,8 @@ export interface Services {
   sendQueue: SendQueue;
   /** The daily D1 usage and the platform_limit flag (KTD24). */
   usage: UsageReader;
+  /** The cache that the public pages read deployment settings from. */
+  settingsCache: SettingsCache;
 }
 
 /** Returns the service, or throws when the surface did not provide it. */

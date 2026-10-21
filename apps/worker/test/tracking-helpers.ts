@@ -1,10 +1,11 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import type { BufferedEvent } from "@envelopen/core";
+import { type BufferedEvent, readSourceUrl } from "@envelopen/core";
 import type { SeedOptions } from "@envelopen/core/testing/campaign-fixtures";
 import type { DbConnection } from "@envelopen/db";
 import { Hono } from "hono";
 import { processPointer } from "../src/queue/send-consumer";
+import { settingsCache } from "../src/services";
 import { formToken } from "../src/tracking/csrf";
 import type { TrackingDeps } from "../src/tracking/deps";
 import {
@@ -71,6 +72,7 @@ export async function recordingDeps(db: DbConnection, now = LATER): Promise<Reco
       for (const event of list) events.push({ workspaceId, event });
     },
     formToken: (token) => formToken(SIGNING_KEY, token),
+    sourceUrl: () => readSourceUrl(db, settingsCache(env)),
     now: () => clock.now,
     events,
     clock,

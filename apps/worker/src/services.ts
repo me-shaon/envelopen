@@ -10,6 +10,7 @@ import {
   type ImportJob,
   type SendQueue,
   type Services,
+  type SettingsCache,
 } from "@envelopen/core";
 import { createTokenSigner, type TokenSigner, tokenKeysFromEnv } from "@envelopen/email-render";
 import { isUsableKey } from "./auth/better-auth";
@@ -177,6 +178,27 @@ export function importInstanceId(job: ImportJob): string {
   return `import-${job.workspaceId}-${job.importId}-${job.mode}-${job.generation}`;
 }
 
+/** KV keys of the settings cache start with this prefix. */
+const SETTINGS_PREFIX = "settings:";
+/** How long an edge location keeps a read in its local cache. */
+const SETTINGS_EDGE_TTL_SECONDS = 300;
+/** How long KV keeps a cached value. A missed write-through heals after this time. */
+const SETTINGS_EXPIRY_SECONDS = 24 * 60 * 60;
+
+/**
+ * The cache of deployment settings in KV (KTD16). The public pages read the source link
+ * from it, so a page view needs no D1 read in the common case.
+ */
+export function settingsCache(env: Pick<Env, "KV">): SettingsCache | undefined {
+  const kv = env.KV;
+  if (!kv) return undefined;
+  return {
+    get: (key) => kv.get(SETTINGS_PREFIX + key, { cacheTtl: SETTINGS_EDGE_TTL_SECONDS }),
+    put: (key, value) =>
+      kv.put(SETTINGS_PREFIX + key, value, { expirationTtl: SETTINGS_EXPIRY_SECONDS }),
+  };
+}
+
 export function createServices(
   env: Pick<
     Env,
@@ -190,6 +212,7 @@ export function createServices(
     | "SIGNING_KEYS_RETIRED"
     | "ENCRYPTION_KEY"
     | "OUTBOUND_MOCK_ORIGIN"
+    | "KV"
   >,
   request?: Request,
 ): Partial<Services> {
@@ -203,6 +226,8 @@ export function createServices(
     sendQueue: sendQueue(env),
     usage: usageReader(env),
   };
+  const cache = settingsCache(env);
+  if (cache) services.settingsCache = cache;
   // Webhook URLs point at the origin that the owner uses for the admin app.
   if (request) services.appOrigin = new URL(request.url).origin;
   // Without SIGNING_KEY, the operations that need a hash or a link fail. The first-run

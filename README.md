@@ -130,6 +130,10 @@ The REST API has the same actions: `POST /api/contacts/{id}/export` and `POST /a
 
 Envelopen records every change with the actor, the surface (UI, API, or MCP), and the target. Exports and erases are in it too. Open **Settings**, then select **Open the audit log**. You can filter by surface and by action.
 
+## Backups
+
+Envelopen backs up all data every day at 02:23 UTC to the R2 bucket of the deployment. Each backup is encrypted with a passphrase that only you hold. You can add a copy to an S3-compatible store, and download a backup as one `.envbak` file. Set the passphrase in **Settings** > **Backups** to turn backups on. A restore works on a new deployment, from the first-run screen. See [Back up and restore](docs/guides/backup-and-restore.md).
+
 ## API and MCP
 
 - The REST API is under `/api`. Create an API key in **Settings** > **API keys**. Send it as `Authorization: Bearer evk_...`. The OpenAPI document is in `apps/web/src/api/openapi.json`.
@@ -206,6 +210,8 @@ All guides are in [docs/guides](docs/guides/README.md):
 - [Import contacts](docs/guides/import-contacts.md)
 - [Send a test email](docs/guides/test-send.md)
 - [Connect an MCP client](docs/guides/mcp.md)
+- [Update Envelopen](docs/guides/updating.md)
+- [Back up and restore](docs/guides/backup-and-restore.md)
 - [Write a provider adapter](docs/guides/adapter-authoring.md)
 - [Release checklist](docs/guides/release-checklist.md)
 

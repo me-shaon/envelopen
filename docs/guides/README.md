@@ -15,6 +15,7 @@ Vendors change their limits and prices often. Each guide shows the date of the l
 | [Send a test email](test-send.md) | Test addresses, test sends, and the unsubscribe headers in Gmail. |
 | [Connect an MCP client](mcp.md) | API keys, scope presets, and the confirm flow for agents. |
 | [Update Envelopen](updating.md) | The update workflow, update modes, manual updates, backups, and rollback. |
+| [Back up and restore](backup-and-restore.md) | Encrypted backups, the passphrase, the S3 copy, restore into a new deployment, and D1 Time Travel. |
 
 ## Platform
 

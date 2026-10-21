@@ -12,47 +12,39 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-21
+
 ### Added
 
-- License: GNU Affero General Public License v3.0.
-- A source code link with the version in the admin footer and on each subscriber page. The owner can change it in Settings.
-- Scheduled sends have a timezone. The owner picks an IANA timezone, and the app shows the send time in that zone.
-- Encrypted backups of all data to R2, daily and on demand, with an optional copy to an S3-compatible store and a retention period. Only the owner's passphrase opens a backup.
-- Backup status, run history, and downloads in Settings, a warning on every page when a backup fails, and a restore of a backup file or an R2 backup from the first-run screen of a new deployment.
+- Encrypted daily backups to R2, with an optional S3-compatible copy and retention.
+- Backup status, downloads, and a failure banner in the admin app.
+- Restore of a backup into a new deployment from the first-run screen.
+- Timezone for scheduled campaigns.
+- Source code link with the version in the admin footer and on subscriber pages.
+- License: AGPL-3.0.
 
 ### Changed
 
-- Faster contact pages, list and tag counts, and audit log on large workspaces.
-- Deleting a contact or a draft campaign no longer reads every event and recipient.
-- The hourly event retention job reads only the expired events.
-- Event flushes look up campaign recipients by id instead of reading the workspace.
-- Lists and tags store their member counts, so the lists and tags pages no longer count every membership.
-- Campaign estimates and recipient snapshots read the memberships of the targeted lists and tags only.
-- The end of a recipient snapshot sums the batch sizes instead of counting every recipient.
-- Erasing a contact deletes its raw events through the contact index instead of reading every event.
-- The onboarding checklist finds a sent email without reading every campaign recipient.
-- A daily cron job recounts the stored list and tag counts and corrects any drift.
+- Lists and tags store their member counts, and a daily job corrects drift.
+- Faster contact pages, audit log, snapshots, estimates, and erase on large workspaces.
+- Fewer D1 reads for retention, event flushes, deletes, and the onboarding checklist.
 
 ### Fixed
 
-- One-click unsubscribe and preference saves succeed at the D1 daily limit. Sends skip the contact until the unsubscribe is written to D1 after the reset.
-- A contact page of 100, and adding 100 contacts to a list, stay within the D1 limit of 100 bound parameters.
+- One-click unsubscribe and preference saves work at the D1 daily limit.
+- Contact pages and list adds stay within the D1 limit of 100 bound parameters.
 
 ### Security
 
-- An import raises a consent basis of `unknown` only when the owner configured and started it. An API key cannot configure or start another principal's import with a stronger basis.
-- A contact deleted with a consent basis of `unknown` keeps that basis when an API key adds the address again.
-- An `Idempotency-Key` used on another resource of the same route gets 422 instead of the first response.
-- Failed logins from other IPs no longer lock the owner out. The right password always signs in, and a high per-email ceiling slows guessing from many IPs.
-- Adding a passkey from a signed-in session needs a session from the last 10 minutes. A password reset with the setup token removes every passkey.
-- The HTML sanitizer checks every copy of a repeated attribute, drops unterminated `url(` and quoted `data:` CSS, and drops a `<style>` with a `<` in it.
-- Link tracking no longer slows down on HTML with many unclosed `<a ` tags.
-- The admin app sends a Content-Security-Policy, `X-Content-Type-Options`, and `Referrer-Policy`. API responses send `Cache-Control: no-store`.
-- Webhook, unsubscribe, setup, and login routes cap the request body while they read it, also without `Content-Length`.
-- The CI workflow pins every action to a commit SHA and has read-only permissions.
-- Provider credentials and webhook secrets are bound to their connection. The cron encrypts existing values again in the new format.
-- New SES webhook URLs carry the token in the path, not the query string. Existing `?token=` URLs keep working.
-- `pnpm demo` keeps its secrets in files that only the owner can read, and no longer passes them on the command line.
+- Stricter consent basis rules for imports and re-added contacts.
+- Owner login cannot be locked out from other IPs.
+- Adding a passkey needs a recent sign-in.
+- Stricter HTML sanitizer and faster link tracking on malformed HTML.
+- Security headers on the admin app and `no-store` on API responses.
+- Request body caps on public routes.
+- Credentials bound to their connection, and SES webhook tokens moved to the path.
+- Idempotency keys refuse reuse on another resource.
+- CI actions pinned to commit SHAs, and demo secrets kept off the command line.
 
 ## [0.1.0] - 2026-10-20
 
@@ -77,5 +69,6 @@ The first release of Envelopen: self-hosted email campaigns on Cloudflare Worker
 - Erase also removes the contact from stored batch data.
 - Unsubscribe links use the tracking domain only after it is verified.
 
-[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/me-shaon/envelopen/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/me-shaon/envelopen/releases/tag/v0.1.0

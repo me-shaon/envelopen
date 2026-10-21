@@ -139,6 +139,57 @@ Expected result: a new user sends a test campaign with only the README and the g
 2. Ask the person to deploy, connect a provider with its API key, verify a domain, import contacts, and send a test campaign.
 3. Record each step where the person needed help, and fix the guide.
 
+## 11. One-click unsubscribe at the D1 daily limit (v0.2)
+
+Expected result: the unsubscribe succeeds while D1 refuses writes, and the contact shows as unsubscribed after the reset.
+
+1. On the Free deployment, send a campaign to two of your own addresses.
+2. Bring D1 to its daily write limit. For example, import test addresses until the dashboard shows the limit.
+3. Run `npx wrangler tail --format json`.
+4. In Gmail, select **Unsubscribe** next to the sender name, and confirm.
+5. Check in the tail that the POST to `/u/` returns 200.
+6. On a page with a preference link, save the preferences. Check that the page shows success.
+7. After 00:00 UTC, open the contact. Check the banner "Unsubscribed from every list" with the source "One-click unsubscribe".
+
+## 12. Backup round trip to S3 (v0.2)
+
+Expected result: the backup reaches R2 and the S3 store, and retention removes old copies in both.
+
+1. Create a bucket in AWS S3 or Backblaze B2, and a key with only `PutObject` and `DeleteObject` on `backups/*`.
+2. In **Settings** > **Backups**, set a passphrase, and add the destination in **Copy to S3**.
+3. Select **Back up now**, and wait for **Succeeded**.
+4. Check that `backups/<backup-id>/manifest.json` and the chunks exist in R2 and in the S3 bucket.
+5. Change the secret access key to a wrong value, and back up again. Check that the run shows as partial, and that the banner shows on every page.
+6. Set the right key again, and back up again. Check that the banner goes away.
+7. Set **Keep backups for (days)** to 1. On the next day, check that the cron removed the old backups from R2 and S3, and kept the newest one.
+8. Record the time and the rows read of the daily run at 02:23 UTC.
+
+## 13. Restore on a fresh deployment (v0.2)
+
+Expected result: the new deployment holds the same data, old unsubscribe links work, and sends wait for the age confirmation.
+
+1. On the source deployment, select **Download** for a backup. Check that the audit log shows the download.
+2. Deploy a second Envelopen with new secrets, on another hostname if you can.
+3. Open `/setup`, type the setup token, and select **Restore a backup**.
+4. Type a wrong passphrase once. Check that the restore stops before any write.
+5. Upload the `.envbak` file, type the right passphrase, and select **Start the restore**.
+6. Close the page during the restore, then open `/setup` again. Check that the progress shows.
+7. When the restore is complete, sign in. Compare the counts of contacts, lists, templates, campaigns, and stats with the source.
+8. Open an unsubscribe link from an email of the source deployment, with the hostname changed to the new deployment. Check that it works.
+9. Check that a campaign send waits until you select **I checked. Allow sends**.
+10. Repeat steps 2 to 5 with the R2 source: copy a backup folder into the R2 bucket of a fresh deployment.
+
+## 14. Passphrase derivation time on Free (v0.2)
+
+Expected result: the backup key is ready within about 30 seconds, and no Workflow step exceeds the CPU limit.
+
+1. On the Free deployment, run `npx wrangler tail --format json`.
+2. In **Settings** > **Backups**, set a passphrase.
+3. Measure the time from **Set the passphrase** until the card shows **Set on**.
+4. Read `cpuTime` of each step of the key derivation Workflow.
+5. Do the same for the passphrase check at the start of a restore (check 13).
+6. Record the times. If a step is near 10 ms of CPU, lower `PBKDF2_SEGMENT_ITERATIONS` in `packages/core/src/backup/crypto.ts`.
+
 ## Release process
 
 A release is a `vX.Y.Z` tag on `main`. The release workflow (`.github/workflows/release.yml`) checks the tag, runs the checks, and creates the GitHub release. The update workflow in each copy then finds the release.
@@ -174,5 +225,6 @@ The plan leaves these questions for a deployed check. Record the answers here:
 - The TTL of confirm tokens and of the lease on claimed batches.
 - The sweep timeout for `enqueued` batches, compared with the normal queue backlog on Free.
 - Whether the Deploy button provisions the dead-letter queue on a Free account (check 1), and the Queues operation count for a 5,000-recipient campaign.
+- The time and the CPU of the passphrase derivation on Free (check 14).
 
-Last checked: 2026-10-20
+Last checked: 2026-10-21

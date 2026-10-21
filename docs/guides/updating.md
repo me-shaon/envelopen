@@ -28,7 +28,8 @@ The workflow does nothing in the `me-shaon/envelopen` repository itself.
 
 - Make sure that your repository is on GitHub. The workflow is a GitHub Actions workflow. On GitLab, use [Update by hand](#update-by-hand).
 - Read the release notes of each new version on the [releases page](https://github.com/me-shaon/envelopen/releases). Do the steps under **Manual steps** and **Breaking** yourself.
-- Back up the database before a release that adds a D1 migration. See [Back up the database](#back-up-the-database).
+- Back up before each update. Select **Back up now** in **Settings** > **Backups**, and wait until the backup succeeds. See [Back up and restore](backup-and-restore.md).
+- Before a release that adds a D1 migration, also export the database. See [Back up the database](#back-up-the-database).
 
 ## Turn on the update workflow
 
@@ -140,6 +141,8 @@ If Workers Builds is not connected to your repository, deploy from a computer:
 
 A D1 migration changes the database. Back up the database before an update that adds a migration. The release notes and the files in `packages/db/migrations` show the new migrations.
 
+First, make an Envelopen backup with **Back up now** in **Settings** > **Backups**. See [Back up and restore](backup-and-restore.md). Then export the database for a quick restore into the same account:
+
 1. Find the `database_name` of the `DB` binding in your `wrangler.jsonc`.
 2. Export the database. Replace `<database-name>` with that name:
 
@@ -165,7 +168,7 @@ To undo a D1 migration, restore the database to a time before the update with D1
 npx wrangler d1 time-travel restore DB --timestamp=<unix-time-before-the-update>
 ```
 
-The restore overwrites the database. Data that arrived after that time is lost. You can also import your backup into a new database.
+The restore overwrites the database. Data that arrived after that time is lost. You can also import your export into a new database, or restore an Envelopen backup into a new deployment. See [Back up and restore](backup-and-restore.md).
 
 A rollback in the dashboard does not change your repository. The next push to the production branch deploys the newest code again. To stay on the old release, revert the update commit in your repository.
 
@@ -197,6 +200,7 @@ If you forked `me-shaon/envelopen` on GitHub instead of using the Deploy button,
 - [README](../../README.md)
 - [Cloudflare Workers platform](cloudflare-platform.md)
 - [Cloudflare D1](database-d1.md)
+- [Back up and restore](backup-and-restore.md)
 - [Release checklist](release-checklist.md)
 
 ## Sources
@@ -207,4 +211,4 @@ If you forked `me-shaon/envelopen` on GitHub instead of using the Deploy button,
 - [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)
 - [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow)
 
-Last checked: 2026-10-20
+Last checked: 2026-10-21

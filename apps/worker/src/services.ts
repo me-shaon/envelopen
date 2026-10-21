@@ -16,6 +16,9 @@ import {
   type Services,
   type SettingsCache,
   signingKeyRing,
+  type WelcomeJob,
+  type WelcomeRunner,
+  welcomeInstanceId,
 } from "@envelopen/core";
 import { createDb } from "@envelopen/db";
 import { createTokenSigner, type TokenSigner } from "@envelopen/email-render";
@@ -255,6 +258,52 @@ export function keyDerivationStarter(env: Pick<Env, "KEY_DERIVATION_WORKFLOW">) 
   };
 }
 
+/**
+ * Starts and stops welcome series instances (U10, KTD8). The instance id
+ * `welcome-<contactId>-<seriesId>` makes a second start of the same contact and series
+ * a no-op: Workflows refuse an id that exists. Workflows allow only letters, digits, `-`,
+ * and `_` in an id, so the parts are joined with `-`.
+ */
+export function welcomeRunner(env: Pick<Env, "WELCOME_WORKFLOW">): WelcomeRunner {
+  return {
+    async start(jobs) {
+      const started: WelcomeJob[] = [];
+      for (const job of jobs) {
+        const id = welcomeInstanceId(job);
+        const params: WelcomeJob = {
+          workspaceId: job.workspaceId,
+          seriesId: job.seriesId,
+          contactId: job.contactId,
+        };
+        try {
+          await env.WELCOME_WORKFLOW.create({ id, params });
+          started.push(job);
+        } catch (error) {
+          // The instance exists: the contact got this series already.
+          const exists = await env.WELCOME_WORKFLOW.get(id).then(
+            () => true,
+            () => false,
+          );
+          if (!exists) console.error(`Welcome instance ${id} did not start`, error);
+        }
+      }
+      return started;
+    },
+    async stop(jobs) {
+      await Promise.all(
+        jobs.map(async (job) => {
+          try {
+            const instance = await env.WELCOME_WORKFLOW.get(welcomeInstanceId(job));
+            await instance.terminate();
+          } catch {
+            // No instance, or it is finished already. The per-step check covers the rest.
+          }
+        }),
+      );
+    },
+  };
+}
+
 /** KV keys of the settings cache start with this prefix. */
 const SETTINGS_PREFIX = "settings:";
 /** How long an edge location keeps a read in its local cache. */
@@ -294,6 +343,7 @@ export function createServices(
     | "KV"
     | "TURNSTILE_SITE_KEY"
     | "TURNSTILE_SECRET"
+    | "WELCOME_WORKFLOW"
   >,
   request?: Request,
 ): Partial<Services> {
@@ -309,6 +359,7 @@ export function createServices(
     sendQueue: sendQueue(env),
     usage: usageReader(env),
     turnstileConfigured: turnstileKeys(env) !== null,
+    welcome: welcomeRunner(env),
   };
   const cache = settingsCache(env);
   if (cache) services.settingsCache = cache;

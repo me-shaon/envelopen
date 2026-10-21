@@ -169,7 +169,7 @@ describe("contacts.upsert (R73)", () => {
       listsAddContacts,
       { id: list.id, contactIds: [other.contact.id] },
     );
-    expect(added).toEqual({ added: 0, keptUnsubscribed: 1 });
+    expect(added).toEqual({ added: 0, keptUnsubscribed: 1, welcomeStarted: 0 });
     // Removing a member leaves the unsubscribe record.
     expect(
       await run(conn, principal, listsRemoveContact, { id: list.id, contactId: other.contact.id }),

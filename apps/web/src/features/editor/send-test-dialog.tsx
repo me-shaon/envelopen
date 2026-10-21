@@ -22,11 +22,16 @@ export function SendTestDialog({
   open,
   onOpenChange,
   prepare,
+  subject,
+  description = "Envelopen saves the template, then sends it with the sample values of the preview.",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Saves the template first and returns its id. */
   prepare: () => Promise<number>;
+  /** A subject in place of the template's, for example a welcome step's subject. */
+  subject?: string;
+  description?: string;
 }) {
   const { current } = useCurrentWorkspace();
   const addresses = useQuery({ ...testAddressesQuery(current.id), enabled: open });
@@ -44,7 +49,12 @@ export function SendTestDialog({
       const templateId = await prepare();
       return unwrap(
         api.POST("/test-sends", {
-          body: { to: recipients.slice(0, 5), from: fromValue, templateId },
+          body: {
+            to: recipients.slice(0, 5),
+            from: fromValue,
+            templateId,
+            ...(subject?.trim() ? { subject: subject.trim() } : {}),
+          },
         }),
       );
     },
@@ -64,10 +74,7 @@ export function SendTestDialog({
       }}
     >
       <DialogContent className="max-w-[480px]">
-        <DialogHeader
-          title="Send a test"
-          description="Envelopen saves the template, then sends it with the sample values of the preview."
-        />
+        <DialogHeader title="Send a test" description={description} />
         <form className="flex flex-col gap-5" onSubmit={onSubmit}>
           <FormError message={errorText(send.error)} />
           <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">

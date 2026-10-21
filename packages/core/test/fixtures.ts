@@ -15,6 +15,7 @@ import type {
   UsageStatus,
 } from "../src/services";
 import { createEmailHasher } from "../src/suppression/hash";
+import { type WelcomeJob, welcomeInstanceId } from "../src/welcome/model";
 
 /** A connection that fails any tenant query without a workspace_id condition. */
 export function testDb(): DbConnection {
@@ -115,6 +116,10 @@ export interface TestServices extends Services {
   queued: BatchPointer[];
   /** What `usage.status()` returns. Tests change it. */
   usageStatus: UsageStatus;
+  /** Welcome instances that started, in order. An instance id starts once, as in Workflows. */
+  welcomeStarts: WelcomeJob[];
+  /** Welcome instances that a stop asked to terminate, in order. */
+  welcomeStops: WelcomeJob[];
 }
 
 /** Services as the Worker builds them, with a job recorder in place of the Workflow. */
@@ -125,6 +130,9 @@ export async function testServices(options: { fetch?: typeof fetch } = {}): Prom
   const backupJobs: BackupJob[] = [];
   const derivationJobs: KeyDerivationJob[] = [];
   const queued: BatchPointer[] = [];
+  const welcomeStarts: WelcomeJob[] = [];
+  const welcomeStops: WelcomeJob[] = [];
+  const welcomeIds = new Set<string>();
   const services: TestServices = {
     bucket: env.BUCKET,
     hashEmail: await createEmailHasher(TEST_SIGNING_KEY),
@@ -160,6 +168,19 @@ export async function testServices(options: { fetch?: typeof fetch } = {}): Prom
     },
     settingsCache: memorySettingsCache(),
     turnstileConfigured: true,
+    welcomeStarts,
+    welcomeStops,
+    welcome: {
+      async start(jobs) {
+        const fresh = jobs.filter((job) => !welcomeIds.has(welcomeInstanceId(job)));
+        for (const job of fresh) welcomeIds.add(welcomeInstanceId(job));
+        welcomeStarts.push(...fresh);
+        return fresh;
+      },
+      async stop(jobs) {
+        welcomeStops.push(...jobs);
+      },
+    },
   };
   return services;
 }

@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { ListIcon, PlusIcon, TagIcon } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { api, unwrap } from "@/api/client";
-import { listsQuery, tagsQuery } from "@/api/queries";
+import { listsQuery, tagsQuery, welcomeSeriesListQuery } from "@/api/queries";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmDialog } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -153,9 +153,46 @@ function useAudienceMutations(kind: "lists" | "tags") {
   return { create, rename, remove };
 }
 
+/** The list's welcome series (U10), or a link to create one. */
+function WelcomeLink({
+  listId,
+  listName,
+  series,
+}: {
+  listId: number;
+  listName: string;
+  series: { id: number; listId: number; enabled: boolean }[] | undefined;
+}) {
+  if (!series) return null;
+  const own = series.find((item) => item.listId === listId);
+  if (own) {
+    return (
+      <Link
+        to="/welcome/$seriesId"
+        params={{ seriesId: String(own.id) }}
+        className="text-[13px] hover:underline"
+      >
+        {own.enabled ? "On" : "Off"}
+        <span className="sr-only"> welcome series of {listName}</span>
+      </Link>
+    );
+  }
+  return (
+    <Link
+      to="/welcome/$seriesId"
+      params={{ seriesId: "new" }}
+      search={{ listId }}
+      className="text-[13px] text-muted-foreground hover:text-foreground hover:underline"
+    >
+      Add<span className="sr-only"> a welcome series to {listName}</span>
+    </Link>
+  );
+}
+
 export function ListsPage() {
   const { current } = useCurrentWorkspace();
   const lists = useQuery(listsQuery(current.id));
+  const welcome = useQuery(welcomeSeriesListQuery(current.id));
   const { create, rename, remove } = useAudienceMutations("lists");
   const [renaming, setRenaming] = useState<Item | null>(null);
   const [deleting, setDeleting] = useState<Item | null>(null);
@@ -188,6 +225,7 @@ export function ListsPage() {
                 <TableHead>List</TableHead>
                 <TableHead>Subscribed</TableHead>
                 <TableHead>Unsubscribed</TableHead>
+                <TableHead>Welcome series</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
@@ -211,6 +249,13 @@ export function ListsPage() {
                   </TableCell>
                   <TableCell>
                     <Figure value={list.unsubscribed} className="text-muted-foreground" />
+                  </TableCell>
+                  <TableCell>
+                    <WelcomeLink
+                      listId={list.id}
+                      listName={list.name}
+                      series={welcome.data?.items}
+                    />
                   </TableCell>
                   <TableCell className="figure text-muted-foreground">
                     {formatDate(list.createdAt)}

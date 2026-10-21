@@ -263,6 +263,45 @@ export function formQuery(workspaceId: number, id: number) {
   });
 }
 
+// Welcome series (U10) ----------------------------------------------------------------------
+
+export function welcomeSeriesListQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "welcome", "list"],
+    queryFn: () => unwrap(api.GET("/welcome-series")),
+  });
+}
+
+export function welcomeSeriesQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "welcome", "one", id],
+    queryFn: () => unwrap(api.GET("/welcome-series/{id}", { params: { path: { id } } })),
+    // The editor owns the draft after the first load. A refetch would reset it.
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/** The other series whose list shares subscribed contacts with `listId`. */
+export function welcomeOverlapsQuery(workspaceId: number, listId: number, seriesId?: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "welcome", "overlaps", listId, seriesId ?? null],
+    queryFn: () =>
+      unwrap(
+        api.GET("/welcome-series/overlaps", {
+          params: { query: { listId, ...(seriesId ? { seriesId } : {}) } },
+        }),
+      ),
+  });
+}
+
+export function templatePreviewQuery(workspaceId: number, id: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "templates", "preview", id],
+    queryFn: () => unwrap(api.GET("/templates/{id}/preview", { params: { path: { id } } })),
+  });
+}
+
 export function templatesQuery(workspaceId: number) {
   return queryOptions({
     queryKey: ["ws", workspaceId, "templates", "list"],

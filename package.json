@@ -76,6 +76,9 @@
       "EVENT_BUFFER": {
         "description": "Durable Object per workspace that collects opens, clicks, unsubscribes, and provider events, and writes them to D1 in groups."
       },
+      "WELCOME_WORKFLOW": {
+        "description": "Workflow that sends the welcome series of a list to one contact: it waits each step's delay, checks the contact again, and sends one email per step."
+      },
       "UNSUBSCRIBE_LEDGER": {
         "description": "Durable Object that keeps unsubscribes that D1 rejected at its daily limit. Sends skip these contacts, and the cron writes the unsubscribes to D1 after the reset."
       },

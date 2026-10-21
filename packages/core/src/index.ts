@@ -235,4 +235,32 @@ export {
 } from "./templates/operations";
 export { personalizePreview, SAMPLE_VALUES } from "./templates/preview";
 export * from "./usage";
+export {
+  checkStepEligibility,
+  type Eligibility,
+  type StopReason,
+  startableJobs,
+} from "./welcome/eligibility";
+export {
+  MAX_DELAY_MINUTES,
+  MAX_WELCOME_STEPS,
+  parseSteps,
+  storedCampaignId,
+  WELCOME_TOKEN_CAMPAIGN,
+  type WelcomeJob,
+  type WelcomeStep,
+  welcomeInstanceId,
+  welcomeRecipientId,
+  welcomeSendIdOf,
+} from "./welcome/model";
+export {
+  type BudgetDecision,
+  planStep,
+  runWelcomeStep,
+  type StepOutcome,
+  type StepPlan,
+  WelcomeRetryError,
+  type WelcomeStepDeps,
+} from "./welcome/run";
+export { startWelcome, stopWelcome, type WelcomeRunner } from "./welcome/start";
 export { resolveSessionPrincipal, WORKSPACE_HEADER } from "./workspaces/membership";

@@ -18,6 +18,7 @@ interface __BaseEnv_Env {
 	BACKUP_WORKFLOW: Workflow<Parameters<import("./src/index").BackupWorkflow['run']>[0]['payload']>;
 	KEY_DERIVATION_WORKFLOW: Workflow<Parameters<import("./src/index").KeyDerivationWorkflow['run']>[0]['payload']>;
 	RESTORE_WORKFLOW: Workflow<Parameters<import("./src/index").RestoreWorkflow['run']>[0]['payload']>;
+	WELCOME_WORKFLOW: Workflow<Parameters<import("./src/index").WelcomeWorkflow['run']>[0]['payload']>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {

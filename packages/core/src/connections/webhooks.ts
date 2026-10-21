@@ -9,6 +9,7 @@ import { normalizeEmail } from "../contacts/email";
 import { chunk } from "../contacts/writes";
 import type { ProviderEventRef } from "../events/model";
 import { requireService, type Services } from "../services";
+import { stopWelcome } from "../welcome/start";
 import { adapterContext, decryptWebhookSecret, refsOf } from "./model";
 
 // Provider webhooks (R43): verify, normalize, store. This is the hand-off to the event
@@ -183,6 +184,27 @@ async function storeEvents(
     email_hash: string | null;
     occurred_at: number;
   }>([...inserts, ...suppressions]);
+  const suppressed = rows
+    .filter((row) => SUPPRESS[row.type as keyof typeof SUPPRESS] && row.email_hash)
+    .map((row) => row.email_hash as string);
+  const newSuppressions = results
+    .slice(inserts.length)
+    .some((result) => (result.meta.changes ?? 0) > 0);
+  if (newSuppressions && deps.services.welcome) {
+    // A bounce or a complaint stops the welcome series of the contact (U10).
+    const contacts = await db.db
+      .selectFrom("contacts")
+      .select("id")
+      .where("workspace_id", "=", workspaceId)
+      .where("email_hash", "in", suppressed)
+      .execute();
+    await stopWelcome(
+      db,
+      deps.services.welcome,
+      workspaceId,
+      contacts.map((row) => row.id),
+    );
+  }
   return results.slice(0, inserts.length).flatMap((result) =>
     (result.results ?? []).map((added) => ({
       source: "provider" as const,

@@ -21,6 +21,9 @@ import { sql } from "kysely";
 // - `test_addresses` with the same address.
 // - `consent_tombstones` with the address hash. The suppression is enough.
 // - `signups` (U8): pending and confirmed signups of the address, on any form.
+// - `welcome_sends` (U10): the welcome steps of the contact. The rows hold no address,
+//   but they link the contact to the series. The erase operation also terminates the
+//   contact's welcome Workflow instances, whose state holds only ids.
 //
 // Files in R2 (import uploads, error files, and contact exports) can hold the address
 // too. They expire after FILE_TTL_MS, and cleanup deletes them.
@@ -154,6 +157,10 @@ WHERE campaign_batches.workspace_id = ${workspaceId} AND campaign_batches.id = r
       .where((eb) =>
         eb.or([eb("email", "=", target.email), eb("email_hash", "=", target.emailHash)]),
       ),
+    db.db
+      .deleteFrom("welcome_sends")
+      .where("workspace_id", "=", workspaceId)
+      .where("contact_id", "=", target.id),
     // 5. The contact. Foreign keys cascade to tags, memberships, fields, and consent.
     db.db
       .deleteFrom("contacts")

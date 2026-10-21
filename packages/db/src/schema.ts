@@ -758,6 +758,48 @@ export interface FormConsentsTable {
   created_at: Generated<number>;
 }
 
+// Welcome series (U10, KTD8) -------------------------------------------------------------
+
+export type WelcomeSendStatus = "pending" | "sent" | "failed" | "skipped";
+
+/** A series of 1 to 5 emails for one list (0021_welcome_series.sql). */
+export interface WelcomeSeriesTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  list_id: Immutable<number>;
+  name: string;
+  /** JSON array of steps in send order: `{ templateId, subject, delayMinutes }`. */
+  steps: Defaulted<string>;
+  from_name: string | null;
+  from_email: string | null;
+  reply_to: string | null;
+  /** The https origin of the unsubscribe links. */
+  link_origin: string | null;
+  enabled: Defaulted<Bool>;
+  /** The contacts that started the series. */
+  entered_count: Defaulted<number>;
+  created_at: Generated<number>;
+  updated_at: Defaulted<number>;
+}
+
+/** One step of a series for one contact (0021_welcome_series.sql). */
+export interface WelcomeSendsTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  series_id: Immutable<number>;
+  /** The position of the step, 1 to 5. */
+  position: Immutable<number>;
+  contact_id: number | null;
+  status: Defaulted<WelcomeSendStatus>;
+  skip_reason: Defaulted<string | null>;
+  provider_message_id: Defaulted<string | null>;
+  error: Defaulted<string | null>;
+  attempts: Defaulted<number>;
+  created_at: Generated<number>;
+  sent_at: Defaulted<number | null>;
+  updated_at: Defaulted<number>;
+}
+
 // Backups (U4, KTD2) ---------------------------------------------------------------------
 
 export type BackupRunStatus = "running" | "succeeded" | "partial" | "failed";
@@ -922,6 +964,8 @@ export interface Database {
   forms: FormsTable;
   signups: SignupsTable;
   form_consents: FormConsentsTable;
+  welcome_series: WelcomeSeriesTable;
+  welcome_sends: WelcomeSendsTable;
 }
 
 export type TableName = keyof Database;
@@ -985,6 +1029,9 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   forms: "tenant",
   signups: "tenant",
   form_consents: "tenant",
+  // Welcome series (U10).
+  welcome_series: "tenant",
+  welcome_sends: "tenant",
 };
 
 export const TENANT_TABLES: ReadonlySet<string> = new Set(

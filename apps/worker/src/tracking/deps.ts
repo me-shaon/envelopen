@@ -1,4 +1,4 @@
-import { readSourceUrl } from "@envelopen/core";
+import { readSourceUrl, type WelcomeRunner } from "@envelopen/core";
 import { createDb, type DbConnection } from "@envelopen/db";
 import type { TokenSigner } from "@envelopen/email-render";
 import { isUsableKey } from "../auth/better-auth";
@@ -6,7 +6,7 @@ import { type AttemptRule, attemptKeys, durableAttemptLimiter } from "../auth/ra
 import { type EventSink, eventSink } from "../do/events";
 import { type LedgerClient, unsubscribeLedger } from "../do/unsubscribes";
 import { usageSink } from "../do/usage";
-import { settingsCache, tokenSigner } from "../services";
+import { settingsCache, tokenSigner, welcomeRunner } from "../services";
 import { formToken } from "./csrf";
 
 // What the public routes under /t and /u need. Tests pass their own sink and clock.
@@ -25,6 +25,8 @@ export interface TrackingDeps {
   ledger: LedgerClient;
   /** Counts one ledger write for the IP. False when the IP is over LEDGER_IP_RULE. */
   allowLedgerWrite(ip: string): Promise<boolean>;
+  /** Stops welcome series instances after an unsubscribe (U10). Optional in tests. */
+  welcome?: WelcomeRunner;
 }
 
 /**
@@ -54,5 +56,6 @@ export function trackingDeps(env: Env): TrackingDeps {
       const status = await limiter.record(attemptKeys.ip("unsubscribe-ledger", ip), LEDGER_IP_RULE);
       return status.count <= LEDGER_IP_RULE.limit;
     },
+    welcome: welcomeRunner(env),
   };
 }

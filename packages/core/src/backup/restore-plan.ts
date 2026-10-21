@@ -75,6 +75,8 @@ export const RESTORE_ORDER: readonly TableName[] = [
   "forms",
   "signups",
   "form_consents",
+  "welcome_series",
+  "welcome_sends",
   "suppressions",
   "consent_tombstones",
   "imports",
@@ -135,6 +137,12 @@ export const FOREIGN_KEYS: Readonly<Partial<Record<TableName, readonly ForeignKe
     ws(),
     ref("consent_event_id", "consent_events", "skip"),
     ref("form_id", "forms", "clear"),
+  ],
+  welcome_series: [ws(), ref("list_id", "lists", "skip")],
+  welcome_sends: [
+    ws(),
+    ref("series_id", "welcome_series", "skip"),
+    ref("contact_id", "contacts", "skip"),
   ],
   suppressions: [ws(), ref("campaign_id", "campaigns", "clear")],
   consent_tombstones: [ws()],
@@ -197,6 +205,7 @@ const identity: Upgrade = (_table, row) => row;
  * - 0019 adds only new tables (forms, signups, form consents). An older backup has none.
  * - 0020 adds `contact_fields.preference` and `forms.required_field_ids`. An older field
  *   stays off the preference page, and an older form requires no field.
+ * - 0021 adds only new tables (welcome series and welcome sends). An older backup has none.
  */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
@@ -207,6 +216,7 @@ export const UPGRADES: Readonly<Record<number, Upgrade>> = {
     if (table === "forms") return { required_field_ids: "[]", ...row };
     return row;
   },
+  21: identity,
 };
 
 /** Returns why a backup of `schemaVersion` cannot be restored here, or null. */

@@ -91,6 +91,9 @@
     },
     // Restore (U5): a backup into a new deployment from the first-run screen, one chunk per
     // step, within the daily D1 write budget.
-    { "name": "envelopen-restore", "binding": "RESTORE_WORKFLOW", "class_name": "RestoreWorkflow" }
+    { "name": "envelopen-restore", "binding": "RESTORE_WORKFLOW", "class_name": "RestoreWorkflow" },
+    // Welcome series (U10): one instance per contact and series. Each step sleeps its delay,
+    // checks the contact again, and sends one email.
+    { "name": "envelopen-welcome", "binding": "WELCOME_WORKFLOW", "class_name": "WelcomeWorkflow" }
   ]
 }

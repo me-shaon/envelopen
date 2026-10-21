@@ -6,6 +6,7 @@ import { OperationError } from "../errors";
 import { pageInputShape, pageOf, pageParams, toPage } from "../pagination";
 import { defineOperation } from "../registry/operation";
 import { requireService } from "../services";
+import { stopWelcome } from "../welcome/start";
 
 // The suppression list (R19). Rows store a keyed hash of the normalized address, never
 // the address. The list shows the address only when a contact with that hash exists.
@@ -145,6 +146,21 @@ export const suppressionsAdd = defineOperation({
       ),
     );
     const added = results.reduce((sum, result) => sum + (result.meta.changes ?? 0), 0);
+    if (added > 0 && ctx.services.welcome) {
+      // Stop the welcome series of these contacts (U10). The per-step check covers a miss.
+      const contacts = await db.db
+        .selectFrom("contacts")
+        .select("id")
+        .where("workspace_id", "=", principal.workspaceId)
+        .where("email_hash", "in", [...hashes])
+        .execute();
+      await stopWelcome(
+        db,
+        ctx.services.welcome,
+        principal.workspaceId,
+        contacts.map((row) => row.id),
+      );
+    }
     return { added, alreadySuppressed: hashes.size - added, invalid };
   },
   auditTarget: (_input, output) => ({

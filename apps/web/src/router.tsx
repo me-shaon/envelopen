@@ -27,6 +27,8 @@ import { ImportPage } from "./features/import/import-page";
 import { ConnectionsPage } from "./features/providers/connections-page";
 import { DomainDetailPage, DomainsPage } from "./features/providers/domains-page";
 import { UsagePage } from "./features/usage/usage-page";
+import { SeriesEditorPage } from "./features/welcome/series-editor";
+import { WelcomePage } from "./features/welcome/welcome-page";
 import { LoginPage } from "./routes/login";
 import { OverviewPage } from "./routes/overview";
 import { RecoverPage } from "./routes/recover";
@@ -210,6 +212,22 @@ const formRoute = createRoute({
     return <FormEditorPage key={formId} formId={formId} />;
   },
 });
+const welcomeRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/welcome",
+  component: WelcomePage,
+});
+const welcomeSeriesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/welcome/$seriesId",
+  validateSearch: (search: Record<string, unknown>): { listId?: number } =>
+    positiveId(search.listId) ? { listId: positiveId(search.listId) } : {},
+  component: function WelcomeSeries() {
+    const { seriesId } = welcomeSeriesRoute.useParams();
+    const { listId } = welcomeSeriesRoute.useSearch();
+    return <SeriesEditorPage key={seriesId} seriesId={seriesId} listId={listId} />;
+  },
+});
 const connectionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/connections",
@@ -265,6 +283,8 @@ const routeTree = rootRoute.addChildren([
     templateRoute,
     formsRoute,
     formRoute,
+    welcomeRoute,
+    welcomeSeriesRoute,
     connectionsRoute,
     domainsRoute,
     domainRoute,

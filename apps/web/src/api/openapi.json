@@ -907,12 +907,17 @@
             "items": {
               "type": "string"
             }
+          },
+          "welcomeStarted": {
+            "type": "integer",
+            "description": "The welcome series that started for the contact."
           }
         },
         "required": [
           "contact",
           "created",
-          "warnings"
+          "warnings",
+          "welcomeStarted"
         ]
       },
       "ContactExport": {
@@ -1656,6 +1661,206 @@
           "recommendedHeight",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "WelcomeSeriesList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WelcomeSeries"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "WelcomeSeries": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "listId": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WelcomeStep"
+            }
+          },
+          "fromName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fromEmail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null uses noreply@ the first verified sending domain."
+          },
+          "replyTo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "entered": {
+            "type": "integer",
+            "description": "The contacts that started the series."
+          },
+          "stats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "position": {
+                  "type": "integer"
+                },
+                "sent": {
+                  "type": "integer"
+                },
+                "failed": {
+                  "type": "integer"
+                },
+                "skipped": {
+                  "type": "integer"
+                },
+                "pending": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "position",
+                "sent",
+                "failed",
+                "skipped",
+                "pending"
+              ]
+            },
+            "description": "Send results per step position."
+          },
+          "overlaps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "seriesId": {
+                  "type": "integer"
+                },
+                "listId": {
+                  "type": "integer"
+                },
+                "listName": {
+                  "type": "string"
+                },
+                "sharedContacts": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "seriesId",
+                "listId",
+                "listName",
+                "sharedContacts"
+              ]
+            },
+            "description": "Other series whose list shares subscribed contacts with this list. A shared contact gets both series."
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "listId",
+          "name",
+          "steps",
+          "fromName",
+          "fromEmail",
+          "replyTo",
+          "enabled",
+          "entered",
+          "stats",
+          "overlaps",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "WelcomeStep": {
+        "type": "object",
+        "properties": {
+          "templateId": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The subject line. Merge tags such as {{ first_name }} work here."
+          },
+          "delayMinutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 43200,
+            "description": "Minutes to wait before this step: after the start for step 1, after the previous step for the others. At most 43,200 (30 days)."
+          }
+        },
+        "required": [
+          "templateId",
+          "subject",
+          "delayMinutes"
+        ]
+      },
+      "WelcomeSeriesOverlaps": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "seriesId": {
+                  "type": "integer"
+                },
+                "listId": {
+                  "type": "integer"
+                },
+                "listName": {
+                  "type": "string"
+                },
+                "sharedContacts": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "seriesId",
+                "listId",
+                "listName",
+                "sharedContacts"
+              ]
+            },
+            "description": "Other series whose list shares subscribed contacts with this list. A shared contact gets both series."
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "Import": {
@@ -8277,6 +8482,10 @@
                       ]
                     },
                     "description": "Custom field values by key (lowercase letters, digits, underscores). Missing fields are created as text fields. Null clears a value. A choice field takes an option id or an option label (labels match without regard to case). A multiple choice field takes a list of option ids or labels, or one text with labels separated by commas. An unknown option, or an option of another field, fails with `invalid_input`. Reads return option ids: see `fields.list`."
+                  },
+                  "startWelcome": {
+                    "type": "boolean",
+                    "description": "Start the welcome series of each list in `listIds` that has one turned on. A contact who started a series earlier does not get it again."
                   }
                 },
                 "required": [
@@ -10279,6 +10488,10 @@
                     },
                     "minItems": 1,
                     "maxItems": 100
+                  },
+                  "startWelcome": {
+                    "type": "boolean",
+                    "description": "Start the list's welcome series, when it is on, for each subscribed contact. A contact who started it earlier does not get it again."
                   }
                 },
                 "required": [
@@ -10302,11 +10515,16 @@
                     },
                     "keptUnsubscribed": {
                       "type": "integer"
+                    },
+                    "welcomeStarted": {
+                      "type": "integer",
+                      "description": "The contacts for whom the welcome series started."
                     }
                   },
                   "required": [
                     "added",
-                    "keptUnsubscribed"
+                    "keptUnsubscribed",
+                    "welcomeStarted"
                   ]
                 }
               }
@@ -13021,6 +13239,874 @@
           },
           "404": {
             "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/welcome-series": {
+      "get": {
+        "operationId": "welcome_series.list",
+        "summary": "List welcome series",
+        "description": "Returns every welcome series of the workspace with its steps, the contacts that started it, the send results per step, and the series lists that share contacts.",
+        "tags": [
+          "welcome_series"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeSeriesList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "welcome_series.create",
+        "summary": "Create a welcome series",
+        "description": "Creates the welcome series of a list: 1 to 5 emails, each with a template, a subject, and a delay (R15). A list has at most one series. A new series is off until `welcome_series.set_enabled` turns it on.",
+        "tags": [
+          "welcome_series"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:write",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "now",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "listId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/WelcomeStep"
+                    },
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "description": "1 to 5 steps in send order."
+                  },
+                  "fromName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "default": null
+                  },
+                  "fromEmail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 320,
+                    "default": null,
+                    "description": "On a sending domain of the workspace. Null uses noreply@ the first verified one."
+                  },
+                  "replyTo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 320,
+                    "default": null
+                  }
+                },
+                "required": [
+                  "listId",
+                  "name",
+                  "steps"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeSeries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different path or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/welcome-series/overlaps": {
+      "get": {
+        "operationId": "welcome_series.overlaps",
+        "summary": "Check list overlap for a welcome series",
+        "description": "Returns the other series whose list shares subscribed contacts with `listId`. A shared contact gets both series.",
+        "tags": [
+          "welcome_series"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "listId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": false,
+            "name": "seriesId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeSeriesOverlaps"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/welcome-series/{id}": {
+      "get": {
+        "operationId": "welcome_series.get",
+        "summary": "Get a welcome series",
+        "tags": [
+          "welcome_series"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeSeries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "welcome_series.update",
+        "summary": "Change a welcome series",
+        "description": "Replaces the name, the steps, and the sender. The Workflow reads each step when it is due, so the change applies to the steps that have not run yet. A contact that got step 2 gets the new step 3 next.",
+        "tags": [
+          "welcome_series"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:write",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "now",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/WelcomeStep"
+                    },
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "description": "1 to 5 steps in send order."
+                  },
+                  "fromName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100,
+                    "default": null
+                  },
+                  "fromEmail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 320,
+                    "default": null,
+                    "description": "On a sending domain of the workspace. Null uses noreply@ the first verified one."
+                  },
+                  "replyTo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 320,
+                    "default": null
+                  }
+                },
+                "required": [
+                  "name",
+                  "steps"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeSeries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "welcome_series.delete",
+        "summary": "Delete a welcome series",
+        "description": "Deletes the series and its send records. Contacts in the series stop at their next step.",
+        "tags": [
+          "welcome_series"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:write",
+        "x-envelopen-risk": "destructive",
+        "x-envelopen-mcp": "later",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/welcome-series/{id}/enabled": {
+      "post": {
+        "operationId": "welcome_series.set_enabled",
+        "summary": "Turn a welcome series on or off",
+        "description": "On: each new subscriber of the list who joins through a confirmed form signup, or through an add with `startWelcome`, gets the series. Off: no new contact starts it, and running contacts stop at their next step.",
+        "tags": [
+          "welcome_series"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:send",
+        "x-envelopen-risk": "external_send",
+        "x-envelopen-mcp": "later",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeSeries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different path or body.",
             "content": {
               "application/json": {
                 "schema": {

@@ -1,7 +1,13 @@
 import { env } from "cloudflare:workers";
-import { type Operation, registry, runOperation } from "@envelopen/core";
+import {
+  type Operation,
+  registry,
+  runOperation,
+  WELCOME_TOKEN_CAMPAIGN,
+  welcomeRecipientId,
+} from "@envelopen/core";
 import { describe, expect, it, vi } from "vitest";
-import { dbOver, limitedD1, SIGNING_KEY as SIGNING } from "../../test/campaign-helpers";
+import { dbOver, limitedD1, SIGNING_KEY as SIGNING, testKeys } from "../../test/campaign-helpers";
 import {
   call,
   LATER,
@@ -492,5 +498,85 @@ describe("the preference page", () => {
     );
     expect(other.status).toBe(403);
     expect((await contact(sent)).status).toBe("subscribed");
+  });
+});
+
+describe("unsubscribe links of welcome emails (U10)", () => {
+  /** A welcome series of the campaign's list, and a sent step 1 for the first contact. */
+  async function welcome(sent: SentCampaign) {
+    const ws = sent.seeded.workspaceId;
+    const series = await sent.db.db
+      .insertInto("welcome_series")
+      .values({
+        workspace_id: ws,
+        list_id: sent.seeded.listId,
+        name: "Welcome",
+        steps: JSON.stringify([
+          { templateId: sent.seeded.templateId, subject: "Hi", delayMinutes: 0 },
+        ]),
+        from_name: null,
+        from_email: null,
+        reply_to: null,
+        link_origin: "https://envelopen.test",
+        enabled: 1,
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    const contactId = sent.recipients[0]?.contact_id as number;
+    const send = await sent.db.db
+      .insertInto("welcome_sends")
+      .values({
+        workspace_id: ws,
+        series_id: series.id,
+        position: 1,
+        contact_id: contactId,
+        status: "sent",
+      })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    const { signer } = await testKeys();
+    const token = await signer.sign({
+      campaignId: WELCOME_TOKEN_CAMPAIGN,
+      recipientId: welcomeRecipientId(send.id),
+    });
+    return { token, job: { workspaceId: ws, seriesId: series.id, contactId } };
+  }
+
+  it("unsubscribes with no campaign and stops the contact's welcome series", async () => {
+    const { sent, deps, app } = await setup();
+    const { token, job } = await welcome(sent);
+    const stops: unknown[] = [];
+    deps.welcome = {
+      start: async () => [],
+      stop: async (jobs) => {
+        stops.push(...jobs);
+      },
+    };
+    const response = await call(app, `/u/${token}`, oneClickUrlencoded());
+    expect(response.status).toBe(200);
+    const after = await contact(sent);
+    expect(after.status).toBe("unsubscribed");
+    expect(after.unsubscribeCampaignId).toBeNull();
+    expect(after.lists[0]).toMatchObject({ status: "unsubscribed", campaignId: null });
+    expect(stops).toEqual([job]);
+    // The page of the link shows the contact.
+    const page = await call(app, `/u/${token}`);
+    expect(page.status).toBe(200);
+  });
+
+  it("keeps the intent at the D1 limit, and the drain finds the contact of the welcome email", async () => {
+    const sent = await sentCampaign();
+    const { token } = await welcome(sent);
+    const at = Date.now() + 60_000;
+    const deps = await recordingDeps(dbOver(limitedD1(env.DB, { reads: true })), at);
+    const app = mount("/u", createUnsubscribeRoutes({ deps: () => deps }));
+    const response = await call(app, `/u/${token}`, oneClickUrlencoded());
+    expect(response.status).toBe(200);
+    const [kept] = await deps.ledger.list();
+    expect(kept).toMatchObject({ campaignId: WELCOME_TOKEN_CAMPAIGN, contactId: null });
+    expect(
+      await drainUnsubscribes(sent.db, deps.ledger, deps.sink, deps.clock.now + 120_000),
+    ).toMatchObject({ applied: 1, left: 0 });
+    expect((await contact(sent)).status).toBe("unsubscribed");
   });
 });

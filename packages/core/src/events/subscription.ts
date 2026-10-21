@@ -2,6 +2,7 @@ import { type DbConnection, unscoped } from "@envelopen/db";
 import { sql } from "kysely";
 import { loadFieldDefs } from "../contacts/fields";
 import type { PreferenceField } from "../forms/answers";
+import { storedCampaignId, WELCOME_TOKEN_CAMPAIGN, welcomeSendIdOf } from "../welcome/model";
 
 // Unsubscribe and preferences (R24, R25, R64, F3). The public pages under `/u/` call
 // these with the recipient from a verified token. The token holds no workspace id, so
@@ -19,6 +20,10 @@ import type { PreferenceField } from "../forms/answers";
 // Durable Object (KTD1). After the reset, `applyUnsubscribeIntent` writes it here with
 // the time of the subscriber's click. The newest action wins: a membership whose status
 // changed after that time stays as it is.
+//
+// A welcome email (U10) carries a token whose campaign field is WELCOME_TOKEN_CAMPAIGN and
+// whose recipient field names a `welcome_sends` row (welcome/model.ts). The lookups here
+// resolve it to the contact of that row, and the writes store no campaign for it.
 
 export type UnsubscribeSource = "one_click" | "preference_page";
 
@@ -46,13 +51,22 @@ export interface Subscription {
   fields: PreferenceField[];
 }
 
-/** The contact behind a recipient, or null when the recipient or its contact is gone. */
-export async function loadSubscription(
+interface RecipientRow {
+  workspace_id: number;
+  campaign_id: number;
+  id: number;
+  contact_id: number;
+  email: string;
+  email_hash: string | null;
+  unsubscribed_at: number | null;
+  workspace_name: string;
+}
+
+async function campaignRecipient(
   db: DbConnection,
   ref: { campaignId: number; recipientId: number },
-): Promise<Subscription | null> {
-  // The token is the credential: the recipient id and campaign id come from its MAC.
-  const row = await unscoped(db.db)
+): Promise<RecipientRow | undefined> {
+  return unscoped(db.db)
     .selectFrom("campaign_recipients as r")
     .innerJoin("contacts as c", (join) =>
       join.onRef("c.id", "=", "r.contact_id").onRef("c.workspace_id", "=", "r.workspace_id"),
@@ -71,6 +85,45 @@ export async function loadSubscription(
     .where("r.id", "=", ref.recipientId)
     .where("r.campaign_id", "=", ref.campaignId)
     .executeTakeFirst();
+}
+
+/** The contact of a welcome email. The ids stay those of the token. */
+async function welcomeRecipient(
+  db: DbConnection,
+  sendId: number,
+  ref: { campaignId: number; recipientId: number },
+): Promise<RecipientRow | undefined> {
+  const row = await unscoped(db.db)
+    .selectFrom("welcome_sends as s")
+    .innerJoin("contacts as c", (join) =>
+      join.onRef("c.id", "=", "s.contact_id").onRef("c.workspace_id", "=", "s.workspace_id"),
+    )
+    .innerJoin("workspaces as w", "w.id", "s.workspace_id")
+    .select([
+      "s.workspace_id",
+      "c.id as contact_id",
+      "c.email",
+      "c.email_hash",
+      "c.unsubscribed_at",
+      "w.name as workspace_name",
+    ])
+    .where("s.id", "=", sendId)
+    .executeTakeFirst();
+  return row && { ...row, campaign_id: ref.campaignId, id: ref.recipientId };
+}
+
+/** The contact behind a recipient, or null when the recipient or its contact is gone. */
+export async function loadSubscription(
+  db: DbConnection,
+  ref: { campaignId: number; recipientId: number },
+): Promise<Subscription | null> {
+  const welcomeSendId = welcomeSendIdOf(ref);
+  if (ref.campaignId === WELCOME_TOKEN_CAMPAIGN && welcomeSendId === null) return null;
+  // The token is the credential: the recipient id and campaign id come from its MAC.
+  const row =
+    welcomeSendId !== null
+      ? await welcomeRecipient(db, welcomeSendId, ref)
+      : await campaignRecipient(db, ref);
   if (!row) return null;
   const workspaceId = row.workspace_id;
   const [lists, suppression, fields] = await Promise.all([
@@ -147,7 +200,8 @@ export async function unsubscribeAll(
   source: UnsubscribeSource,
   now: number,
 ): Promise<boolean> {
-  const { workspaceId, contactId, campaignId } = target;
+  const { workspaceId, contactId } = target;
+  const campaignId = storedCampaignId(target.campaignId);
   const [contact] = await db.atomic([
     db.db
       .updateTable("contacts")
@@ -224,7 +278,8 @@ export async function savePreferences(
   now: number,
   fieldValues: ReadonlyMap<number, string | null> = new Map(),
 ): Promise<{ unsubscribed: number; resubscribed: number; fields: number }> {
-  const { workspaceId, contactId, campaignId } = target;
+  const { workspaceId, contactId } = target;
+  const campaignId = storedCampaignId(target.campaignId);
   const leave = target.lists
     .filter((list) => list.status === "subscribed" && !subscribedIds.has(list.id))
     .map((list) => list.id);
@@ -298,7 +353,8 @@ export async function applyUnsubscribeIntent(
   intent: UnsubscribeIntent,
   now: number,
 ): Promise<boolean> {
-  const { workspaceId, contactId, campaignId, listId, source, at } = intent;
+  const { workspaceId, contactId, listId, source, at } = intent;
+  const campaignId = storedCampaignId(intent.campaignId);
   const members =
     sql`UPDATE list_members SET status = 'unsubscribed', status_source = ${source}, status_at = ${at}, status_campaign_id = ${campaignId}
 WHERE workspace_id = ${workspaceId} AND contact_id = ${contactId} AND status = 'subscribed'
@@ -339,8 +395,28 @@ export async function recipientTargets(
   workspaceId?: number,
 ): Promise<Map<number, RecipientTarget>> {
   const targets = new Map<number, RecipientTarget>();
-  if (refs.length === 0) return targets;
-  const ids = JSON.stringify([...new Set(refs.map((ref) => ref.recipientId))]);
+  const welcome = new Map<number, number>();
+  for (const ref of refs) {
+    const sendId = welcomeSendIdOf(ref);
+    if (sendId !== null) welcome.set(sendId, ref.recipientId);
+  }
+  if (welcome.size > 0) {
+    // The rows of welcome emails (U10). Their recipient ids never meet campaign ones.
+    const scope = workspaceId === undefined ? sql`` : sql` AND workspace_id = ${workspaceId}`;
+    const { rows } = await sql<{ id: number; workspace_id: number; contact_id: number | null }>`
+SELECT id, workspace_id, contact_id FROM welcome_sends
+WHERE id IN (SELECT value FROM json_each(${JSON.stringify([...welcome.keys()])}))${scope}`.execute(
+      workspaceId === undefined ? unscoped(db.db) : db.db,
+    );
+    for (const row of rows) {
+      const recipientId = welcome.get(row.id);
+      if (row.contact_id === null || recipientId === undefined) continue;
+      targets.set(recipientId, { workspaceId: row.workspace_id, contactId: row.contact_id });
+    }
+  }
+  const campaignRefs = refs.filter((ref) => ref.campaignId !== WELCOME_TOKEN_CAMPAIGN);
+  if (campaignRefs.length === 0) return targets;
+  const ids = JSON.stringify([...new Set(campaignRefs.map((ref) => ref.recipientId))]);
   const scope = workspaceId === undefined ? sql`` : sql` AND workspace_id = ${workspaceId}`;
   const { rows } = await sql<{
     id: number;
@@ -351,7 +427,7 @@ export async function recipientTargets(
 WHERE id IN (SELECT value FROM json_each(${ids}))${scope}`.execute(
     workspaceId === undefined ? unscoped(db.db) : db.db,
   );
-  const campaignOf = new Map(refs.map((ref) => [ref.recipientId, ref.campaignId]));
+  const campaignOf = new Map(campaignRefs.map((ref) => [ref.recipientId, ref.campaignId]));
   for (const row of rows) {
     if (row.contact_id === null || campaignOf.get(row.id) !== row.campaign_id) continue;
     targets.set(row.id, { workspaceId: row.workspace_id, contactId: row.contact_id });

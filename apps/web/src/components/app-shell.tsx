@@ -7,6 +7,7 @@ import {
   FileTextIcon,
   HouseIcon,
   type LucideIcon,
+  MailPlusIcon,
   MenuIcon,
   PlugIcon,
   PlusIcon,
@@ -36,7 +37,15 @@ import { WorkspaceContext, type WorkspaceContextValue } from "./workspace-contex
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 interface NavItem {
-  to: "/" | "/campaigns" | "/contacts" | "/templates" | "/forms" | "/connections" | "/settings";
+  to:
+    | "/"
+    | "/campaigns"
+    | "/contacts"
+    | "/templates"
+    | "/forms"
+    | "/welcome"
+    | "/connections"
+    | "/settings";
   label: string;
   icon: LucideIcon;
 }
@@ -47,6 +56,7 @@ const MAIN_NAV: NavItem[] = [
   { to: "/contacts", label: "Contacts", icon: UsersIcon },
   { to: "/templates", label: "Templates", icon: FileTextIcon },
   { to: "/forms", label: "Forms", icon: ClipboardListIcon },
+  { to: "/welcome", label: "Welcome series", icon: MailPlusIcon },
 ];
 
 const WORKSPACE_NAV: NavItem[] = [{ to: "/connections", label: "Connections", icon: PlugIcon }];

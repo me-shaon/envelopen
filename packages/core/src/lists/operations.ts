@@ -6,6 +6,7 @@ import { chunk, cleanTagNames, TAG_NAME_MAX } from "../contacts/writes";
 import { OperationError } from "../errors";
 import { pageInputShape, pageOf, pageParams, toPage } from "../pagination";
 import { defineOperation } from "../registry/operation";
+import { startWelcome } from "../welcome/start";
 
 // Lists, tags, and list membership (R14, R64). Managing lists and tags needs
 // lists:write. Changing a contact's membership needs contacts:write, as the plan's
@@ -195,12 +196,22 @@ export const listsAddContacts = defineOperation({
   scope: "contacts:write",
   risk: "write",
   mcp: { class: "now", reason: "List membership is in the plan's MCP 'now' set." },
-  input: z.object({ id: Id, contactIds: z.array(z.number().int().positive()).min(1).max(100) }),
+  input: z.object({
+    id: Id,
+    contactIds: z.array(z.number().int().positive()).min(1).max(100),
+    startWelcome: z.boolean().optional().meta({
+      description:
+        "Start the list's welcome series, when it is on, for each subscribed contact. A contact who started it earlier does not get it again.",
+    }),
+  }),
   output: z.object({
     added: z.number().int().meta({ description: "New memberships." }),
     keptUnsubscribed: z.number().int(),
+    welcomeStarted: z.number().int().meta({
+      description: "The contacts for whom the welcome series started.",
+    }),
   }),
-  async handler(input, { principal, db, now }) {
+  async handler(input, { principal, db, now, services }) {
     const workspaceId = principal.workspaceId;
     await getList(db.db, workspaceId, input.id);
     const ids = [...new Set(input.contactIds)];
@@ -245,12 +256,18 @@ export const listsAddContacts = defineOperation({
       ),
     );
     const added = results.reduce((sum, result) => sum + (result.results?.length ?? 0), 0);
-    return { added, keptUnsubscribed: Number(kept.count) };
+    const welcomeStarted = input.startWelcome
+      ? await startWelcome(db, services, workspaceId, ids, [input.id])
+      : 0;
+    return { added, keptUnsubscribed: Number(kept.count), welcomeStarted };
   },
   auditTarget: (input, output) => ({
     targetType: "list",
     targetId: input.id,
-    metadata: { added: output.added },
+    metadata: {
+      added: output.added,
+      ...(output.welcomeStarted > 0 ? { welcomeStarted: output.welcomeStarted } : {}),
+    },
   }),
 });
 

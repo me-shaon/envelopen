@@ -113,6 +113,21 @@ const ACTIONS: Record<string, ActionText> = {
     label: counted("Address removed from the suppression list", "suppressions removed"),
   },
 
+  // Welcome series (U10).
+  "welcome_series.create": {
+    label: counted("Welcome series created", "welcome series created"),
+    notable: true,
+  },
+  "welcome_series.update": { label: counted("Welcome series changed", "welcome series changed") },
+  "welcome_series.set_enabled": {
+    label: counted("Welcome series turned on or off", "welcome series changes"),
+    notable: true,
+  },
+  "welcome_series.delete": {
+    label: counted("Welcome series deleted", "welcome series deleted"),
+    notable: true,
+  },
+
   // Templates.
   "templates.create": {
     label: counted("Template created", "templates created"),

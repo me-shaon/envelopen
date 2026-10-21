@@ -1,4 +1,5 @@
 import type { CredentialCipher } from "./crypto/credentials";
+import type { WelcomeRunner } from "./welcome/start";
 
 // Platform services that some operations need besides the database. The Worker builds
 // them from its bindings and secrets. Tests pass their own. An operation asks for a
@@ -142,6 +143,8 @@ export interface Services {
   startKeyDerivation(job: KeyDerivationJob): Promise<void>;
   /** True when TURNSTILE_SITE_KEY and TURNSTILE_SECRET are set, so forms take signups (U8). */
   turnstileConfigured: boolean;
+  /** Starts and stops welcome series instances (U10). The Worker wraps WELCOME_WORKFLOW. */
+  welcome: WelcomeRunner;
 }
 
 /** Returns the service, or throws when the surface did not provide it. */

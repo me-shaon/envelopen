@@ -4,6 +4,7 @@ import { actorSource, loadContacts } from "../contacts/model";
 import { OperationError } from "../errors";
 import { defineOperation, type OperationContext } from "../registry/operation";
 import { requireService } from "../services";
+import { stopWelcome } from "../welcome/start";
 import { eraseContact } from "./erase";
 import { buildContactExport, ContactExportSchema } from "./export";
 
@@ -102,6 +103,8 @@ export const contactsErase = defineOperation({
       { id: contact.id, email: contact.email, emailHash },
       { now, source: `erased:${actorSource(principal)}` },
     );
+    // The per-step check stops a run that this misses: the contact no longer exists.
+    await stopWelcome(ctx.db, ctx.services.welcome, principal.workspaceId, [contact.id]);
     return { id: contact.id, erasedAt: now, removed };
   },
   // The audit row keeps the contact id and counts. Never the address.

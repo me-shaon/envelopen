@@ -27,6 +27,7 @@ export { CampaignWorkflow } from "./workflows/campaign-workflow";
 export { ImportWorkflow } from "./workflows/import-workflow";
 export { KeyDerivationWorkflow } from "./workflows/key-derivation-workflow";
 export { RestoreWorkflow } from "./workflows/restore-workflow";
+export { WelcomeWorkflow } from "./workflows/welcome-workflow";
 
 const app = new Hono<{ Bindings: Env }>();
 

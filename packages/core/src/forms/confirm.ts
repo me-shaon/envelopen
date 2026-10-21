@@ -2,6 +2,8 @@ import { type DbConnection, unscoped } from "@envelopen/db";
 import { sql } from "kysely";
 import { type FieldInput, storedFieldValue } from "../contacts/fields";
 import { fillEmailHashes, insertContacts, setFieldValues } from "../contacts/writes";
+import type { Services } from "../services";
+import { startWelcome } from "../welcome/start";
 import { idList } from "./model";
 import { type SignupState, signupOfToken } from "./signup";
 
@@ -19,6 +21,10 @@ import { type SignupState, signupOfToken } from "./signup";
 // - The answers of the fields that the form still shows are saved. A choice value whose
 //   option was deleted since the submission is left out.
 // - The signup is marked as confirmed, and its answers are cleared.
+//
+// After the batch, the welcome series of each list that the signup joined starts for
+// the contact (U10). A confirmation that comes again starts nothing: the instance id of a
+// contact in a series is unique, and a contact with a row in the series does not start.
 
 /** The consent basis of a confirmed signup. The consent model has no separate value. */
 export const FORM_CONSENT_BASIS = "explicit_opt_in" as const;
@@ -44,6 +50,7 @@ export async function confirmSignup(
   db: DbConnection,
   token: string,
   now: number,
+  services: Partial<Pick<Services, "welcome">> = {},
 ): Promise<ConfirmOutcome> {
   const state = await signupOfToken(db, token, now);
   if (state.kind === "invalid") return { kind: "invalid" };
@@ -153,6 +160,7 @@ WHERE list_members.status <> 'subscribed'`.compile(db.db),
   ]);
   const contact = await contactOf();
   if (!contact) return { kind: "invalid" };
+  await startWelcome(db, services, workspaceId, [contact.id], lists);
   return { kind: "confirmed", contactId: contact.id, already: false, state };
 }
 

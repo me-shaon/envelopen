@@ -169,7 +169,7 @@ export function createFormRoutes(options: FormRoutesOptions = {}) {
     try {
       if (!isSameOriginPost(c.req.raw)) return page(deps, { kind: "invalid" }, { status: 403 });
       const token = c.req.param("token");
-      const outcome = await confirmSignup(deps.db, token, deps.now());
+      const outcome = await confirmSignup(deps.db, token, deps.now(), deps.services);
       if (outcome.kind === "confirmed" && outcome.state.kind !== "invalid") {
         return page(deps, { kind: "confirmed", form: outcome.state.form.page });
       }

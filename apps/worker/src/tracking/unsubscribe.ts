@@ -4,6 +4,7 @@ import {
   resubscribe,
   type Subscription,
   savePreferences,
+  stopWelcome,
   type TrackingEvent,
   type UnsubscribeSource,
   unsubscribeAll,
@@ -53,6 +54,11 @@ import { type PageNotice, publicPage } from "./preferences";
 //
 // An invalid, forged, or unknown token gets one generic page with status 404 and
 // changes nothing. The test link `/u/test` of test sends lands there too.
+//
+// After an unsubscribe that D1 has, the welcome series instances of the contact stop in
+// the background (U10, KTD8): every series for an unsubscribe from all, and the series of
+// the lists that a save left. An intent in the ledger stops nothing here: each welcome
+// step checks the ledger before it sends.
 
 const MAX_FORM_BYTES = 16 * 1024;
 const FORM_TYPES = /^(application\/x-www-form-urlencoded|multipart\/form-data)\b/i;
@@ -161,6 +167,16 @@ function unsubscribeEvent(sub: Subscription, now: number): TrackingEvent {
     reason: null,
     occurredAt: now,
   };
+}
+
+/** Stops the contact's welcome series: of `listIds`, or every series when it is null. */
+function stopSeries(
+  c: AppContext,
+  deps: TrackingDeps,
+  sub: Subscription,
+  listIds: readonly number[] | null,
+): void {
+  background(c, stopWelcome(deps.db, deps.welcome, sub.workspaceId, [sub.contactId], listIds));
 }
 
 function background(c: AppContext, work: Promise<unknown>): void {
@@ -312,7 +328,10 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
         console.error("One-click unsubscribe failed", error);
         return publicPage(deps, { kind: "error" }, 503);
       }
-      if (changed) background(c, deps.sink(sub.workspaceId, [unsubscribeEvent(sub, now)]));
+      if (changed) {
+        background(c, deps.sink(sub.workspaceId, [unsubscribeEvent(sub, now)]));
+        stopSeries(c, deps, sub, null);
+      }
       return publicPage(deps, { kind: "one_click_done" });
     } finally {
       background(c, deps.db.meter.flush());
@@ -394,6 +413,7 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
         if (action === "unsubscribe_all") {
           if (await unsubscribeAll(deps.db, sub, "preference_page", now)) {
             background(c, deps.sink(sub.workspaceId, [unsubscribeEvent(sub, now)]));
+            stopSeries(c, deps, sub, null);
           }
           return c.redirect(`${back}?state=unsubscribed`, 303);
         }
@@ -406,6 +426,14 @@ export function createUnsubscribeRoutes(options: UnsubscribeRoutesOptions = {}) 
           const result = await savePreferences(deps.db, sub, checked, now, changes);
           if (result.unsubscribed > 0) {
             background(c, deps.sink(sub.workspaceId, [unsubscribeEvent(sub, now)]));
+            stopSeries(
+              c,
+              deps,
+              sub,
+              sub.lists
+                .filter((list) => list.status === "subscribed" && !checked.has(list.id))
+                .map((list) => list.id),
+            );
           }
           return c.redirect(`${back}?state=saved`, 303);
         }

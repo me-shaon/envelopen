@@ -3,6 +3,7 @@ import { OperationError } from "../errors";
 import { encodeCursor, pageInputShape, pageOf, pageParams } from "../pagination";
 import { defineOperation, type OperationContext } from "../registry/operation";
 import { requireService } from "../services";
+import { startWelcome } from "../welcome/start";
 import { normalizeEmail } from "./email";
 import { FieldValueSchema, prepareFieldValues } from "./fields";
 import { actorSource, ConsentBasisSchema, ContactSchema, loadContacts } from "./model";
@@ -173,17 +174,35 @@ export const contactsUpsert = defineOperation({
     tags: TagNames.optional().meta({ description: "Tag names. Missing tags are created." }),
     listIds: z.array(z.number().int().positive()).max(20).optional(),
     fields: FieldsInput.optional(),
+    startWelcome: z.boolean().optional().meta({
+      description:
+        "Start the welcome series of each list in `listIds` that has one turned on. A contact who started a series earlier does not get it again.",
+    }),
   }),
   output: z
     .object({
       contact: ContactSchema,
       created: z.boolean(),
       warnings: z.array(z.string()),
+      welcomeStarted: z.number().int().meta({
+        description: "The welcome series that started for the contact.",
+      }),
     })
     .meta({ id: "ContactUpsertResult" }),
   async handler(input, ctx) {
     const result = await upsertContact(ctx, input);
+    const welcomeStarted =
+      input.startWelcome && input.listIds?.length
+        ? await startWelcome(
+            ctx.db,
+            ctx.services,
+            ctx.principal.workspaceId,
+            [result.contactId],
+            input.listIds,
+          )
+        : 0;
     return {
+      welcomeStarted,
       contact: await requireContact(ctx, result.contactId),
       created: result.created,
       warnings: result.warnings,
@@ -192,7 +211,11 @@ export const contactsUpsert = defineOperation({
   auditTarget: (_input, output) => ({
     targetType: "contact",
     targetId: output.contact.id,
-    metadata: { created: output.created, warnings: output.warnings },
+    metadata: {
+      created: output.created,
+      warnings: output.warnings,
+      ...(output.welcomeStarted > 0 ? { welcomeStarted: output.welcomeStarted } : {}),
+    },
   }),
 });
 

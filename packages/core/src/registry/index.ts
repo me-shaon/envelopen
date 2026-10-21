@@ -114,6 +114,15 @@ import {
   templatesUpdate,
 } from "../templates/operations";
 import { usageGet } from "../usage/operations";
+import {
+  welcomeSeriesCreate,
+  welcomeSeriesDelete,
+  welcomeSeriesGet,
+  welcomeSeriesList,
+  welcomeSeriesOverlaps,
+  welcomeSeriesSetEnabled,
+  welcomeSeriesUpdate,
+} from "../welcome/operations";
 import { apiKeysCreate, apiKeysList, apiKeysPresets, apiKeysRevoke } from "./operations/api-keys";
 import { auditActions, auditList } from "./operations/audit";
 import { onboardingStatus } from "./operations/onboarding";
@@ -247,6 +256,14 @@ export const registry = createRegistry([
   formsCreate,
   formsUpdate,
   formsDelete,
+  // Welcome series (U10, R15). The overlap check comes before get, so its path matches first.
+  welcomeSeriesList,
+  welcomeSeriesOverlaps,
+  welcomeSeriesGet,
+  welcomeSeriesCreate,
+  welcomeSeriesUpdate,
+  welcomeSeriesSetEnabled,
+  welcomeSeriesDelete,
   importsList,
   importsCreate,
   importsGet,

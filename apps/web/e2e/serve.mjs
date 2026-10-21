@@ -25,8 +25,11 @@ const wrangler = [
   fileURLToPath(new URL("../../../node_modules/wrangler/bin/wrangler.js", import.meta.url)),
 ];
 
+// A Worker can have its own secret: E2E_<NAME>_<STATE> wins over E2E_<NAME>. The
+// backup spec restores into a Worker with other keys, as a new deployment has.
+const stateKey = stateName.toUpperCase().replaceAll("-", "_");
 const secrets = ["SETUP_TOKEN", "SIGNING_KEY", "ENCRYPTION_KEY"].map((name) => {
-  const value = process.env[`E2E_${name}`];
+  const value = process.env[`E2E_${name}_${stateKey}`] ?? process.env[`E2E_${name}`];
   if (!value) {
     console.error(`E2E_${name} is not set. Run the tests through Playwright.`);
     process.exit(1);

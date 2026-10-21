@@ -91,6 +91,16 @@ export const LOGIN_RULE: AttemptRule = { limit: 5, windowMs: 15 * 60 * 1000 };
 export const LOGIN_EMAIL_CEILING: AttemptRule = { limit: 100, windowMs: 60 * 60 * 1000 };
 /** Wrong setup tokens (first-run screen and recovery) from one IP. */
 export const SETUP_RULE: AttemptRule = { limit: 5, windowMs: 15 * 60 * 1000 };
+/** Restore starts and backup uploads from one IP on the first-run screen (U5). */
+export const RESTORE_RULE: AttemptRule = { limit: 10, windowMs: 60 * 60 * 1000 };
+/**
+ * Wrong backup passphrases over the whole deployment (U5). After five in an hour, the
+ * first-run screen refuses every restore start until the hour ends. Each try costs a
+ * full key derivation, so this also bounds the Workflow work that a guess can cause.
+ */
+export const RESTORE_PASSPHRASE_RULE: AttemptRule = { limit: 5, windowMs: 60 * 60 * 1000 };
+/** The counter key of RESTORE_PASSPHRASE_RULE: one per deployment. */
+export const RESTORE_PASSPHRASE_KEY = "restore-passphrase:deployment";
 
 /** The counters that the auth routes use. Tests can pass another implementation. */
 export interface AttemptLimiter {

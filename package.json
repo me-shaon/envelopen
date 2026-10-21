@@ -61,6 +61,9 @@
       "KEY_DERIVATION_WORKFLOW": {
         "description": "Workflow that derives the backup key from the owner's passphrase in steps, so each step stays within the Workers Free CPU limit."
       },
+      "RESTORE_WORKFLOW": {
+        "description": "Workflow that restores an encrypted backup into a new deployment from the first-run screen, one chunk per step, within the daily D1 write budget."
+      },
       "CAMPAIGN_WORKFLOW": {
         "description": "Workflow that takes the recipient snapshot of a campaign in pages and puts its batches on the send queue."
       },

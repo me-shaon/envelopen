@@ -10,11 +10,15 @@ import {
   type FileLinkSigner,
   type ImportJob,
   type KeyDerivationJob,
+  type RestoreJob,
+  readImportedSigningKeys,
   type SendQueue,
   type Services,
   type SettingsCache,
+  signingKeyRing,
 } from "@envelopen/core";
-import { createTokenSigner, type TokenSigner, tokenKeysFromEnv } from "@envelopen/email-render";
+import { createDb } from "@envelopen/db";
+import { createTokenSigner, type TokenSigner } from "@envelopen/email-render";
 import { isUsableKey } from "./auth/better-auth";
 import { usageReader } from "./do/usage";
 
@@ -45,20 +49,62 @@ function keyedServices(signingKey: string): KeyedServices {
   return keyed;
 }
 
+type KeyRingEnv = Pick<
+  Env,
+  "DB" | "KV" | "SIGNING_KEY" | "SIGNING_KEYS_RETIRED" | "ENCRYPTION_KEY"
+>;
+
+/** How long an isolate keeps the imported signing keys before it reads them again. */
+const IMPORTED_KEYS_TTL_MS = 5 * 60 * 1000;
+let imported: { at: number; value: Promise<string[]> } | undefined;
+
+/**
+ * The signing keys that a restore imported (U5, KTD3), from the settings cache in KV,
+ * then D1. An isolate keeps them for 5 minutes. A failed read gives no imported keys
+ * and is not kept, so the next call tries again.
+ */
+export function importedSigningKeys(env: KeyRingEnv): Promise<string[]> {
+  if (!isUsableKey(env.ENCRYPTION_KEY)) return Promise.resolve([]);
+  const now = Date.now();
+  if (!imported || now - imported.at > IMPORTED_KEYS_TTL_MS) {
+    const cipher = credentialCipher(env.ENCRYPTION_KEY);
+    const entry = {
+      at: now,
+      value: readImportedSigningKeys(createDb(env), cipher, settingsCache(env)).catch(
+        (error: unknown) => {
+          console.error("The imported signing keys did not load", error);
+          if (imported === entry) imported = undefined;
+          return [] as string[];
+        },
+      ),
+    };
+    imported = entry;
+  }
+  return imported.value;
+}
+
+/** Forgets the imported keys of this isolate. The restore and the tests call it. */
+export function forgetImportedSigningKeys(): void {
+  imported = undefined;
+}
+
+/**
+ * The key ring of the token signer and the suppression hasher: SIGNING_KEY, then
+ * SIGNING_KEYS_RETIRED, then the imported keys.
+ */
+async function keyRing(env: KeyRingEnv, signingKey: string): Promise<string[]> {
+  return signingKeyRing(signingKey, env.SIGNING_KEYS_RETIRED, await importedSigningKeys(env));
+}
+
 /**
  * The suppression hasher with the pinned key (see packages/core/src/suppression/hash.ts).
- * It looks for the pinned key in SIGNING_KEY and SIGNING_KEYS_RETIRED, so a rotation
- * keeps every suppression. A failed setup is not cached, so the next call tries again.
+ * It looks for the pinned key in the key ring, so a rotation and a restore keep every
+ * suppression. A failed setup is not cached, so the next call tries again.
  */
-function emailHasher(
-  env: Pick<Env, "DB" | "SIGNING_KEYS_RETIRED">,
-  signingKey: string,
-): Promise<EmailHasher> {
-  const keys = `${signingKey}|${env.SIGNING_KEYS_RETIRED ?? ""}`;
+async function emailHasher(env: KeyRingEnv, signingKey: string): Promise<EmailHasher> {
+  const secrets = await keyRing(env, signingKey);
+  const keys = secrets.join("|");
   if (hasher?.keys !== keys) {
-    const secrets = tokenKeysFromEnv(signingKey, env.SIGNING_KEYS_RETIRED).map(
-      (entry) => entry.secret,
-    );
     const value = createPinnedEmailHasher(env.DB, secrets);
     const entry = { keys, value };
     hasher = entry;
@@ -114,19 +160,16 @@ export function fileLinkSigner(env: Pick<Env, "SIGNING_KEY">): Promise<FileLinkS
 
 /**
  * The signer of unsubscribe and tracking tokens (KTD28): SIGNING_KEY signs, and the
- * retired keys still verify. The key derivation runs once per isolate.
+ * retired keys and the keys that a restore imported still verify. The key derivation
+ * runs once per isolate and key ring.
  */
-export function tokenSigner(
-  env: Pick<Env, "SIGNING_KEY" | "SIGNING_KEYS_RETIRED">,
-): Promise<TokenSigner> {
+export async function tokenSigner(env: KeyRingEnv): Promise<TokenSigner> {
   const current = env.SIGNING_KEY;
-  if (!isUsableKey(current)) return Promise.reject(new Error("SIGNING_KEY is missing."));
-  const keys = `${current}|${env.SIGNING_KEYS_RETIRED ?? ""}`;
+  if (!isUsableKey(current)) throw new Error("SIGNING_KEY is missing.");
+  const ring = await keyRing(env, current);
+  const keys = ring.join("|");
   if (tokens?.keys !== keys) {
-    tokens = {
-      keys,
-      value: createTokenSigner(tokenKeysFromEnv(current, env.SIGNING_KEYS_RETIRED)),
-    };
+    tokens = { keys, value: createTokenSigner(ring.map((secret) => ({ secret }))) };
   }
   return tokens.value;
 }
@@ -189,6 +232,18 @@ export function backupInstanceId(job: BackupJob): string {
 export function backupStarter(env: Pick<Env, "BACKUP_WORKFLOW">) {
   return async (job: BackupJob): Promise<void> => {
     await env.BACKUP_WORKFLOW.create({ id: backupInstanceId(job), params: job });
+  };
+}
+
+/** The Workflow instance id of one restore instance (U5). */
+export function restoreInstanceId(job: RestoreJob): string {
+  return `restore-${job.runId}-${job.generation}`;
+}
+
+/** Starts the restore Workflow (U5). */
+export function restoreStarter(env: Pick<Env, "RESTORE_WORKFLOW">) {
+  return async (job: RestoreJob): Promise<void> => {
+    await env.RESTORE_WORKFLOW.create({ id: restoreInstanceId(job), params: job });
   };
 }
 

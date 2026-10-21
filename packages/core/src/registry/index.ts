@@ -1,4 +1,6 @@
 import {
+  backupsAcknowledgeRestore,
+  backupsDownload,
   backupsGet,
   backupsRuns,
   backupsSetPassphrase,
@@ -179,12 +181,14 @@ export const registry = createRegistry([
   // Deployment settings (KTD16): the source link of this deployment.
   settingsGet,
   settingsUpdate,
-  // Encrypted backups (U4): owner session only, never MCP.
+  // Encrypted backups (U4, U5): owner session only, never MCP.
   backupsGet,
   backupsRuns,
   backupsStart,
   backupsSetPassphrase,
   backupsUpdateSettings,
+  backupsDownload,
+  backupsAcknowledgeRestore,
   apiKeysPresets,
   apiKeysList,
   apiKeysCreate,

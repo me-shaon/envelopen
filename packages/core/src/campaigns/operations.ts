@@ -2,6 +2,7 @@ import type { DbConnection, RowUpdate } from "@envelopen/db";
 import { getAdapter } from "@envelopen/providers";
 import { sql } from "kysely";
 import { z } from "zod";
+import { assertNoRestoreHold } from "../backup/restore-ack";
 import { assertCampaignPolicy } from "../connections/policy-gate";
 import { normalizeEmail } from "../contacts/email";
 import { checkLists, checkTags } from "../contacts/writes";
@@ -646,6 +647,8 @@ export const campaignsConfirm = defineOperation({
   async handler(input, ctx) {
     const { principal, db, now, services } = ctx;
     const campaign = await loadCampaign(db, principal.workspaceId, input.id);
+    // After a restore, sends wait until the owner confirms the age of the backup (KTD3).
+    await assertNoRestoreHold(db);
     const token = await consumeConfirmToken(db, principal, campaign, input.token, now);
     // The policy can change between prepare and confirm, for example a removed connection.
     const policy = await assertCampaignPolicy(db, principal.workspaceId);

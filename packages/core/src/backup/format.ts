@@ -25,10 +25,10 @@ import {
 export const BACKUP_FORMAT_VERSION = 1;
 /**
  * The schema of the backed-up data: the number of the latest D1 migration. A restore
- * refuses a newer backup, and migrates an older one first (U5). A test keeps it equal
- * to the highest migration file.
+ * refuses a newer backup, and upgrades an older one row by row (restore-plan.ts). A
+ * test keeps it equal to the highest migration file.
  */
-export const BACKUP_SCHEMA_VERSION = 16;
+export const BACKUP_SCHEMA_VERSION = 17;
 /** Rows per chunk. A chunk of 1,000 rows encrypts in a few milliseconds of CPU. */
 export const CHUNK_ROWS = 1_000;
 
@@ -37,11 +37,14 @@ export const CHUNK_ROWS = 1_000;
  * - auth_session: live session tokens. A restore signs every user out anyway (KTD3).
  * - backup_runs: the history of this deployment's backups, not data to restore.
  * - key_derivations: passphrase derivations in progress, with sealed secrets.
+ * - restore_runs, restore_tables: the restores into this deployment (U5).
  */
 export const BACKUP_EXCLUDED_TABLES: Readonly<Partial<Record<TableName, string>>> = {
   auth_session: "Session tokens. A restore signs every user out.",
   backup_runs: "The backup history of the source deployment.",
   key_derivations: "Short-lived passphrase derivations with sealed secrets.",
+  restore_runs: "The restore history of the source deployment.",
+  restore_tables: "The restore progress of the source deployment.",
 };
 
 /** The tables in a backup, in TABLE_SCOPE order. */

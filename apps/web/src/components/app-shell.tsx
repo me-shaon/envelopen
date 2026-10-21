@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   BookOpenIcon,
+  CircleAlertIcon,
   FileTextIcon,
   HouseIcon,
   type LucideIcon,
@@ -14,10 +15,16 @@ import {
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { useEffect, useState } from "react";
-import { deploymentSettingsQuery, sessionQuery, workspacesQuery } from "@/api/queries";
+import {
+  backupStatusQuery,
+  deploymentSettingsQuery,
+  sessionQuery,
+  workspacesQuery,
+} from "@/api/queries";
 import { setWorkspaceId, useWorkspaceId } from "@/api/workspace";
 import type { SessionUser } from "@/auth/auth-client";
 import { UsageCard } from "@/features/usage/usage-card";
+import { formatDateTime } from "@/lib/format";
 import { guideUrl } from "@/lib/guides";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
@@ -139,6 +146,54 @@ function AppFooter() {
         </>
       ) : null}
     </footer>
+  );
+}
+
+/**
+ * The backup warning on every signed-in page (R4, AE7). It shows while the last backup
+ * failed, or reached R2 without its S3 copy, with the time of the last successful
+ * backup. It goes away when a backup succeeds. After a restore, it says that campaign
+ * sends wait for the owner (KTD3).
+ */
+function BackupBanner() {
+  const status = useQuery(backupStatusQuery);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const data = status.data;
+  if (!data) return null;
+  const last = data.lastRun;
+  let message: string | null = null;
+  let tone = "bg-tone-danger text-tone-danger-foreground";
+  if (data.restore) {
+    tone = "bg-tone-salmon text-tone-salmon-foreground";
+    message = `This deployment was restored from a backup of ${formatDateTime(data.restore.backupCreatedAt)}. Campaign sends wait until you confirm the age of the backup.`;
+  } else if (last?.status === "failed" || last?.status === "partial") {
+    const success = data.lastSuccess
+      ? `The last successful backup was on ${formatDateTime(data.lastSuccess.startedAt)}.`
+      : "No backup has succeeded yet.";
+    message =
+      last.status === "failed"
+        ? `The backup of ${formatDateTime(last.startedAt)} failed. ${success}`
+        : `The backup of ${formatDateTime(last.startedAt)} reached R2, but its S3 copy failed. ${success}`;
+  }
+  if (!message) return null;
+  return (
+    <div
+      role="alert"
+      data-testid="backup-banner"
+      className={`mx-auto mt-4 flex max-w-[1120px] flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-4 py-3 text-[13px] ${tone}`}
+    >
+      <CircleAlertIcon className="size-4 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">{message}</span>
+      {pathname === "/settings" ? null : (
+        <Link
+          to="/settings"
+          hash="backups"
+          className="font-medium underline underline-offset-[3px]"
+        >
+          Open the backup settings
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -285,6 +340,7 @@ export function AppShell() {
             </div>
           </header>
 
+          <BackupBanner />
           <main className="mx-auto max-w-[1120px] pt-10">
             <Outlet />
           </main>

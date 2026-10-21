@@ -223,6 +223,29 @@
               "finishedAt"
             ],
             "description": "The latest passphrase key derivation. It runs in the background for a few seconds after the passphrase is set. The passphrase is in use when it is ready."
+          },
+          "restore": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "backupId": {
+                "type": "string"
+              },
+              "backupCreatedAt": {
+                "type": "number"
+              },
+              "restoredAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "backupId",
+              "backupCreatedAt",
+              "restoredAt"
+            ],
+            "description": "Set after a restore until the owner confirms the age of the backup. Campaign sends wait until then."
           }
         },
         "required": [
@@ -235,7 +258,8 @@
           "lastSuccess",
           "nextRunAt",
           "readBudget",
-          "passphraseDerivation"
+          "passphraseDerivation",
+          "restore"
         ]
       },
       "BackupRun": {
@@ -327,6 +351,30 @@
           "error",
           "s3Error",
           "deletedAt"
+        ]
+      },
+      "BackupLink": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The download path. It works without a session until it expires."
+          },
+          "expiresAt": {
+            "type": "number"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "url",
+          "expiresAt",
+          "filename",
+          "sizeBytes"
         ]
       },
       "ApiKey": {
@@ -3772,7 +3820,8 @@
               "audience",
               "connection",
               "policy",
-              "free_budget"
+              "free_budget",
+              "restore"
             ]
           },
           "label": {
@@ -6326,6 +6375,29 @@
                       ],
                       "description": "The latest passphrase key derivation. It runs in the background for a few seconds after the passphrase is set. The passphrase is in use when it is ready."
                     },
+                    "restore": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "backupId": {
+                          "type": "string"
+                        },
+                        "backupCreatedAt": {
+                          "type": "number"
+                        },
+                        "restoredAt": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "backupId",
+                        "backupCreatedAt",
+                        "restoredAt"
+                      ],
+                      "description": "Set after a restore until the owner confirms the age of the backup. Campaign sends wait until then."
+                    },
                     "changed": {
                       "type": "boolean"
                     }
@@ -6341,6 +6413,7 @@
                     "nextRunAt",
                     "readBudget",
                     "passphraseDerivation",
+                    "restore",
                     "changed"
                   ]
                 }
@@ -6549,6 +6622,237 @@
           },
           "404": {
             "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backups/runs/{id}/download": {
+      "post": {
+        "operationId": "backups.download",
+        "summary": "Get a download link of a backup",
+        "description": "Returns a link to the backup as one encrypted file (.envbak) that works for 15 minutes. The first-run screen of a new deployment restores it with the passphrase. Needs a sign-in in the last 10 minutes.",
+        "tags": [
+          "backups"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "never",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different path or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backups/restore/acknowledge": {
+      "post": {
+        "operationId": "backups.acknowledge_restore",
+        "summary": "Confirm the age of a restored backup",
+        "description": "After a restore, campaign sends wait until the owner confirms the age of the backup, because a backup misses the unsubscribes that came after it. Import the provider's suppression and unsubscribe lists first. This call lets sends go out again.",
+        "tags": [
+          "backups"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "never",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different path or body.",
             "content": {
               "application/json": {
                 "schema": {

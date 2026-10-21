@@ -744,6 +744,50 @@ export interface KeyDerivationsTable {
   finished_at: Defaulted<number | null>;
 }
 
+export type RestoreRunStatus = "deriving" | "running" | "waiting" | "succeeded" | "failed";
+export type RestoreSource = "r2" | "upload";
+
+/** One restore of a backup into this deployment (0017_restore.sql). */
+export interface RestoreRunsTable {
+  id: Generated<number>;
+  status: Defaulted<RestoreRunStatus>;
+  source: RestoreSource;
+  source_key: string;
+  backup_id: string;
+  backup_created_at: number;
+  schema_version: number;
+  total_rows: number;
+  chunk_count: number;
+  derivation_id: Defaulted<number | null>;
+  /** The data key and the backup's secrets, sealed with ENCRYPTION_KEY. */
+  sealed_key: Defaulted<string | null>;
+  key_version: Defaulted<number | null>;
+  owner_user_id: Defaulted<string | null>;
+  position: Defaulted<number>;
+  rows_inserted: Defaulted<number>;
+  rows_skipped: Defaulted<number>;
+  rows_written: Defaulted<number>;
+  generation: Defaulted<number>;
+  resume_at: Defaulted<number | null>;
+  failed_step: Defaulted<string | null>;
+  error: Defaulted<string | null>;
+  error_code: Defaulted<string | null>;
+  ip: Defaulted<string | null>;
+  started_at: number;
+  updated_at: number;
+  finished_at: Defaulted<number | null>;
+}
+
+/** The progress of one table in one restore (0017_restore.sql). */
+export interface RestoreTablesTable {
+  run_id: number;
+  table_name: string;
+  ord: number;
+  total_rows: number;
+  rows_done: Defaulted<number>;
+  rows_skipped: Defaulted<number>;
+}
+
 // Database -------------------------------------------------------------------------------
 
 export interface Database {
@@ -790,6 +834,8 @@ export interface Database {
   backup_settings: BackupSettingsTable;
   backup_runs: BackupRunsTable;
   key_derivations: KeyDerivationsTable;
+  restore_runs: RestoreRunsTable;
+  restore_tables: RestoreTablesTable;
 }
 
 export type TableName = keyof Database;
@@ -845,6 +891,9 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   backup_settings: "global",
   backup_runs: "global",
   key_derivations: "global",
+  // Restores into this deployment (U5).
+  restore_runs: "global",
+  restore_tables: "global",
 };
 
 export const TENANT_TABLES: ReadonlySet<string> = new Set(

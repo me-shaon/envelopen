@@ -11,6 +11,7 @@ import { createHookRoutes } from "./hooks";
 import { createMcpRoutes, MCP_PATH } from "./mcp/route";
 import { handleSendBatch } from "./queue/send-consumer";
 import { createSetupRoutes } from "./setup/first-run";
+import { createRestoreRoutes } from "./setup/restore";
 import { createTrackingRoutes, createUnsubscribeRoutes } from "./tracking";
 import { ENVELOPEN_VERSION } from "./version";
 
@@ -24,6 +25,7 @@ export { BackupWorkflow } from "./workflows/backup-workflow";
 export { CampaignWorkflow } from "./workflows/campaign-workflow";
 export { ImportWorkflow } from "./workflows/import-workflow";
 export { KeyDerivationWorkflow } from "./workflows/key-derivation-workflow";
+export { RestoreWorkflow } from "./workflows/restore-workflow";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -36,6 +38,9 @@ app.get("/api/health", (c) => c.json({ status: "ok", version: ENVELOPEN_VERSION 
 // before the API router, whose catch-all would answer their paths with 404. So is the
 // file download route.
 app.route(AUTH_BASE_PATH, createAuthRoutes());
+// Restore from the first-run screen (U5). Mounted before the setup routes, whose
+// catch-all would answer its paths with 404.
+app.route("/api/setup/restore", createRestoreRoutes());
 app.route("/api/setup", createSetupRoutes());
 // Signed download links for import error files and exports. No session: the link is the credential.
 app.route("/api/files", createFileRoutes());

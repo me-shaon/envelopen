@@ -350,3 +350,18 @@ export const usageQuery = queryOptions({
   queryFn: () => unwrap(api.GET("/usage")),
   refetchInterval: 60_000,
 });
+
+/**
+ * The backup status of the deployment (U4, U5): the last run, the last success, and a
+ * restore that waits for the owner. The app shell banner reads it too.
+ */
+export const backupStatusQuery = queryOptions({
+  queryKey: ["backups"],
+  queryFn: () => unwrap(api.GET("/backups")),
+  refetchInterval: 5 * 60_000,
+});
+
+export const backupRunsQuery = queryOptions({
+  queryKey: ["backups", "runs"],
+  queryFn: () => unwrap(api.GET("/backups/runs", { params: { query: { limit: 30 } } })),
+});

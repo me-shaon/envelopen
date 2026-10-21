@@ -18,6 +18,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 - A source code link with the version in the admin footer and on each subscriber page. The owner can change it in Settings.
 - Scheduled sends have a timezone. The owner picks an IANA timezone, and the app shows the send time in that zone.
 - Encrypted backups of all data to R2, daily and on demand, with an optional copy to an S3-compatible store and a retention period. Only the owner's passphrase opens a backup.
+- Backup status, run history, and downloads in Settings, a warning on every page when a backup fails, and a restore of a backup file or an R2 backup from the first-run screen of a new deployment.
 
 ### Changed
 

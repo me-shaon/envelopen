@@ -111,6 +111,7 @@ export {
   type ImportJobMode,
   type KeyDerivationJob,
   type PlatformLimit,
+  type RestoreJob,
   requireService,
   type SendQueue,
   type Services,
@@ -159,6 +160,7 @@ export {
   hmacHex,
   SUPPRESSION_KEY_SETTING,
   SuppressionKeyError,
+  signingKeyRing,
 } from "./suppression/hash";
 export {
   MAX_SOURCE_LENGTH,

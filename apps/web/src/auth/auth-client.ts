@@ -185,6 +185,86 @@ export function setupRecover(
   return post("/api/setup/recover", password === undefined ? { token } : { token, password });
 }
 
+// Restore from the first-run screen (U5) --------------------------------------------------------
+// apps/worker/src/setup/restore.ts serves /api/setup/restore/*.
+
+export interface BackupSummary {
+  backupId: string;
+  createdAt: number;
+  schemaVersion: number;
+  totalRows: number;
+  chunkCount: number;
+  sizeBytes: number;
+  estimatedDays: number;
+  /** Why this deployment cannot restore the backup, or null. */
+  problem: string | null;
+}
+
+export interface RestoreTableStatus {
+  table: string;
+  totalRows: number;
+  rowsDone: number;
+  rowsSkipped: number;
+}
+
+export interface RestoreStatus {
+  id: number;
+  status: "deriving" | "running" | "waiting" | "succeeded" | "failed";
+  source: "r2" | "upload";
+  backupId: string;
+  backupCreatedAt: number;
+  totalRows: number;
+  rowsInserted: number;
+  rowsSkipped: number;
+  chunkCount: number;
+  chunksDone: number;
+  resumeAt: number | null;
+  failedStep: string | null;
+  error: string | null;
+  errorCode: string | null;
+  startedAt: number;
+  finishedAt: number | null;
+  estimatedDays: number;
+  remainingDays: number;
+  tables: RestoreTableStatus[];
+}
+
+export type RestoreSourceInput =
+  | { kind: "r2"; backupId: string }
+  | { kind: "upload"; uploadId: string };
+
+export function restoreStatus(
+  token: string,
+): Promise<{ restore: RestoreStatus | null; owner: boolean }> {
+  return post("/api/setup/restore/status", { token });
+}
+
+export function restoreSources(
+  token: string,
+): Promise<{ backups: BackupSummary[]; schemaVersion: number; maxUploadBytes: number }> {
+  return post("/api/setup/restore/sources", { token });
+}
+
+/** Sends a backup file (.envbak) for a restore. The token goes in a header, never the URL. */
+export function restoreUpload(
+  token: string,
+  file: File,
+): Promise<{ uploadId: string; backup: BackupSummary }> {
+  return request("/api/setup/restore/upload", {
+    method: "POST",
+    headers: { "X-Setup-Token": token, "Content-Type": "application/octet-stream" },
+    body: file,
+  });
+}
+
+export function restoreStart(input: {
+  token: string;
+  source: RestoreSourceInput;
+  passphrase: string;
+}): Promise<{ restore: RestoreStatus }> {
+  return post("/api/setup/restore/start", input);
+}
+
 /** Password rules of the Worker (apps/worker/src/auth/better-auth.ts). */
 export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_LENGTH = 128;

@@ -3,6 +3,7 @@ import { OperationError } from "../errors";
 import { hasRecentSignIn, type Principal, SESSION_NOT_FRESH } from "../principal";
 import { defineOperation, type OperationContext } from "../registry/operation";
 import { requireService } from "../services";
+import { ARCHIVE_EXTENSION, archiveLinkKey } from "./archive";
 import { MAX_PASSPHRASE_LENGTH, MIN_PASSPHRASE_LENGTH } from "./crypto";
 import { startKeyDerivation } from "./derivation";
 import {
@@ -20,6 +21,7 @@ import {
   S3DestinationSchema,
   writeBackupSettings,
 } from "./model";
+import { RESTORE_ACK_SETTING, readRestoreAck } from "./restore-ack";
 import { startBackup } from "./run";
 
 // Backup operations (U4, R1, R2). They are for the owner only: the workspace:admin scope
@@ -28,7 +30,9 @@ import { startBackup } from "./run";
 // that completed in the last 10 minutes, as for adding a passkey. A stolen session
 // cookie then cannot redirect or rekey the backups.
 //
-// The full Settings section, the download, and the restore come in U5.
+// U5 adds the download link and the acknowledgement of a restored backup. The download
+// needs a recent sign-in too. The restore itself runs only from the first-run screen
+// (apps/worker/src/setup), never through an operation.
 
 const BACKUP_MCP = {
   class: "never",
@@ -38,13 +42,18 @@ const BACKUP_MCP = {
 } as const;
 
 /** Throws unless the session's sign-in completed in the last 10 minutes. */
-function requireRecentSignIn(principal: Principal, now: number): void {
+function requireRecentSignIn(
+  principal: Principal,
+  now: number,
+  message = "Sign in again to change the backup settings.",
+): void {
   if (!hasRecentSignIn(principal, now)) {
-    throw new OperationError("forbidden", "Sign in again to change the backup settings.", {
-      code: SESSION_NOT_FRESH,
-    });
+    throw new OperationError("forbidden", message, { code: SESSION_NOT_FRESH });
   }
 }
+
+/** How long a backup download link works. */
+export const BACKUP_LINK_TTL_MS = 15 * 60 * 1000;
 
 const BackupRunSchema = z
   .object({
@@ -98,6 +107,18 @@ const BackupStatusSchema = z
         description:
           "The latest passphrase key derivation. It runs in the background for a few " +
           "seconds after the passphrase is set. The passphrase is in use when it is ready.",
+      }),
+    restore: z
+      .object({
+        backupId: z.string(),
+        backupCreatedAt: z.number(),
+        restoredAt: z.number(),
+      })
+      .nullable()
+      .meta({
+        description:
+          "Set after a restore until the owner confirms the age of the backup. Campaign " +
+          "sends wait until then.",
       }),
   })
   .meta({ id: "BackupStatus" });
@@ -179,6 +200,7 @@ async function statusOf(
           finishedAt: derivation.finished_at,
         }
       : null,
+    restore: await readRestoreAck(db),
   };
 }
 
@@ -352,4 +374,81 @@ export const backupsStart = defineOperation({
     return runOutput(run);
   },
   auditTarget: (_input, output) => ({ targetType: "backup_run", targetId: output.backupId }),
+});
+
+const BackupLinkSchema = z
+  .object({
+    url: z
+      .string()
+      .meta({ description: "The download path. It works without a session until it expires." }),
+    expiresAt: z.number(),
+    filename: z.string(),
+    sizeBytes: z.number(),
+  })
+  .meta({ id: "BackupLink" });
+
+export const backupsDownload = defineOperation({
+  id: "backups.download",
+  summary: "Get a download link of a backup",
+  description:
+    "Returns a link to the backup as one encrypted file (.envbak) that works for 15 " +
+    "minutes. The first-run screen of a new deployment restores it with the passphrase. " +
+    "Needs a sign-in in the last 10 minutes.",
+  method: "post",
+  path: "/backups/runs/{id}/download",
+  scope: "workspace:admin",
+  risk: "write",
+  mcp: BACKUP_MCP,
+  input: z.object({ id: z.coerce.number().int().positive() }),
+  output: BackupLinkSchema,
+  async handler(input, ctx) {
+    requireRecentSignIn(ctx.principal, ctx.now, "Sign in again to download a backup.");
+    const run = await ctx.db.db
+      .selectFrom("backup_runs")
+      .selectAll()
+      .where("id", "=", input.id)
+      .executeTakeFirst();
+    if (!run) throw new OperationError("not_found", "No backup has this id.");
+    if ((run.status !== "succeeded" && run.status !== "partial") || run.deleted_at !== null) {
+      throw new OperationError(
+        "conflict",
+        "Only a finished backup that is still kept can be downloaded.",
+      );
+    }
+    const expiresAt = ctx.now + BACKUP_LINK_TTL_MS;
+    const day = new Date(run.started_at).toISOString().slice(0, 10);
+    const filename = `envelopen-backup-${day}-${run.backup_id.slice(0, 8)}${ARCHIVE_EXTENSION}`;
+    const url = await requireService(
+      ctx.services,
+      "signFileLink",
+    )({
+      key: archiveLinkKey(run.backup_id),
+      filename,
+      expiresAt,
+    });
+    return { url, expiresAt, filename, sizeBytes: run.size_bytes };
+  },
+  // Each download link is an audit event (U4, U5).
+  auditTarget: (input) => ({ targetType: "backup_run", targetId: input.id }),
+});
+
+export const backupsAcknowledgeRestore = defineOperation({
+  id: "backups.acknowledge_restore",
+  summary: "Confirm the age of a restored backup",
+  description:
+    "After a restore, campaign sends wait until the owner confirms the age of the backup, " +
+    "because a backup misses the unsubscribes that came after it. Import the provider's " +
+    "suppression and unsubscribe lists first. This call lets sends go out again.",
+  method: "post",
+  path: "/backups/restore/acknowledge",
+  scope: "workspace:admin",
+  risk: "write",
+  mcp: BACKUP_MCP,
+  input: z.object({}),
+  output: BackupStatusSchema,
+  async handler(_input, ctx) {
+    await ctx.db.db.deleteFrom("system_settings").where("key", "=", RESTORE_ACK_SETTING).execute();
+    return statusOf(ctx, await readBackupSettings(ctx.db));
+  },
+  auditTarget: () => ({ targetType: "backup_settings", metadata: { restore: "acknowledged" } }),
 });

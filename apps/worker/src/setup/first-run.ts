@@ -1,4 +1,4 @@
-import { PLAN_LIMITS, type PlanLimit } from "@envelopen/core";
+import { latestRestoreRun, PLAN_LIMITS, type PlanLimit } from "@envelopen/core";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -24,6 +24,9 @@ import { readBodyLimited } from "../body";
 //   POST /api/setup/owner    { token, email, name, workspaceName, password? }
 //   POST /api/setup/recover  { token, password? }
 //
+// Restore of a backup (U5) is under /api/setup/restore (restore.ts). A running or
+// part-done restore blocks the owner form, because the restore writes the owner.
+//
 // Every route answers 404, the same as an unknown API route, when SETUP_TOKEN is unset
 // or shorter than 32 characters. The setup routes also answer 404 once the owner
 // exists, and recovery answers 404 before it exists. Wrong tokens count per IP in the
@@ -34,7 +37,7 @@ const OWNER_SETTING = "owner_user_id";
 const PLATFORM_GUIDE = "docs/guides/cloudflare-platform.md";
 const DATABASE_GUIDE = "docs/guides/database-d1.md";
 
-type SetupAppEnv = { Bindings: Env };
+export type SetupAppEnv = { Bindings: Env };
 
 export interface SetupRoutesOptions {
   limiter?: (env: Env) => AttemptLimiter;
@@ -217,7 +220,7 @@ export async function readOwnerId(conn: DbConnection): Promise<string | null> {
 
 // Routes ----------------------------------------------------------------------------------------
 
-function notFound(c: Context<SetupAppEnv>) {
+export function notFound(c: Context<SetupAppEnv>) {
   // The same body as an unknown API route, so a closed screen looks like no screen.
   return c.json(
     { error: { code: "not_found", message: "No API route matches this request." } },
@@ -228,7 +231,7 @@ function notFound(c: Context<SetupAppEnv>) {
 /** The setup forms send a few short fields. */
 const MAX_SETUP_BODY_BYTES = 16 * 1024;
 
-function fail(
+export function fail(
   c: Context<SetupAppEnv>,
   status: ContentfulStatusCode,
   code: string,
@@ -334,6 +337,19 @@ export function createSetupRoutes(options: SetupRoutesOptions = {}): Hono<SetupA
     const checks = await runSetupChecks(c.env);
     if (!checks.every((item) => item.ok)) {
       return fail(c, 409, "setup_checks_failed", "Fix the failed checks first.", checks);
+    }
+    // A restore writes the owner of the backup (U5). It and a new owner exclude each other.
+    const restore = await latestRestoreRun(conn);
+    const partDone = restore?.status === "failed" && restore.position > 0;
+    if (restore && (partDone || (restore.status !== "failed" && restore.status !== "succeeded"))) {
+      return fail(
+        c,
+        409,
+        "restore_running",
+        restore.status === "failed"
+          ? "A restore stopped part way. Start it again, or deploy a new, empty database."
+          : "A restore is running. Wait for it to end.",
+      );
     }
 
     const auth = await createAuth({ env: c.env, origin: appOrigin(c), d1: conn.d1 });

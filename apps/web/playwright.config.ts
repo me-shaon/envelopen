@@ -2,9 +2,10 @@ import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 
 // End-to-end tests of the admin app against `wrangler dev` with a local D1.
-// Seven Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
-// and one each for the contacts, providers, editor, campaigns, and first-campaign specs,
-// so their owners and data start fresh. The providers, editor, campaigns, and
+// Nine Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
+// one each for the contacts, providers, editor, campaigns, and first-campaign specs,
+// so their owners and data start fresh, and two for the backup spec: the source and
+// the restore target, which has its own keys. The providers, editor, campaigns, and
 // first-campaign Workers send their provider and DNS requests to local mock servers
 // (e2e/provider-mock.mjs), one each, so each spec sees only its own sent emails.
 // The secrets are random per run unless E2E_* variables set them. Playwright loads this
@@ -13,6 +14,9 @@ import { defineConfig, devices } from "@playwright/test";
 process.env.E2E_SETUP_TOKEN ??= randomBytes(32).toString("hex");
 process.env.E2E_SIGNING_KEY ??= randomBytes(32).toString("base64");
 process.env.E2E_ENCRYPTION_KEY ??= randomBytes(32).toString("base64");
+// The restore target of the backup spec is a new deployment with its own keys.
+process.env.E2E_SIGNING_KEY_BACKUP_TARGET ??= randomBytes(32).toString("base64");
+process.env.E2E_ENCRYPTION_KEY_BACKUP_TARGET ??= randomBytes(32).toString("base64");
 
 export const PASSWORD_PORT = 8790;
 export const PASSKEY_PORT = 8791;
@@ -25,6 +29,9 @@ export const CAMPAIGNS_MOCK_PORT = 8797;
 export const PROVIDER_MOCK_PORT = 8799;
 export const EDITOR_MOCK_PORT = 8798;
 export const FIRST_CAMPAIGN_MOCK_PORT = 8800;
+export const BACKUP_SOURCE_PORT = 8801;
+export const BACKUP_TARGET_PORT = 8802;
+export const BACKUP_MOCK_PORT = 8803;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -127,6 +134,31 @@ export default defineConfig({
     {
       command: `node e2e/serve.mjs ${FIRST_CAMPAIGN_PORT} first-campaign 100000 http://127.0.0.1:${FIRST_CAMPAIGN_MOCK_PORT}`,
       url: `http://localhost:${FIRST_CAMPAIGN_PORT}/api/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      // The backup source sends its S3 copy to a mock that has no S3, so the copy fails.
+      command: `node e2e/provider-mock.mjs ${BACKUP_MOCK_PORT}`,
+      url: `http://127.0.0.1:${BACKUP_MOCK_PORT}/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      command: `node e2e/serve.mjs ${BACKUP_SOURCE_PORT} backup-source 100000 http://127.0.0.1:${BACKUP_MOCK_PORT}`,
+      url: `http://localhost:${BACKUP_SOURCE_PORT}/api/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      command: `node e2e/serve.mjs ${BACKUP_TARGET_PORT} backup-target 100000`,
+      url: `http://localhost:${BACKUP_TARGET_PORT}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: "ignore",

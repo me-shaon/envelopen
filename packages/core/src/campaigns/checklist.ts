@@ -2,6 +2,7 @@ import type { DbConnection } from "@envelopen/db";
 import { extractLinks, mergeTagNames } from "@envelopen/email-render";
 import { getAdapter } from "@envelopen/providers";
 import { z } from "zod";
+import { readRestoreAck } from "../backup/restore-ack";
 import { type CampaignPolicy, checkCampaignPolicy } from "../connections/policy-gate";
 import { normalizeEmail } from "../contacts/email";
 import type { Services } from "../services";
@@ -32,6 +33,7 @@ export const ChecklistItemSchema = z
       "connection",
       "policy",
       "free_budget",
+      "restore",
     ]),
     label: z.string(),
     status: z.enum(CHECK_STATUSES),
@@ -334,6 +336,17 @@ export async function runChecklist(input: ChecklistInput): Promise<Checklist> {
   }
 
   items.push(await budgetItem(input, policy));
+  const restore = await readRestoreAck(db);
+  if (restore) {
+    items.push({
+      id: "restore",
+      label: "Restored data",
+      status: "fail",
+      message:
+        "This deployment was restored from a backup. Unsubscribes after the backup are missing. Confirm the age of the backup before you send.",
+      fix: { label: "Open the backup settings", path: "/settings#backups" },
+    });
+  }
   return { items, blocked: items.some((item) => item.status === "fail"), policy };
 }
 

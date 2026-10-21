@@ -13,6 +13,7 @@ import {
   loadBatchContext,
   type PlatformLimit,
   parseFrozenSet,
+  readRestoreAck,
   refsOf,
   type Services,
   systemAudit,
@@ -259,6 +260,9 @@ async function handlePointer(
   if (campaign.status !== "sending") return ack("inactive");
   if (batch.generation !== pointer.generation) return ack("stale");
   if (batch.status !== "enqueued") return ack("not_enqueued");
+  // After a restore, nothing sends until the owner confirms the backup age (KTD3). The
+  // batch stays enqueued, and the sweep dispatches it again after the confirmation.
+  if (await readRestoreAck(deps.db)) return ack("restore_hold");
 
   const adapter = connection ? getAdapter(connection.provider) : undefined;
   if (!connection || !adapter || connection.status !== "active") {

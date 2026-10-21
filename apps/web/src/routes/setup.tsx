@@ -8,7 +8,9 @@ import {
   AuthRequestError,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  type RestoreStatus,
   registerPasskey,
+  restoreStatus,
   type SetupCheckResult,
   setupCheck,
   setupOwner,
@@ -19,12 +21,15 @@ import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { RestoreFlow } from "@/features/restore/restore-flow";
 import { guideUrl } from "@/lib/guides";
 
 // First-run setup (KTD6): the setup token, then the binding and migration checks with
-// a fix hint for each failure, then the plan limits, then the owner form.
+// a fix hint for each failure, then the plan limits, then the owner form. From the
+// checks, the owner can restore a backup instead (U5). A restore that already started
+// shows its progress right after the token, so a reload keeps it.
 
-type Step = "token" | "review" | "owner" | "closed";
+type Step = "token" | "review" | "owner" | "restore" | "closed";
 
 function messageOf(error: unknown): string {
   if (error instanceof AuthRequestError) {
@@ -147,11 +152,24 @@ export function SetupPage() {
   const [result, setResult] = useState<SetupCheckResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [restore, setRestore] = useState<RestoreStatus | null>(null);
 
-  async function runCheck(value: string) {
+  async function runCheck(value: string, options: { restore?: boolean } = {}) {
     setError(null);
     setPending(true);
     try {
+      if (options.restore) {
+        // A restore that started earlier: show its progress or its end.
+        const current = await restoreStatus(value).catch((cause: unknown) => {
+          if (cause instanceof AuthRequestError && cause.status === 404) return null;
+          throw cause;
+        });
+        if (current?.restore) {
+          setRestore(current.restore);
+          setStep("restore");
+          return;
+        }
+      }
       const checked = await setupCheck(value);
       setResult(checked);
       setStep("review");
@@ -165,7 +183,7 @@ export function SetupPage() {
 
   function onToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void runCheck(token.trim());
+    void runCheck(token.trim(), { restore: true });
   }
 
   async function onOwner(event: FormEvent<HTMLFormElement>) {
@@ -210,6 +228,20 @@ export function SetupPage() {
           <Link to="/login">Go to sign in</Link>
         </Button>
       </AuthLayout>
+    );
+  }
+
+  if (step === "restore") {
+    return (
+      <RestoreFlow
+        token={token.trim()}
+        initial={restore}
+        onBack={() => {
+          setRestore(null);
+          if (result) setStep("review");
+          else void runCheck(token.trim());
+        }}
+      />
     );
   }
 
@@ -261,7 +293,7 @@ export function SetupPage() {
         title="Check the deployment"
         description={
           result.ready
-            ? "Every check passes. Read the limits, then create the owner."
+            ? "Every check passes. Read the limits, then create the owner, or restore a backup of another deployment."
             : "Fix the failed checks, deploy again, and check again."
         }
       >
@@ -271,6 +303,16 @@ export function SetupPage() {
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" disabled={pending} onClick={() => void runCheck(token.trim())}>
             Check again
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!result.ready}
+            onClick={() => {
+              setRestore(null);
+              setStep("restore");
+            }}
+          >
+            Restore a backup
           </Button>
           <Button disabled={!result.ready} onClick={() => setStep("owner")}>
             Continue

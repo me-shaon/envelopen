@@ -197,6 +197,46 @@ export interface paths {
         patch: operations["backups.update_settings"];
         trace?: never;
     };
+    "/backups/runs/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get a download link of a backup
+         * @description Returns a link to the backup as one encrypted file (.envbak) that works for 15 minutes. The first-run screen of a new deployment restores it with the passphrase. Needs a sign-in in the last 10 minutes.
+         */
+        post: operations["backups.download"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/restore/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm the age of a restored backup
+         * @description After a restore, campaign sends wait until the owner confirms the age of the backup, because a backup misses the unsubscribes that came after it. Import the provider's suppression and unsubscribe lists first. This call lets sends go out again.
+         */
+        post: operations["backups.acknowledge_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api-keys/presets": {
         parameters: {
             query?: never;
@@ -1709,6 +1749,12 @@ export interface components {
                 startedAt: number;
                 finishedAt: number | null;
             } | null;
+            /** @description Set after a restore until the owner confirms the age of the backup. Campaign sends wait until then. */
+            restore: {
+                backupId: string;
+                backupCreatedAt: number;
+                restoredAt: number;
+            } | null;
         };
         BackupRun: {
             id: number;
@@ -1728,6 +1774,13 @@ export interface components {
             s3Error: string | null;
             deletedAt: number | null;
         } | null;
+        BackupLink: {
+            /** @description The download path. It works without a session until it expires. */
+            url: string;
+            expiresAt: number;
+            filename: string;
+            sizeBytes: number;
+        };
         ApiKey: {
             id: number;
             name: string;
@@ -2529,7 +2582,7 @@ export interface components {
         };
         ChecklistItem: {
             /** @enum {string} */
-            id: "subject" | "preheader" | "content" | "unsubscribe_link" | "links" | "from_address" | "domain_auth" | "audience" | "connection" | "policy" | "free_budget";
+            id: "subject" | "preheader" | "content" | "unsubscribe_link" | "links" | "from_address" | "domain_auth" | "audience" | "connection" | "policy" | "free_budget" | "restore";
             label: string;
             /** @enum {string} */
             status: "pass" | "warn" | "fail";
@@ -3795,6 +3848,12 @@ export interface operations {
                             startedAt: number;
                             finishedAt: number | null;
                         } | null;
+                        /** @description Set after a restore until the owner confirms the age of the backup. Campaign sends wait until then. */
+                        restore: {
+                            backupId: string;
+                            backupCreatedAt: number;
+                            restoredAt: number;
+                        } | null;
                         changed: boolean;
                     };
                 };
@@ -3938,6 +3997,192 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backups.download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupLink"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different path or body. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "backups.acknowledge_restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupStatus"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different path or body. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

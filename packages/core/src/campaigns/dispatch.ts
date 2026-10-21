@@ -1,5 +1,6 @@
 import type { DbConnection } from "@envelopen/db";
 import { sql } from "kysely";
+import { RESTORE_ACK_SETTING } from "../backup/restore-ack";
 import { chunk } from "../contacts/writes";
 import type { BatchPointer, SendQueue } from "../services";
 
@@ -10,6 +11,9 @@ import type { BatchPointer, SendQueue } from "../services";
 // The state is written first, so a lost message never loses a batch: the sweep finds
 // a batch that stays enqueued too long and dispatches it again. If the queue call
 // fails, the batches go back to `pending` at once, and the caller can try again.
+//
+// After a restore, no batch goes out until the owner confirms the age of the backup
+// (KTD3): the restore_ack_required setting stops every dispatch.
 
 /** One queue call sends at most 100 messages. */
 export const DISPATCH_LIMIT = 100;
@@ -55,6 +59,7 @@ WHERE workspace_id = ${workspaceId} AND id IN (
   SELECT b.id FROM campaign_batches b
   WHERE b.workspace_id = ${workspaceId} AND b.campaign_id = ${campaignId} AND (${sql.join(conditions, sql` OR `)})
     AND EXISTS (SELECT 1 FROM campaigns c WHERE c.workspace_id = ${workspaceId} AND c.id = ${campaignId} AND c.status = 'sending')
+    AND NOT EXISTS (SELECT 1 FROM system_settings s WHERE s.key = ${RESTORE_ACK_SETTING})
   ORDER BY b.seq LIMIT ${limit}
 )
 RETURNING id, generation`.execute(db.db);

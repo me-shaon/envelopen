@@ -35,6 +35,14 @@ export interface BackupJob {
 }
 
 /** A passphrase key derivation that the key derivation Workflow runs in steps (U4). */
+/** One instance of the restore Workflow (U5). */
+export interface RestoreJob {
+  /** `restore_runs.id`. */
+  runId: number;
+  /** `restore_runs.generation`. A long restore goes on in a new instance with the next one. */
+  generation: number;
+}
+
 export interface KeyDerivationJob {
   /** `key_derivations.id`. */
   derivationId: number;

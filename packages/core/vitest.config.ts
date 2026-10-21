@@ -11,7 +11,8 @@ export default defineConfig(async () => {
       cloudflareTest({
         miniflare: {
           compatibilityDate: "2026-10-01",
-          d1Databases: ["DB"],
+          // RESTORE_DB is a second, fresh deployment for the restore tests (U5).
+          d1Databases: ["DB", "RESTORE_DB"],
           // Imports and exports keep their files in R2.
           r2Buckets: ["BUCKET"],
           // Test-only binding. The setup file applies these migrations.

@@ -17,6 +17,7 @@ import {
   repairAllCounts,
   rescueSnapshots,
   resealLegacyConnections,
+  restoreInProgress,
   resumeAfterPlatformLimit,
   type SweepDeps,
   startBackup,
@@ -82,10 +83,12 @@ export interface CronReport {
   unsubscribes: DrainReport | null;
   /** True when platform_limit stays because unsubscribes still wait for D1. */
   held: boolean;
+  /** True when a restore runs, so every job waits (U5). */
+  restoring?: boolean;
 }
 
-export async function runCampaignCron(deps: CronDeps): Promise<CronReport> {
-  const report: CronReport = {
+function emptyReport(): CronReport {
+  return {
     resumed: [],
     started: [],
     rescued: [],
@@ -97,6 +100,10 @@ export async function runCampaignCron(deps: CronDeps): Promise<CronReport> {
     unsubscribes: null,
     held: false,
   };
+}
+
+export async function runCampaignCron(deps: CronDeps): Promise<CronReport> {
+  const report = emptyReport();
   const { sweep, meter } = deps;
   const status = await meter.status(sweep.now);
   const limit = status.platformLimit;
@@ -297,6 +304,11 @@ export async function runCron(
 ): Promise<CronReport> {
   const db = createDb(env, { usageSink: usageSink(env) });
   try {
+    // A restore writes the backup row by row (U5). The jobs wait until it ends, so they
+    // never act on a half-written deployment.
+    if (await restoreInProgress(db, now).catch(() => false)) {
+      return { ...emptyReport(), restoring: true };
+    }
     const report = await runCampaignCron({
       db,
       meter: usageMeter(env),

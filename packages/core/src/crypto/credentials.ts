@@ -46,7 +46,8 @@ export interface CredentialOwner {
     | "backup_destination"
     | "derivation_secret"
     | "derivation_state"
-    | "derivation_result";
+    | "derivation_result"
+    | "imported_signing_keys";
   /**
    * The provider connection. `encrypt` binds the value to it (the `v2.` format) when it
    * is set. `decrypt` needs it for a `v2.` value.

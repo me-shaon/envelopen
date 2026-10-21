@@ -8,8 +8,10 @@ import type { EmailHasher } from "../services";
 // new key is not possible. The installation pins one hash key instead: the first use
 // stores the key id in `system_settings`, and every later use hashes with that key.
 // After a rotation, the old SIGNING_KEY stays in SIGNING_KEYS_RETIRED, and the pinned
-// key is found there. If the pinned key is in neither secret, hashing fails, so no
-// suppression check can pass by mistake.
+// key is found there. After a restore into another deployment (U5, KTD3), the backup's
+// signing keys are imported keys in `system_settings`, and the pinned key is found
+// there. If the pinned key is in none of them, hashing fails, so no suppression check
+// can pass by mistake.
 
 const HKDF_INFO = "envelopen/suppression/v1";
 const KEY_ID_INFO = "envelopen/suppression/key-id/v1";
@@ -85,7 +87,25 @@ export async function createEmailHasher(signingKey: string): Promise<EmailHasher
   return (normalizedEmail) => hmacHex(key, normalizedEmail);
 }
 
-/** Thrown when the pinned suppression hash key is not in SIGNING_KEY or SIGNING_KEYS_RETIRED. */
+/**
+ * The key ring of the token signer and the suppression hasher: SIGNING_KEY, then each
+ * key of SIGNING_KEYS_RETIRED, then the keys that a restore imported (U5). Empty values
+ * and repeats are left out, so the first key is always the one that signs.
+ */
+export function signingKeyRing(
+  current: string,
+  retired: string | undefined,
+  imported: readonly string[] = [],
+): string[] {
+  const ring: string[] = [];
+  for (const value of [current, ...(retired ?? "").split(","), ...imported]) {
+    const key = value.trim();
+    if (key.length > 0 && !ring.includes(key)) ring.push(key);
+  }
+  return ring;
+}
+
+/** Thrown when the pinned suppression hash key is not in the key ring. */
 export class SuppressionKeyError extends Error {
   constructor(message: string) {
     super(message);
@@ -100,7 +120,8 @@ interface RingEntry {
 
 /**
  * The email hasher for suppressions with a pinned key (see the note at the top).
- * `secrets` is the key ring: SIGNING_KEY first, then the retired keys.
+ * `secrets` is the key ring of `signingKeyRing`: SIGNING_KEY first, then the retired
+ * keys, then the imported keys.
  *
  * The first use pins a key. When contacts with a hash exist, it pins the ring key that
  * made their hashes, so a rotation before the first use is safe too. When no ring key
@@ -143,8 +164,8 @@ export async function createPinnedEmailHasher(
   const entry = ring.find((candidate) => candidate.id === pinned);
   if (!entry) {
     throw new SuppressionKeyError(
-      "The suppression hash key is not in SIGNING_KEY or SIGNING_KEYS_RETIRED. " +
-        "Add the earlier SIGNING_KEY to SIGNING_KEYS_RETIRED.",
+      "The suppression hash key is not in SIGNING_KEY, SIGNING_KEYS_RETIRED, or the keys " +
+        "that a restore imported. Add the earlier SIGNING_KEY to SIGNING_KEYS_RETIRED.",
     );
   }
   return (normalizedEmail) => hmacHex(entry.key, normalizedEmail);
@@ -171,7 +192,7 @@ async function keyOfExistingHashes(db: D1Database, ring: RingEntry[]): Promise<R
     if (matches) return entry;
   }
   throw new SuppressionKeyError(
-    "The stored suppression hashes match no key in SIGNING_KEY or SIGNING_KEYS_RETIRED. " +
-      "Add the earlier SIGNING_KEY to SIGNING_KEYS_RETIRED.",
+    "The stored suppression hashes match no key in SIGNING_KEY, SIGNING_KEYS_RETIRED, or " +
+      "the keys that a restore imported. Add the earlier SIGNING_KEY to SIGNING_KEYS_RETIRED.",
   );
 }

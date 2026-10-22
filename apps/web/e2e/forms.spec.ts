@@ -333,7 +333,12 @@ test.describe("signup forms", () => {
     await expect(preview.getByText("(required)")).toBeVisible();
     await expectNoSeriousViolations(page);
     await page.getByRole("button", { name: "Save form" }).click();
-    await expect(page.getByText(/Form ".*" saved\./)).toBeVisible();
+    await expect(
+      page
+        .getByTestId("toast")
+        .getByText(/Form ".*" saved\./)
+        .first(),
+    ).toBeVisible();
 
     // Without an answer, the form shows an error and sends nothing.
     await stubTurnstile(page);

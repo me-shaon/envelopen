@@ -36,11 +36,13 @@ Envelopen v1 uses D1 only. Postgres (Supabase or other Postgres through Hyperdri
 | [Amazon SES](provider-ses.md) | Campaigns | 2026-10-19 |
 | [Resend](provider-resend.md) | Campaigns | 2026-10-19 |
 | [Postmark](provider-postmark.md) | Campaigns (Broadcast stream) | 2026-10-19 |
+| [Mailgun](provider-mailgun.md) (US and EU regions) | Campaigns | 2026-10-22 |
+| [SMTP](provider-smtp.md) with the Gmail, Google Workspace, and Custom SMTP presets | Campaigns (Gmail and Google Workspace after a policy warning) | 2026-10-22 |
+| [Brevo](provider-brevo.md) (a preset of SMTP, with a webhook) | Campaigns | 2026-10-22 |
 | [toSend](provider-tosend.md) | Transactional only | 2026-10-19 |
 | [Cloudflare Email](provider-cloudflare-email.md) | Transactional only | 2026-10-19 |
-| [SMTP (Gmail, Google Workspace, custom)](provider-smtp.md) | Campaigns (Gmail and Workspace after a policy warning) | 2026-10-22 |
-| [Brevo (SMTP preset with webhooks)](provider-brevo.md) | Campaigns | 2026-10-22 |
-| [Mailgun](provider-mailgun.md) | Campaigns | 2026-10-22 |
+
+Each connection can have a daily sending limit. A campaign larger than the limit sends over several days. See [Daily sending limits and multi-day sends](provider-smtp.md#daily-sending-limits-and-multi-day-sends).
 
 A transactional-only provider always sends system email, such as test sends. The send checklist blocks a campaign through it until the owner accepts the provider policy warning. The Gmail and Google Workspace presets of SMTP have the same gate.
 

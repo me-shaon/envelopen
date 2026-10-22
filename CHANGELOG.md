@@ -12,16 +12,40 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-22
+
 ### Added
 
-- An internal SMTP client and socket capability for provider adapters, with a local SMTP mock for development.
-- An SMTP provider connection with Gmail, Google Workspace, Brevo, and custom SMTP presets.
-- A daily sending limit for each connection, with a default from the preset. A later update enforces it.
-- A policy warning for the Gmail and Google Workspace presets. The owner accepts it before the first campaign.
-- Brevo webhooks for bounces, complaints, blocked messages, and unsubscribes, with a rotatable bearer token.
-- Guides for SMTP and Brevo.
-- Daily caps per connection: a campaign larger than the cap sends over several 24-hour days, and the confirm step shows the sending days and the expected end date.
-- A Mailgun provider connection for US and EU accounts, with signed webhooks for deliveries, bounces, complaints, and unsubscribes.
+- An SMTP provider with Gmail, Google Workspace, Brevo, and custom SMTP presets.
+- A Mailgun provider for US and EU accounts, with an automatic webhook.
+- Brevo webhooks for bounces, complaints, blocked messages, and unsubscribes.
+- A daily sending limit for each connection, with a default from the SMTP preset.
+- Multi-day sends: a campaign larger than the daily limit sends over several 24-hour days.
+- The sending days and the expected end date in the confirm dialog and on the campaign page.
+- The use of the daily limit in the last 24 hours on each connection card.
+- A policy warning for the Gmail and Google Workspace presets, accepted by the owner.
+- SMTP batches of 20 messages on Workers Free and 50 on Workers Paid.
+- A local SMTP mock for development and end-to-end tests.
+- Guides for SMTP, Brevo, Mailgun, and daily sending limits.
+
+### Changed
+
+- Welcome emails wait for room under the daily limit of the connection.
+- Form confirmation emails wait in an outbox at the daily limit, and the cron sends them later.
+- A provider quota error fills the daily counter, so other sends of the connection wait too.
+- Backups include the daily limit of each connection and the sending days of each campaign.
+
+### Security
+
+- SMTP sends the password only after implicit TLS or a completed STARTTLS.
+- The Brevo webhook checks a rotatable bearer token in constant time. The URL holds no secret.
+- The Mailgun webhook checks the HMAC signature, a 5-minute timestamp window, and a single-use token.
+
+### Manual steps
+
+- Optional: set a daily sending limit on existing connections, for example 100 on the Mailgun Free plan.
+- For Brevo, run the `curl` command in the **Brevo events** dialog once to create the webhook.
+- For Gmail and Google Workspace, accept the policy warning before the first campaign.
 
 ## [0.4.0] - 2026-10-22
 
@@ -150,7 +174,8 @@ The first release of Envelopen: self-hosted email campaigns on Cloudflare Worker
 - Erase also removes the contact from stored batch data.
 - Unsubscribe links use the tracking domain only after it is verified.
 
-[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/me-shaon/envelopen/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/me-shaon/envelopen/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/me-shaon/envelopen/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/me-shaon/envelopen/compare/v0.1.0...v0.2.0

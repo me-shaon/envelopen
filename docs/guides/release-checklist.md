@@ -284,18 +284,20 @@ Expected result: the send checklist blocks the confirm until the brand kit has a
 
 ## 22. SMTP batch CPU on a deployed Free Worker (v0.5)
 
-Expected result: a batch of 50 SMTP messages has p99 CPU time below about 8 ms. If it does not, lower the SMTP batch size for Free.
+Expected result: an SMTP batch of 20 messages on Workers Free has p99 CPU time below about 8 ms, with no "Exceeded CPU time limit" error.
 
-The local part of this trial ran in the Workers runtime and in Node against mock servers. A warm 50-message batch used about 1 ms of client CPU. The first batch in a new isolate used about 8.6 ms, mostly JIT compilation. Real TLS, a real server, and the queue consumer's own work are not in those numbers.
+Envelopen v0.5 sends 20 SMTP messages per batch on Workers Free and 50 on Workers Paid. The local trial ran in the Workers runtime and in Node against mock servers. A warm 50-message batch used about 1 ms of client CPU. The first batch in a new isolate used about 8.6 ms, mostly JIT compilation. Real TLS, a real server, and the work of the queue consumer are not in those numbers.
 
-1. Use the Free deployment. Connect an SMTP server that you control and that delivers only to your own addresses, for example a test account at your SMTP provider.
-2. Import 50 of your own test addresses. Use plus addresses, for example `you+1@gmail.com`.
-3. Run `npx wrangler tail --format json` in a second terminal.
-4. Send a campaign to the 50 addresses through the SMTP connection.
-5. Read `cpuTime` of the queue invocation that sent the batch, and look for "Exceeded CPU time limit".
-6. Repeat steps 4 and 5 two more times, with a pause of 10 minutes between them, so at least one batch runs in a new isolate.
-7. Record the highest `cpuTime`. If it is above about 8 ms, set the SMTP batch size for Free to 20, and send again.
-8. Record whether SMTP campaigns need Workers Paid. Update the Risks table of the plan with the result.
+1. Use the Free deployment. In **Settings** > **Workers plan**, check that **Workers Free** is selected.
+2. Connect an SMTP server that you control and that delivers only to your own addresses. For example, use a test account at your SMTP provider.
+3. Import 60 of your own test addresses. Use plus addresses, for example `you+1@gmail.com`.
+4. Run `npx wrangler tail --format json` in a second terminal.
+5. Send a campaign to the 60 addresses through the SMTP connection. Envelopen sends 3 batches of 20.
+6. Read `cpuTime` of each queue invocation that sent a batch. Look for "Exceeded CPU time limit".
+7. Do steps 5 and 6 two more times, with a pause of 10 minutes between them. Then at least one batch runs in a new isolate.
+8. Record the highest `cpuTime`. If it is above about 8 ms, lower `SMTP_BATCH_SIZE_FREE` in `packages/providers/src/smtp/index.ts`.
+9. Optional: select **Workers Paid** for one send, so that a batch has 50 messages. Record the `cpuTime`, then select **Workers Free** again. A Free account stops an invocation above 10 ms, so expect a possible error.
+10. Record whether SMTP campaigns need Workers Paid.
 
 ## 23. Brevo keeps the unsubscribe headers (v0.5)
 
@@ -311,6 +313,76 @@ Send only to an address that you own. No automated test sends real email.
 6. Check that `List-Unsubscribe-Post` is `List-Unsubscribe=One-Click`.
 7. Check if Brevo added its own `List-Unsubscribe` value, or replaced the Envelopen value.
 8. Record the result. If Brevo replaced the headers, the Brevo preset relies on Brevo's own unsubscribe header and the Brevo webhook (KTD13).
+
+## 24. Brevo webhook with a bearer token (v0.5)
+
+Expected result: Brevo sends each event with `Authorization: Bearer <token>`, and Envelopen stores the event with the right type.
+
+1. Connect Brevo, and create the webhook with the `curl` command in the **Brevo events** dialog.
+2. Run `npx wrangler tail --format json`.
+3. Send a test campaign to a list with one of your own addresses and one address that does not exist at a domain that you own.
+4. In the tail, find the POST to `/hooks/smtp/<workspace id>/<connection id>`. Check that it returns 200.
+5. In the Brevo webhook logs, check that the request had the `Authorization` header. The URL must have no query string.
+6. Record the body of one `hard_bounce` event. Check that it has `event`, `email`, `message-id`, and `ts_epoch` or `ts_event`.
+7. Open the contact of the missing address. Check that Envelopen suppressed it with a hard bounce.
+8. On the connection card, select **Set up the webhook**, then **Rotate the token**. Send again. Check that Brevo gets 401 until you update the webhook in Brevo.
+9. Record whether Brevo sends one event per request, or a list of events.
+
+## 25. Brevo keeps the Message-ID (v0.5)
+
+Expected result: the `message-id` of a Brevo event is the `Message-ID` that Envelopen set, so bounces show on the campaign stats.
+
+1. Send a test campaign through Brevo to your Gmail address and to one address that bounces.
+2. In Gmail, open **Show original**. Record the `Message-ID` header.
+3. In the Envelopen database, compare it with the provider message id of the recipient. Run `npx wrangler d1 execute <database name> --remote --command "SELECT provider_message_id FROM campaign_recipients ORDER BY id DESC LIMIT 5"`.
+4. Compare the `message-id` of the bounce event in the tail (check 24) with the id of the bounced recipient.
+5. Open the campaign. Check that **Bounced** counts the bounce.
+6. Record the result. If Brevo replaced the `Message-ID`, the address is still suppressed, but the campaign stats miss the bounce. Update the [Brevo guide](provider-brevo.md).
+
+## 26. Mailgun quota error text (v0.5)
+
+Expected result: the error of a spent Mailgun quota pauses the campaign with "The provider's sending quota is used up", not a rate-limit retry.
+
+1. Use a Mailgun Free account (100 emails per day). Do not set a daily sending limit on the connection.
+2. Import 120 of your own test addresses.
+3. Send a campaign to them through Mailgun.
+4. Run `npx wrangler tail --format json`. Record the status code and the message of the first refused request.
+5. Check that the campaign pauses with the reason "The provider's sending quota is used up".
+6. If the campaign does not pause, add the words of the Mailgun message to `QUOTA_MESSAGE` in `packages/providers/src/mailgun/index.ts`.
+7. Select **Daily limit** on the card, and set it to 100. Resume the campaign. Check that the confirm note and the campaign banner show the next sending day.
+
+## 27. Mailgun webhook retries and the signature (v0.5)
+
+Expected result: Mailgun signs each retry with a new timestamp and token, so Envelopen accepts a retry after an outage.
+
+1. Connect Mailgun, and send a campaign to one of your own addresses.
+2. Make the webhook fail for some minutes. For example, deploy a build that answers 500 on `/hooks/mailgun/*`, and send again.
+3. Deploy the normal build again.
+4. Wait for the first Mailgun retry (about 5 minutes later), and run `npx wrangler tail --format json`.
+5. Check that the retry returns 200, and that the event shows on the campaign.
+6. Record whether the retry has a new `timestamp` and `token`. If the retry reuses the old signature, Envelopen answers 401 (the timestamp is more than 5 minutes old, or the token is already used). Then update the [Mailgun guide](provider-mailgun.md#troubleshooting).
+
+## 28. Mailgun EU region end to end (v0.5)
+
+Expected result: a connection in the EU region sends through `api.eu.mailgun.net` and gets its events.
+
+1. Use a Mailgun account in the EU region with a verified domain.
+2. Connect Mailgun, and select the region **EU**.
+3. Select the region **US** with the same key once. Check that the error says that Mailgun rejected the API key in the US region.
+4. Send a test campaign to your Gmail address. In **Show original**, check the unsubscribe headers and that SPF, DKIM, and DMARC pass.
+5. In the tail, check that the send went to `api.eu.mailgun.net`.
+6. Check that the **Delivered** event arrives on the campaign.
+
+## 29. Automatic Mailgun webhook with an API key (v0.5)
+
+Expected result: Envelopen creates the webhook on the domain at connect, and removes only its own URL at remove.
+
+1. In Mailgun, create an account API key (not a domain sending key).
+2. Connect Mailgun with this key. Check that the card shows "Envelopen created the webhook".
+3. In Mailgun, open **Send** > **Sending** > **Webhooks**. Check that the Envelopen URL is set for **Delivered messages**, **Permanent failure**, **Temporary failure**, **Spam complaints**, and **Unsubscribes**.
+4. Add a second URL of your own for one event.
+5. Remove the connection in Envelopen. Check that Mailgun keeps your own URL and removed the Envelopen URL.
+6. Connect again with a domain sending key. Record whether the automatic setup fails, and whether the dialog shows the manual steps.
 
 ## Release process
 
@@ -351,5 +423,8 @@ The plan leaves these questions for a deployed check. Record the answers here:
 - Whether Turnstile in an iframe needs the hostname of the embedding website in the widget (check 15).
 - Whether a 50-message SMTP batch fits 10 ms CPU on Free, and the SMTP batch size for Free (check 22).
 - Whether the Brevo relay keeps both unsubscribe headers (check 23).
+- The format of a Brevo webhook request, and whether Brevo keeps the `Message-ID` (checks 24 and 25).
+- The text of a Mailgun quota error (check 26).
+- Whether Mailgun signs each webhook retry again (check 27).
 
 Last checked: 2026-10-22

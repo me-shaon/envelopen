@@ -7,7 +7,7 @@
 
 # Envelopen
 
-Envelopen is a self-hosted email marketing tool that runs on Cloudflare Workers. It sends campaigns through an email provider that you already use: Amazon SES, Resend, or Postmark. toSend and Cloudflare Email can send system email and test sends.
+Envelopen is a self-hosted email marketing tool that runs on Cloudflare Workers. It sends campaigns through an email provider that you already use: Amazon SES, Resend, Postmark, Mailgun, or an SMTP server. The SMTP connection has presets for Gmail, Google Workspace, and Brevo. A daily sending limit on a connection spreads a large campaign over several days. toSend and Cloudflare Email can send system email and test sends.
 
 Your contacts and stats stay in your own Cloudflare account. Envelopen has an admin app, a REST API, and an MCP server for AI agents. All three use the same rules.
 
@@ -69,13 +69,16 @@ The overview shows a "Finish setting up" checklist with a link for each step.
 
 1. Open **Connections**.
 2. Select **Connect** on the card of your provider.
-3. Paste the API key, and select **Connect**.
+3. Paste the API key, and select **Connect**. For SMTP, select the **Service** and enter the SMTP login and password.
 
-For Resend, Postmark, and Amazon SES, Envelopen creates the webhook for bounces and complaints. For toSend and Cloudflare Email, follow the manual steps in the dialog. Read the guide of your provider first:
+For Resend, Postmark, Amazon SES, and Mailgun, Envelopen creates the webhook for bounces and complaints. For Brevo, run the `curl` command in the dialog once. For toSend and Cloudflare Email, follow the manual steps in the dialog. Gmail, Google Workspace, and Custom SMTP send no bounce events. Read the guide of your provider first:
 
 - [Amazon SES](docs/guides/provider-ses.md)
 - [Resend](docs/guides/provider-resend.md)
 - [Postmark](docs/guides/provider-postmark.md)
+- [Mailgun](docs/guides/provider-mailgun.md) (US and EU regions)
+- [SMTP](docs/guides/provider-smtp.md) (Gmail, Google Workspace, and custom servers)
+- [Brevo](docs/guides/provider-brevo.md) (an SMTP preset with a webhook)
 - [toSend](docs/guides/provider-tosend.md) (transactional only)
 - [Cloudflare Email](docs/guides/provider-cloudflare-email.md) (transactional only)
 

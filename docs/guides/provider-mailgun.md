@@ -4,7 +4,7 @@ Last checked: 2026-10-22
 
 ## What Envelopen uses it for
 
-Envelopen sends campaigns, test sends, and system email (owner alerts) through the Mailgun HTTP API. Mailgun reports deliveries, bounces, complaints, and unsubscribes to Envelopen through a webhook. Envelopen creates the webhook through the Mailgun webhooks API.
+Envelopen sends campaigns, welcome emails, confirmation emails, test sends, and system email (owner alerts) through the Mailgun HTTP API. Mailgun reports deliveries, bounces, complaints, and unsubscribes to Envelopen through a webhook. Envelopen creates the webhook through the Mailgun webhooks API.
 
 The adapter policy is `campaign`. You can send campaigns through Mailgun without a policy warning.
 
@@ -26,7 +26,9 @@ An account and its domains are in one region. Select the region of your account 
 | Foundation | 35 USD (first month free) | 50,000 per month | From 1.30 USD per 1,000 |
 | Scale | 90 USD (first month free) | 100,000 per month | From 1.10 USD per 1,000 |
 
-Effect on Envelopen: the Free plan sends 100 emails per day. On that plan, set the **Daily limit** of the connection to 100. Envelopen then spreads a larger campaign over several days.
+Prices and plans are from the Mailgun pricing page (checked 2026-10-22).
+
+Effect on Envelopen: the Free plan sends 100 emails per day. On that plan, set the daily sending limit of the connection to 100. Envelopen then spreads a larger campaign over several days. See [Daily sending limits and multi-day sends](provider-smtp.md#daily-sending-limits-and-multi-day-sends).
 
 ## Limits and constraints
 
@@ -35,12 +37,12 @@ Effect on Envelopen: the Free plan sends 100 emails per day. On that plan, set t
 | Recipients per batch call | 1,000, with recipient variables | Envelopen does not use batch calls. See [Why one request per recipient](#why-one-request-per-recipient). |
 | Requests per batch | One request per recipient | Envelopen sends 25 recipients per batch, 5 requests at a time. This stays inside the 50 subrequests of Workers Free. |
 | Request rate | Mailgun publishes no fixed rate. A 429 answer has `X-RateLimit-Reset` in Unix milliseconds. | Envelopen starts at 10 emails per second. On a 429, it stops the batch and waits until the reset time. |
-| Daily sending limit | 100 emails per day on the Free plan | A sending-limit error pauses the campaign as a quota error. Set the daily limit of the connection to avoid it. |
+| Daily sending limit | 100 emails per day on the Free plan | A sending-limit error pauses the campaign as a quota error. Set the daily sending limit of the connection to avoid it. The Mailgun connection has no default limit. |
 | Idempotency key | None | If a request times out, that recipient becomes uncertain. Open the campaign page and select retry or skip for each uncertain batch. |
 | Open and click tracking | Mailgun can track opens and clicks. | Envelopen turns off Mailgun tracking (`o:tracking`, `o:tracking-opens`, and `o:tracking-clicks` set to `no`). Envelopen tracks opens and clicks itself. |
 | Custom headers | `h:` fields of the send call | Envelopen sends `h:List-Unsubscribe` and `h:List-Unsubscribe-Post` with each email. |
 | Webhook signature | HMAC-SHA256 of the timestamp and a 50-character token, with the account's HTTP webhook signing key | The signature does not cover the event data. See [Webhook security](#webhook-security). |
-| Webhook retries | Mailgun retries a failed webhook for 8 hours, after 5 minutes, 10 minutes, 15 minutes, 1 hour, 2 hours, and 4 hours. A 200 or a 406 answer stops the retries. | A short Envelopen outage does not lose events, if Mailgun signs each retry again. See [Troubleshooting](#troubleshooting). |
+| Webhook retries | Mailgun retries a failed webhook for 8 hours, after 5 minutes, 10 minutes, 15 minutes, 1 hour, 2 hours, and 4 hours. A 200 or a 406 answer stops the retries. | A short Envelopen outage does not lose events, if Mailgun signs each retry again. The owner checks this (release checklist, check 27). See [Troubleshooting](#troubleshooting). |
 | Sandbox domain | Sends only to authorized recipients | The connection works, and the card shows a warning. Add your own domain for campaigns. |
 
 ### Why one request per recipient
@@ -112,7 +114,7 @@ Do not choose Mailgun when:
 6. Paste the **HTTP webhook signing key**.
 7. Select **Connect**. Envelopen reads the domain from the API of the region to check the key and the domain. It sends no email.
 8. Envelopen creates the webhook for the events `delivered`, `permanent_fail`, `temporary_fail`, `complained`, and `unsubscribed`. The card shows "Envelopen created the webhook".
-9. On the Free plan, select **Daily limit** on the card and set it to 100.
+9. On the Free plan, select **Daily limit** on the card. Type 100 in **Emails in 24 hours (optional)**, and select **Save limit**.
 10. Open the **Sending domains** tab. Add your sending domain and check the DNS records.
 11. Under **Send a test**, send a test to a Gmail address. Open **Show original**. Check that the `List-Unsubscribe` and `List-Unsubscribe-Post` headers contain your Envelopen values.
 
@@ -141,7 +143,7 @@ When you remove the connection, Envelopen removes only its own URL from the Mail
 | "Mailgun has no domain ... in the EU region." | The domain name is wrong, or the domain is in the other region. | Check the domain under **Domains** in Mailgun. Select the other region. |
 | The card warns about a sandbox domain | The domain is the Mailgun sandbox domain. | Add your own domain in Mailgun, and connect again with it. |
 | The card says that Mailgun shows the domain as unverified | The DNS records are not in place yet. | Add the records that Mailgun shows. Then select **Check**. |
-| The campaign pauses with a quota error | The account reached its sending limit, for example 100 emails per day on the Free plan. | Set the daily limit of the connection, or upgrade the plan. Then resume the campaign. |
+| The campaign pauses with a quota error | The account reached its sending limit, for example 100 emails per day on the Free plan. | Select **Daily limit** on the card and set the limit of your plan, or upgrade the plan. Then resume the campaign. |
 | No events arrive, and the webhook log in Mailgun shows 401 | The signing key in Envelopen is not the current HTTP webhook signing key. Or Mailgun retried an event with a signature that is more than 5 minutes old. | Check the key in **API Security**. For a manual setup, paste it in the **Set up the webhook** dialog. For an automatic setup, remove the connection and connect again. |
 | Events stop after you rotate the signing key in Mailgun | The old key is still in Envelopen. | Remove the connection and connect again with the new key. For a manual setup, you can paste the new key in the **Set up the webhook** dialog. |
 | Uncertain batches on the campaign page | A request timed out, and Mailgun has no idempotency key. | Select retry or skip for each batch. A retry can send a second copy to some contacts. |

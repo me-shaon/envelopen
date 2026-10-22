@@ -11,6 +11,24 @@ export {
 } from "./api-keys";
 export { type AuditEntry, type AuditTarget, auditInsert, writeAudit } from "./audit";
 export * from "./backup";
+export { checkLogo, type SniffedImage, sniffImage } from "./brand/logo";
+export {
+  type Brand,
+  BrandSchema,
+  campaignBrand,
+  LOGO_MAX_BYTES,
+  liveBrand,
+  loadBrand,
+  logoUrl,
+  parseLogoPath,
+  snapshotOf,
+} from "./brand/model";
+export {
+  brandGet,
+  brandRemoveLogo,
+  brandUpdate,
+  brandUploadLogo,
+} from "./brand/operations";
 export * from "./campaigns";
 export {
   adapterContext,

@@ -1872,6 +1872,171 @@
           "items"
         ]
       },
+      "Brand": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Defaults to the workspace name when empty."
+          },
+          "logo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "contentType": {
+                "type": "string",
+                "enum": [
+                  "image/png",
+                  "image/jpeg",
+                  "image/gif",
+                  "image/webp"
+                ]
+              },
+              "size": {
+                "type": "integer"
+              },
+              "width": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "height": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "url",
+              "contentType",
+              "size",
+              "width",
+              "height"
+            ]
+          },
+          "colorPrimary": {
+            "type": "string",
+            "description": "`#rrggbb`."
+          },
+          "colorAccent": {
+            "type": "string",
+            "description": "`#rrggbb`."
+          },
+          "font": {
+            "type": "string",
+            "enum": [
+              "system",
+              "helvetica",
+              "arial",
+              "verdana",
+              "tahoma",
+              "trebuchet",
+              "georgia",
+              "times",
+              "palatino",
+              "courier"
+            ]
+          },
+          "footer": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string",
+            "description": "The postal address. A campaign cannot be confirmed without it."
+          },
+          "social": {
+            "$ref": "#/components/schemas/BrandSocialLinks"
+          },
+          "fonts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "stack": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "stack"
+              ]
+            },
+            "description": "The web-safe fonts that `font` can name."
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "description": "The values that fill the tokens now: the brand name after defaults."
+          },
+          "updatedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "logo",
+          "colorPrimary",
+          "colorAccent",
+          "font",
+          "footer",
+          "address",
+          "social",
+          "fonts",
+          "tokens",
+          "updatedAt"
+        ]
+      },
+      "BrandSocialLinks": {
+        "type": "object",
+        "properties": {
+          "website": {
+            "type": "string"
+          },
+          "x": {
+            "type": "string"
+          },
+          "linkedin": {
+            "type": "string"
+          },
+          "instagram": {
+            "type": "string"
+          },
+          "facebook": {
+            "type": "string"
+          },
+          "youtube": {
+            "type": "string"
+          },
+          "github": {
+            "type": "string"
+          }
+        },
+        "description": "https URL by social network."
+      },
       "Import": {
         "type": "object",
         "properties": {
@@ -3185,7 +3350,8 @@
                   "enum": [
                     "standard",
                     "custom",
-                    "reserved"
+                    "reserved",
+                    "brand"
                   ]
                 },
                 "sample": {
@@ -4233,6 +4399,7 @@
               "preheader",
               "content",
               "unsubscribe_link",
+              "postal_address",
               "links",
               "from_address",
               "domain_auth",
@@ -14175,6 +14342,478 @@
           },
           "422": {
             "description": "The Idempotency-Key was used with a different path or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/brand": {
+      "get": {
+        "operationId": "brand.get",
+        "summary": "Get the brand kit",
+        "description": "Returns the brand kit of the workspace: name, logo, colors, font, footer text, postal address, and social links. Templates use them through `{{ brand.* }}` tokens. Drafts show the live brand, and a confirmed campaign keeps the brand of its confirm time.",
+        "tags": [
+          "brand"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "campaigns:read",
+        "x-envelopen-risk": "read",
+        "x-envelopen-mcp": "now",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Brand"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "brand.update",
+        "summary": "Change the brand kit",
+        "description": "Replaces the brand values except the logo. Colors must be hex colors, the font one of the web-safe fonts, and each social link an https URL. Drafts use the new values at once. Confirmed campaigns keep their snapshot.",
+        "tags": [
+          "brand"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "later",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "description": "The brand name. Empty uses the workspace name."
+                  },
+                  "colorPrimary": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "description": "`#rrggbb` or `#rgb`."
+                  },
+                  "colorAccent": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "description": "`#rrggbb` or `#rgb`."
+                  },
+                  "font": {
+                    "type": "string",
+                    "enum": [
+                      "system",
+                      "helvetica",
+                      "arial",
+                      "verdana",
+                      "tahoma",
+                      "trebuchet",
+                      "georgia",
+                      "times",
+                      "palatino",
+                      "courier"
+                    ]
+                  },
+                  "footer": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 300,
+                    "description": "The sender's postal address. A campaign cannot be confirmed without it."
+                  },
+                  "social": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 600
+                    },
+                    "default": {},
+                    "description": "An https URL by network. An empty value removes the link."
+                  }
+                },
+                "required": [
+                  "name",
+                  "colorPrimary",
+                  "colorAccent",
+                  "font",
+                  "footer",
+                  "address"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Brand"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/brand/logo": {
+      "post": {
+        "operationId": "brand.upload_logo",
+        "summary": "Upload the brand logo",
+        "description": "Sets the brand logo. The file must be a PNG, JPEG, GIF, or WebP image of at most 1 MB. The type comes from the file's bytes, and SVG is refused. The logo is served at a fixed public URL. A replaced logo stays, so sent emails keep their logo.",
+        "tags": [
+          "brand"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "later",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "filename": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "content": {
+                    "type": "string",
+                    "maxLength": 1398208,
+                    "description": "The image bytes, base64. At most 1 MB before encoding."
+                  }
+                },
+                "required": [
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Brand"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different path or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "brand.remove_logo",
+        "summary": "Remove the brand logo",
+        "description": "Removes the logo from the brand kit. Templates then show no logo. The logo file stays, so sent emails and confirmed campaigns keep it.",
+        "tags": [
+          "brand"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "later",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Brand"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {

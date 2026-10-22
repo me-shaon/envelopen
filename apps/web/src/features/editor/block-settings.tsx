@@ -1,16 +1,23 @@
 import {
+  BRAND_COLOR_TOKENS,
   SOCIAL_NETWORKS,
   type SocialLink,
   type SocialNetwork,
 } from "@envelopen/email-render/blocks/types";
+import { Link } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/core";
 import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { useBrand } from "@/features/brand/shared";
+import { cn } from "@/lib/utils";
+import { useColor } from "./extensions";
 
 // Settings of the selected atom block. Each change updates the node's attributes, so
 // undo and redo work as for text.
@@ -24,6 +31,8 @@ const TITLES: Record<string, string> = {
   footer: "Footer",
   html: "Raw HTML",
   mergeTag: "Merge tag",
+  brandHeader: "Brand header",
+  brandFooter: "Brand footer",
 };
 
 const NETWORK_LABELS: Record<SocialNetwork, string> = {
@@ -153,26 +162,20 @@ export function BlockSettings({
               onChange={(e) => set({ href: e.target.value })}
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field id={id("background")} label="Background">
-              <Input
-                id={id("background")}
-                type="color"
-                className="h-9 p-1"
-                value={text("background")}
-                onChange={(e) => set({ background: e.target.value })}
-              />
-            </Field>
-            <Field id={id("color")} label="Text">
-              <Input
-                id={id("color")}
-                type="color"
-                className="h-9 p-1"
-                value={text("color")}
-                onChange={(e) => set({ color: e.target.value })}
-              />
-            </Field>
-          </div>
+          <ColorSetting
+            id={id("background")}
+            label="Background"
+            value={attrs.background}
+            fallback="#1a1917"
+            onChange={(background) => set({ background })}
+          />
+          <ColorSetting
+            id={id("color")}
+            label="Text"
+            value={attrs.color}
+            fallback="#ffffff"
+            onChange={(color) => set({ color })}
+          />
           <AlignSelect id={id("align")} value={attrs.align} onChange={(align) => set({ align })} />
         </>
       ) : null}
@@ -252,6 +255,47 @@ export function BlockSettings({
         </>
       ) : null}
 
+      {type === "brandHeader" ? (
+        <>
+          <BrandNote />
+          <div className="flex items-center gap-2.5">
+            <Checkbox
+              id={id("showName")}
+              checked={attrs.showName !== false}
+              onCheckedChange={(checked) => set({ showName: checked === true })}
+            />
+            <Label htmlFor={id("showName")} className="cursor-pointer font-normal">
+              Show the brand name
+            </Label>
+          </div>
+          <Field id={id("logoWidth")} label="Logo width in pixels">
+            <Input
+              id={id("logoWidth")}
+              type="number"
+              min={40}
+              max={600}
+              value={Number(attrs.logoWidth) || 160}
+              onChange={(e) => set({ logoWidth: Number(e.target.value) })}
+            />
+          </Field>
+          <AlignSelect id={id("align")} value={attrs.align} onChange={(align) => set({ align })} />
+        </>
+      ) : null}
+
+      {type === "brandFooter" ? (
+        <BrandFooterSettings
+          networks={Array.isArray(attrs.networks) ? (attrs.networks as SocialNetwork[]) : []}
+          onChange={(networks) => set({ networks })}
+          align={
+            <AlignSelect
+              id={id("align")}
+              value={attrs.align}
+              onChange={(align) => set({ align })}
+            />
+          }
+        />
+      ) : null}
+
       {type === "html" ? (
         <Field
           id={id("html")}
@@ -327,6 +371,144 @@ function SocialSettings({
         <PlusIcon className="size-3.5" aria-hidden="true" />
         Add a link
       </Button>
+      {align}
+    </div>
+  );
+}
+
+/** Where the brand values come from, with a link to change them. */
+function BrandNote() {
+  return (
+    <p className="m-0 text-[13px] text-muted-foreground">
+      The logo, name, colors, and font come from the{" "}
+      <Link to="/brand" className="text-foreground underline underline-offset-2">
+        brand kit
+      </Link>
+      . A change there reaches every draft.
+    </p>
+  );
+}
+
+/**
+ * A color setting: a brand color token or a custom hex color. A brand color follows the
+ * brand kit, and a confirmed campaign keeps the color of its confirm time.
+ */
+function ColorSetting({
+  id,
+  label,
+  value,
+  fallback,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: unknown;
+  fallback: string;
+  onChange: (value: string) => void;
+}) {
+  const shown = useColor(value, fallback);
+  const brand = useBrand();
+  const choices = [
+    { token: BRAND_COLOR_TOKENS.primary, name: "Brand primary", color: brand.colorPrimary },
+    { token: BRAND_COLOR_TOKENS.accent, name: "Brand accent", color: brand.colorAccent },
+  ];
+  const custom = !choices.some((choice) => choice.token === value);
+  return (
+    <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
+      <legend className="mb-1.5 p-0 text-[13px] font-medium">{label}</legend>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {choices.map((choice) => (
+          <button
+            key={choice.token}
+            type="button"
+            aria-pressed={value === choice.token}
+            onClick={() => onChange(choice.token)}
+            className={cn(
+              "inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2 text-[12px] transition-colors",
+              value === choice.token
+                ? "border-ring bg-accent font-medium"
+                : "border-border hover:bg-accent",
+            )}
+          >
+            <span
+              className="size-3.5 rounded-full border border-black/10"
+              style={{ background: choice.color }}
+              aria-hidden="true"
+            />
+            {choice.name}
+          </button>
+        ))}
+        <label
+          htmlFor={id}
+          className={cn(
+            "inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-[12px]",
+            custom ? "border-ring bg-accent font-medium" : "border-border hover:bg-accent",
+          )}
+        >
+          <input
+            id={id}
+            type="color"
+            value={custom ? shown : fallback}
+            onChange={(e) => onChange(e.target.value)}
+            className="size-4 cursor-pointer border-0 bg-transparent p-0"
+          />
+          Custom
+        </label>
+      </div>
+    </fieldset>
+  );
+}
+
+function BrandFooterSettings({
+  networks,
+  onChange,
+  align,
+}: {
+  networks: SocialNetwork[];
+  onChange: (networks: SocialNetwork[]) => void;
+  align: ReactNode;
+}) {
+  const brand = useBrand();
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="m-0 text-[13px] text-muted-foreground">
+        The footer text, the postal address, and the social links come from the{" "}
+        <Link to="/brand" className="text-foreground underline underline-offset-2">
+          brand kit
+        </Link>
+        . The unsubscribe and preference links are always added.
+      </p>
+      <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+        <legend className="mb-1.5 p-0 text-[13px] font-medium">Social links to show</legend>
+        {SOCIAL_NETWORKS.map((network) => {
+          const checkboxId = `brand-footer-network-${network}`;
+          const missing = !brand.social[network];
+          return (
+            <div key={network} className="flex items-center gap-2.5">
+              <Checkbox
+                id={checkboxId}
+                checked={networks.includes(network)}
+                onCheckedChange={(checked) =>
+                  onChange(
+                    checked === true
+                      ? SOCIAL_NETWORKS.filter((n) => n === network || networks.includes(n))
+                      : networks.filter((n) => n !== network),
+                  )
+                }
+              />
+              <Label htmlFor={checkboxId} className="cursor-pointer font-normal">
+                {NETWORK_LABELS[network]}
+                {missing ? (
+                  <span className="ml-1.5 text-xs text-muted-foreground">No link in the kit</span>
+                ) : null}
+              </Label>
+            </div>
+          );
+        })}
+        <p className="m-0 text-xs text-muted-foreground">
+          A network without a link in the brand kit is left out of the email.
+        </p>
+      </fieldset>
       {align}
     </div>
   );

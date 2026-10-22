@@ -12,8 +12,34 @@
 
 export type MergeMode = "html" | "text";
 
-/** Tags that personalization fills from the recipient's token, not from contact data. */
-export const RESERVED_TAGS = ["unsubscribe_url", "preferences_url"] as const;
+/**
+ * Brand tokens (U13, KTD10). They are filled from the brand kit or a campaign's brand
+ * snapshot by string substitution (brand.ts), before personalization. The social
+ * networks are those of the social block (blocks/types.ts SOCIAL_NETWORKS).
+ */
+export const BRAND_TAGS = [
+  "brand.name",
+  "brand.logo_url",
+  "brand.color_primary",
+  "brand.color_accent",
+  "brand.font",
+  "brand.footer",
+  "brand.address",
+  "brand.social.website",
+  "brand.social.x",
+  "brand.social.linkedin",
+  "brand.social.instagram",
+  "brand.social.facebook",
+  "brand.social.youtube",
+  "brand.social.github",
+] as const;
+export type BrandTag = (typeof BRAND_TAGS)[number];
+
+/**
+ * Tags that personalization fills from the recipient's token or from the brand, not
+ * from contact data.
+ */
+export const RESERVED_TAGS = ["unsubscribe_url", "preferences_url", ...BRAND_TAGS] as const;
 export type ReservedTag = (typeof RESERVED_TAGS)[number];
 
 /** The standard contact fields. Custom fields use their key, for example `course`. */
@@ -33,7 +59,7 @@ export interface CompiledTemplate {
 }
 
 const TAG_PATTERN =
-  /\{\{\s*([A-Za-z][A-Za-z0-9_]*|@[a-z]+(?::\d+)?)\s*(?:\|\s*default:\s*(?:"([^"]*)"|&quot;((?:(?!&quot;)[^<>])*)&quot;|'([^']*)'|&#x27;((?:(?!&#x27;)[^<>])*)&#x27;)\s*)?\}\}/g;
+  /\{\{\s*(brand\.(?:name|logo_url|color_primary|color_accent|font|footer|address|social\.(?:website|x|linkedin|instagram|facebook|youtube|github))|[A-Za-z][A-Za-z0-9_]*|@[a-z]+(?::\d+)?)\s*(?:\|\s*default:\s*(?:"([^"]*)"|&quot;((?:(?!&quot;)[^<>])*)&quot;|'([^']*)'|&#x27;((?:(?!&#x27;)[^<>])*)&#x27;)\s*)?\}\}/g;
 
 const ESCAPES: Record<string, string> = {
   "&": "&amp;",

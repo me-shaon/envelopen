@@ -7,6 +7,7 @@ import {
   backupsStart,
   backupsUpdateSettings,
 } from "../backup/operations";
+import { brandGet, brandRemoveLogo, brandUpdate, brandUploadLogo } from "../brand/operations";
 import { campaignsFollowUp } from "../campaigns/follow-up";
 import {
   campaignsBatches,
@@ -264,6 +265,11 @@ export const registry = createRegistry([
   welcomeSeriesUpdate,
   welcomeSeriesSetEnabled,
   welcomeSeriesDelete,
+  // Brand kit (U13, R18). Changes stay with the owner session.
+  brandGet,
+  brandUpdate,
+  brandUploadLogo,
+  brandRemoveLogo,
   importsList,
   importsCreate,
   importsGet,

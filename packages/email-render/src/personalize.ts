@@ -1,3 +1,4 @@
+import { applyBrand, type BrandSnapshot, DEFAULT_BRAND } from "./brand";
 import { extractLinks, rewriteLinks } from "./links";
 import { type CompiledTemplate, compile, fill } from "./merge-tags";
 import type { RecipientRef, TokenSigner } from "./tokens";
@@ -22,6 +23,11 @@ export interface PrepareOptions {
   trackingOrigin: string;
   trackOpens: boolean;
   trackClicks: boolean;
+  /**
+   * The brand that fills the `{{ brand.* }}` tokens (U13): a campaign's snapshot from
+   * confirm, or the live brand kit for a welcome email. Defaults to DEFAULT_BRAND.
+   */
+  brand?: BrandSnapshot | null;
 }
 
 export interface PreparedMessage {
@@ -74,10 +80,15 @@ export function prepareMessage(options: PrepareOptions): PreparedMessage {
     html = insertAfterBodyStart(html, HONEYPOT);
   }
   if (options.trackOpens) html = insertBeforeBodyEnd(html, PIXEL);
+  // After the link rewrite: a link to a brand URL holds a token there, so it is never
+  // tracked, and the link indexes do not depend on the brand. A template without brand
+  // tokens is not changed.
+  const brand = options.brand ?? DEFAULT_BRAND;
+  html = applyBrand(html, brand, "html");
   return {
     html: compile(html, "html"),
-    subject: compile(options.subject, "text"),
-    text: options.text ? compile(options.text, "text") : null,
+    subject: compile(applyBrand(options.subject, brand, "text"), "text"),
+    text: options.text ? compile(applyBrand(options.text, brand, "text"), "text") : null,
     links,
     trackingOrigin: options.trackingOrigin.replace(/\/+$/, ""),
   };

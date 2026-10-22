@@ -263,6 +263,16 @@ export function formQuery(workspaceId: number, id: number) {
   });
 }
 
+// Brand kit (U13) ---------------------------------------------------------------------------
+
+/** The brand kit: the values that fill the `{{ brand.* }}` tokens of drafts and previews. */
+export function brandQuery(workspaceId: number) {
+  return queryOptions({
+    queryKey: ["ws", workspaceId, "brand"],
+    queryFn: () => unwrap(api.GET("/brand")),
+  });
+}
+
 // Welcome series (U10) ----------------------------------------------------------------------
 
 export function welcomeSeriesListQuery(workspaceId: number) {

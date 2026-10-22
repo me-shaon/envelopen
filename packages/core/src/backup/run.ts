@@ -21,6 +21,7 @@ import {
   BACKUP_TABLES,
   backupPrefix,
   CHUNK_ROWS,
+  CHUNK_ROWS_BY_TABLE,
   chunkKey,
   encodeRows,
   MANIFEST_KEY,
@@ -255,11 +256,12 @@ export async function backupChunk(
     };
   }
 
+  const limit = CHUNK_ROWS_BY_TABLE[table.name] ?? CHUNK_ROWS;
   const result = await db.d1
     .prepare(
       `SELECT rowid AS "__backup_rowid", * FROM "${table.name}" WHERE rowid > ?1 AND rowid <= ?2 ORDER BY rowid LIMIT ?3`,
     )
-    .bind(cursor.afterRowid, table.mark, CHUNK_ROWS)
+    .bind(cursor.afterRowid, table.mark, limit)
     .all<Record<string, unknown>>();
   const rowsRead = result.meta.rows_read ?? result.results.length;
   const rows: Record<string, unknown>[] = [];
@@ -277,7 +279,7 @@ export async function backupChunk(
   }
   const tableDone =
     lastRowid >= table.mark ||
-    (rows.length === result.results.length && result.results.length < CHUNK_ROWS);
+    (rows.length === result.results.length && result.results.length < limit);
   const next = tableDone
     ? { table: cursor.table + 1, afterRowid: 0 }
     : { table: cursor.table, afterRowid: lastRowid };

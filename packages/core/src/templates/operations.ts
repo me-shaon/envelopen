@@ -2,6 +2,7 @@ import type { Database, DbConnection } from "@envelopen/db";
 import { extractLinks, mergeTagNames, sanitizeHtml } from "@envelopen/email-render";
 import type { Kysely, Selectable } from "kysely";
 import { z } from "zod";
+import { liveBrand } from "../brand/model";
 import { OperationError } from "../errors";
 import { pageInputShape, pageOf, pageParams, toPage } from "../pagination";
 import { defineOperation } from "../registry/operation";
@@ -162,7 +163,7 @@ export const templatesMergeFields = defineOperation({
         z.object({
           key: z.string(),
           label: z.string(),
-          kind: z.enum(["standard", "custom", "reserved"]),
+          kind: z.enum(["standard", "custom", "reserved", "brand"]),
           sample: z.string().nullable(),
         }),
       ),
@@ -386,7 +387,8 @@ export const templatesPreview = defineOperation({
   async handler(input, { principal, db, services }) {
     const row = await getTemplateRow(db.db, principal.workspaceId, input.id);
     const values = await contactValues(db, principal.workspaceId, input.contactId);
-    return personalizePreview(row, values, testLinkOrigin(services.appOrigin));
+    const brand = await liveBrand(db, principal.workspaceId, services.appOrigin);
+    return personalizePreview(row, values, testLinkOrigin(services.appOrigin), brand);
   },
 });
 

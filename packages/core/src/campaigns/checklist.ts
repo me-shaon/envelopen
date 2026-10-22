@@ -3,6 +3,7 @@ import { extractLinks, mergeTagNames } from "@envelopen/email-render";
 import { getAdapter } from "@envelopen/providers";
 import { z } from "zod";
 import { readRestoreAck } from "../backup/restore-ack";
+import { loadBrand } from "../brand/model";
 import { type CampaignPolicy, checkCampaignPolicy } from "../connections/policy-gate";
 import { normalizeEmail } from "../contacts/email";
 import type { Services } from "../services";
@@ -13,9 +14,10 @@ import { type CampaignRow, isAudienceEmpty, parseAudience } from "./model";
 // The pre-send checklist (R33). Prepare runs it before it issues a confirm token, and a
 // failed check blocks the send. A warning does not. Each item names the page that fixes it.
 //
-// Checks: subject, preview text, content, unsubscribe link, links, From address, domain
-// authentication, audience, connection health, the provider policy gate (R62), and an
-// estimate of the D1 writes against the Workers Free daily budget (KTD24).
+// Checks: subject, preview text, content, unsubscribe link, the postal address of the
+// brand kit (U13), links, From address, domain authentication, audience, connection
+// health, the provider policy gate (R62), and an estimate of the D1 writes against the
+// Workers Free daily budget (KTD24).
 
 export const CHECK_STATUSES = ["pass", "warn", "fail"] as const;
 
@@ -26,6 +28,7 @@ export const ChecklistItemSchema = z
       "preheader",
       "content",
       "unsubscribe_link",
+      "postal_address",
       "links",
       "from_address",
       "domain_auth",
@@ -147,6 +150,28 @@ export async function runChecklist(input: ChecklistInput): Promise<Checklist> {
           status: "fail",
           message: "Add an unsubscribe link, for example the footer block, to the email.",
           fix: templateFix,
+        },
+  );
+
+  // Anti-spam laws (for example CAN-SPAM) ask for the sender's postal address in each
+  // campaign. The brand footer block shows it, and confirm stores it in the snapshot.
+  const address = (await loadBrand(db, workspaceId)).kit?.postal_address.trim() ?? "";
+  items.push(
+    address
+      ? {
+          id: "postal_address",
+          label: "Postal address",
+          status: "pass",
+          message: address.split("\n")[0] ?? address,
+          fix: null,
+        }
+      : {
+          id: "postal_address",
+          label: "Postal address",
+          status: "fail",
+          message:
+            "Campaigns need your postal address, and the brand kit has none. Add it in Brand, then check the send again.",
+          fix: { label: "Add the postal address in Brand", path: "/brand" },
         },
   );
 

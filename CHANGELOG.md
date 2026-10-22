@@ -12,6 +12,14 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+### Added
+
+- A brand kit (name, logo, colors, font, footer, postal address, and social links) that templates and drafts use and confirmed campaigns keep; a campaign needs the postal address before confirm.
+
+### Manual steps
+
+- Add a postal address in Brand before you confirm a campaign.
+
 ## [0.3.0] - 2026-10-21
 
 ### Added

@@ -3,6 +3,7 @@ import { escapeHtml, rewriteLinks } from "@envelopen/email-render";
 import { getAdapter } from "@envelopen/providers";
 import { sql } from "kysely";
 import { z } from "zod";
+import { campaignBrand } from "../brand/model";
 import { followUpAvailability } from "../campaigns/follow-up";
 import { loadCampaign, sendTracking } from "../campaigns/model";
 import { personalizePreview, SAMPLE_VALUES, testLinkOrigin } from "../templates/preview";
@@ -312,10 +313,12 @@ export async function campaignClickMap(
     // Annotate first, on the stored HTML, so the indexes match the ones sent. Then fill
     // the merge tags with sample values, as the preview does.
     const annotated = annotateClicks(campaign.html, counts);
+    // Brand links are not tracked, so the brand does not move the indexes.
     html = personalizePreview(
       { ...campaign, html: annotated },
       SAMPLE_VALUES,
       testLinkOrigin(appOrigin),
+      await campaignBrand(db, campaign, appOrigin),
     ).html;
   }
   return {

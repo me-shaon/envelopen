@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./brand": "./src/brand.ts",
     "./render": "./src/render.ts",
     "./blocks": "./src/blocks/index.ts",
     "./blocks/types": "./src/blocks/types.ts",

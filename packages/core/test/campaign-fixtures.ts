@@ -24,7 +24,11 @@ export interface SeedOptions {
   /** Template HTML. Defaults to CAMPAIGN_HTML. */
   html?: string;
   name?: string;
+  /** The postal address of the brand kit (U13). Null leaves the workspace without a kit. */
+  postalAddress?: string | null;
 }
+
+export const TEST_POSTAL_ADDRESS = "1 Course Street, Springfield";
 
 export interface SeededWorkspace {
   workspaceId: number;
@@ -106,6 +110,16 @@ export async function seedCampaignWorkspace(
     })
     .returning("id")
     .executeTakeFirstOrThrow();
+  // Confirm needs a postal address in the brand kit (U13).
+  if (options.postalAddress !== null) {
+    await conn.db
+      .insertInto("brand_kits")
+      .values({
+        workspace_id: workspaceId,
+        postal_address: options.postalAddress ?? TEST_POSTAL_ADDRESS,
+      })
+      .execute();
+  }
   const list = await conn.db
     .insertInto("lists")
     .values({ workspace_id: workspaceId, name: "Students", description: null })

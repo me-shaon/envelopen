@@ -8,6 +8,7 @@ import {
   type TokenSigner,
 } from "@envelopen/email-render";
 import { type FailureReason, MessageError, sendBatch } from "@envelopen/providers";
+import { liveBrand } from "../brand/model";
 import { customFieldValues } from "../campaigns/batch";
 import { adapterContext, adapterOf, decryptCredentials, refsOf } from "../connections/model";
 import { checkCampaignPolicy, sendingConnection } from "../connections/policy-gate";
@@ -392,13 +393,16 @@ async function stepWork(
   const contact = eligible.contact;
   const keys = customKeys(step.subject, template.html, template.text ?? "");
   const custom = await customFieldValues(db, job.workspaceId, [contact.id], keys);
+  const origin = await linkOrigin(db, series, sender.email);
   const prepared = prepareMessage({
     html: template.html,
     subject: step.subject,
     text: template.text,
-    trackingOrigin: await linkOrigin(db, series, sender.email),
+    trackingOrigin: origin,
     trackOpens: false,
     trackClicks: false,
+    // A welcome email uses the live brand at each send (U13, KTD10).
+    brand: await liveBrand(db, job.workspaceId, origin),
   });
   const personal = await personalize(
     prepared,

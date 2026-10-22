@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { seedCampaignWorkspace } from "../../test/campaign-fixtures";
 import { TEST_SIGNING_KEY, type TestServices, testDb, testServices } from "../../test/fixtures";
 import { createProviderMock, type ProviderMock } from "../../test/provider-mock";
+import { brandUpdate } from "../brand/operations";
 import { contactsUpsert } from "../contacts/operations";
 import { isOperationError } from "../errors";
 import {
@@ -323,6 +324,39 @@ describe("welcome series runs (F2, KTD8)", () => {
     expect(mock.calls).toHaveLength(1);
     const [row] = await sendRows(db, seeded.workspaceId, contact.id);
     expect(row?.attempts).toBe(1);
+  });
+
+  it("fills the brand tokens from the live brand at each send (U13)", async () => {
+    const { db, mock, services, seeded, run, stepDeps, addContact } = await setup(2);
+    await db.db
+      .updateTable("templates")
+      .set({
+        html:
+          '<html><body><p style="color:{{ brand.color_primary }}">{{ brand.name }}</p>' +
+          '<p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p></body></html>',
+      })
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("id", "=", seeded.templateId)
+      .execute();
+    const brand = (colorPrimary: string, name: string) => ({
+      name,
+      colorPrimary,
+      colorAccent: "#ffffff",
+      font: "system",
+      footer: "",
+      address: "1 Course Street",
+      social: {},
+    });
+    await run(brandUpdate, brand("#112233", "Acme"));
+    const { contact } = await addContact("brand@example.org");
+    const job = jobOf(services, contact.id);
+    await runWelcomeStep(stepDeps, job, 1);
+    await run(brandUpdate, brand("#445566", "Acme Two"));
+    await runWelcomeStep(stepDeps, job, 2);
+    const [first, second] = emails(mock);
+    expect(first?.html).toContain('<p style="color:#112233">Acme</p>');
+    expect(second?.html).toContain('<p style="color:#445566">Acme Two</p>');
+    expect(mock.calls).toHaveLength(2);
   });
 
   it("treats a pending row with no result as sent", async () => {

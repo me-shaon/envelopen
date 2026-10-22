@@ -13,6 +13,7 @@ import { AppShell } from "./components/app-shell";
 import { RouteProgress } from "./components/route-progress";
 import { Toaster } from "./components/ui/toast";
 import { AuditLogPage } from "./features/audit/audit-log-page";
+import { BrandPage } from "./features/brand/brand-page";
 import { CampaignPage, NewCampaignPage } from "./features/campaigns/campaign-page";
 import { CampaignsPage } from "./features/campaigns/campaigns-page";
 import { ContactDetailPage } from "./features/contacts/contact-detail";
@@ -228,6 +229,11 @@ const welcomeSeriesRoute = createRoute({
     return <SeriesEditorPage key={seriesId} seriesId={seriesId} listId={listId} />;
   },
 });
+const brandRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/brand",
+  component: BrandPage,
+});
 const connectionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/connections",
@@ -285,6 +291,7 @@ const routeTree = rootRoute.addChildren([
     formRoute,
     welcomeRoute,
     welcomeSeriesRoute,
+    brandRoute,
     connectionsRoute,
     domainsRoute,
     domainRoute,

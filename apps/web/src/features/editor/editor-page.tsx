@@ -5,6 +5,13 @@ import {
   type EmailDocument,
   starterDocument,
 } from "@envelopen/email-render/blocks/types";
+import {
+  applyBrand,
+  BRAND_FONTS,
+  type BrandSnapshot,
+  brandFontStack,
+  isBrandFont,
+} from "@envelopen/email-render/brand";
 import { missingMergeTags, renderMergeTags } from "@envelopen/email-render/merge-tags";
 import { previewValues } from "@envelopen/email-render/personalize";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,7 +34,9 @@ import {
   MinusIcon,
   MousePointerClickIcon,
   MoveVerticalIcon,
+  PanelBottomDashedIcon,
   PanelBottomIcon,
+  PanelTopIcon,
   PencilIcon,
   PilcrowIcon,
   PlusIcon,
@@ -57,10 +66,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { UnsavedChangesGuard } from "@/components/unsaved-changes";
 import { useCurrentWorkspace } from "@/components/workspace-context";
+import { BrandContext, useLiveBrand } from "@/features/brand/shared";
 import { errorText } from "@/features/contacts/shared";
 import { cn } from "@/lib/utils";
 import { BlockSettings } from "./block-settings";
-import { currentBlock, documentOf, insertBlocks, selectedAtom } from "./doc";
+import {
+  currentBlock,
+  documentFont,
+  documentOf,
+  insertBlocks,
+  selectedAtom,
+  setDocumentFont,
+} from "./doc";
 import { editorExtensions } from "./extensions";
 import { EmailPreview, Segmented } from "./preview";
 import { SendTestDialog } from "./send-test-dialog";
@@ -87,6 +104,8 @@ const BLOCKS: { type: BlockType; label: string; icon: LucideIcon }[] = [
   { type: "social", label: "Social links", icon: Share2Icon },
   { type: "footer", label: "Footer", icon: PanelBottomIcon },
   { type: "html", label: "Raw HTML", icon: CodeIcon },
+  { type: "brandHeader", label: "Brand header", icon: PanelTopIcon },
+  { type: "brandFooter", label: "Brand footer", icon: PanelBottomDashedIcon },
 ];
 
 /** The renderer is large (React Email and react-dom/server), so it loads on first use. */
@@ -97,7 +116,9 @@ function loadRenderer() {
 /** Sample merge values: the standard fields have samples, custom fields stay empty. */
 function sampleValues(fields: MergeField[] | undefined) {
   const values: Record<string, string | null> = {};
-  for (const field of fields ?? []) if (field.kind !== "reserved") values[field.key] = field.sample;
+  for (const field of fields ?? []) {
+    if (field.kind === "standard" || field.kind === "custom") values[field.key] = field.sample;
+  }
   return previewValues(values, window.location.origin);
 }
 
@@ -281,7 +302,11 @@ function MergeTagMenu({
   onPick: (field: MergeField) => void;
 }) {
   const groups = [
-    { title: "Contact fields", items: fields.filter((f) => f.kind !== "reserved") },
+    {
+      title: "Contact fields",
+      items: fields.filter((f) => f.kind === "standard" || f.kind === "custom"),
+    },
+    { title: "Brand", items: fields.filter((f) => f.kind === "brand") },
     { title: "Links", items: fields.filter((f) => f.kind === "reserved") },
   ];
   return (
@@ -548,12 +573,58 @@ function LinkDialog({
   );
 }
 
-function BlockPanel({ editor, onSaveBlock }: { editor: Editor; onSaveBlock: () => void }) {
+/** A new block. A brand footer starts with the networks that the brand kit has links for. */
+function newBlock(type: BlockType, brand: BrandSnapshot): BlockNode {
+  const block = defaultBlock(type);
+  if (block.type === "brandFooter") {
+    block.attrs.networks = (Object.keys(brand.social) as (keyof typeof brand.social)[]).filter(
+      (network) => brand.social[network],
+    );
+  }
+  return block;
+}
+
+/** The email's font: the default font or the brand font of the brand kit (U13). */
+function FontSetting({ editor, brand }: { editor: Editor; brand: BrandSnapshot }) {
+  const font = useEditorState({ editor, selector: ({ editor: e }) => documentFont(e) });
+  return (
+    <Field
+      id="email-font"
+      label="Email font"
+      hint="The brand font follows the brand kit. A confirmed campaign keeps the font of its confirm time."
+    >
+      <NativeSelect
+        id="email-font"
+        value={font ?? "default"}
+        aria-describedby="email-font-hint"
+        onChange={(event) =>
+          setDocumentFont(editor, event.target.value === "brand" ? "brand" : null)
+        }
+      >
+        <option value="default">Default sans-serif</option>
+        <option value="brand">
+          Brand font ({isBrandFont(brand.font) ? BRAND_FONTS[brand.font].label : "System"})
+        </option>
+      </NativeSelect>
+    </Field>
+  );
+}
+
+function BlockPanel({
+  editor,
+  brand,
+  onSaveBlock,
+}: {
+  editor: Editor;
+  brand: BrandSnapshot;
+  onSaveBlock: () => void;
+}) {
   const { current } = useCurrentWorkspace();
   const saved = useQuery(savedBlocksQuery(current.id));
   const items = saved.data?.items ?? [];
   return (
     <div className="flex flex-col gap-6">
+      <FontSetting editor={editor} brand={brand} />
       <section aria-labelledby="block-panel-title" className="flex flex-col gap-3">
         <h2 id="block-panel-title" className="m-0 text-[14px] font-semibold tracking-[-0.01em]">
           Blocks
@@ -566,7 +637,7 @@ function BlockPanel({ editor, onSaveBlock }: { editor: Editor; onSaveBlock: () =
                 key={block.type}
                 type="button"
                 aria-label={`Add ${block.label.toLowerCase()}`}
-                onClick={() => insertBlocks(editor, [defaultBlock(block.type)])}
+                onClick={() => insertBlocks(editor, [newBlock(block.type, brand)])}
                 className="flex min-h-9 items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-[12.5px] transition-colors hover:bg-accent"
               >
                 <Icon
@@ -699,6 +770,7 @@ function usePreview(
   produce: () => Promise<string>,
   draft: Draft,
   fields: MergeField[] | undefined,
+  brand: BrandSnapshot,
 ) {
   const [html, setHtml] = useState<string | null>(null);
   const values = useMemo(() => sampleValues(fields), [fields]);
@@ -713,11 +785,14 @@ function usePreview(
       live = false;
     };
   }, [mode, produce]);
+  // Drafts show the live brand (U13): the brand tokens are filled before the merge tags.
+  const branded = html === null ? null : applyBrand(html, brand, "html");
+  const subject = applyBrand(draft.subject, brand, "text");
   return {
-    html: html === null ? null : renderMergeTags(html, values, "html"),
-    subject: renderMergeTags(draft.subject, values, "text"),
-    preheader: renderMergeTags(draft.preheader, values, "text"),
-    missing: html === null ? [] : missingMergeTags(`${draft.subject} ${html}`, values),
+    html: branded === null ? null : renderMergeTags(branded, values, "html"),
+    subject: renderMergeTags(subject, values, "text"),
+    preheader: renderMergeTags(applyBrand(draft.preheader, brand, "text"), values, "text"),
+    missing: branded === null ? [] : missingMergeTags(`${subject} ${branded}`, values),
   };
 }
 
@@ -754,6 +829,10 @@ function BlockEditor({ template }: { template: Template | null }) {
     editor,
     selector: ({ editor: e }) => (e ? selectedAtom(e) : null),
   });
+  const docFont = useEditorState({
+    editor,
+    selector: ({ editor: e }) => (e ? documentFont(e) : null),
+  });
 
   const onDraft = (next: Draft) => {
     setDraft(next);
@@ -768,7 +847,8 @@ function BlockEditor({ template }: { template: Template | null }) {
     },
     [editor, draft.preheader],
   );
-  const preview = usePreview(mode, renderHtml, draft, fields);
+  const brand = useLiveBrand();
+  const preview = usePreview(mode, renderHtml, draft, fields, brand);
 
   async function saveNow(): Promise<Template> {
     const { renderEmail } = await loadRenderer();
@@ -828,25 +908,32 @@ function BlockEditor({ template }: { template: Template | null }) {
         {mode === "preview" ? (
           <EmailPreview {...preview} />
         ) : (
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_288px]">
-            <div className="overflow-hidden rounded-xl border border-border bg-muted">
-              <Toolbar editor={editor} fields={fields ?? []} onLink={() => setDialog("link")} />
-              <div className="px-3 py-6 sm:px-6">
-                <div className="email-canvas mx-auto max-w-[600px] rounded-xl border border-border bg-card px-6 py-8 sm:px-10">
-                  <EditorContent editor={editor} />
+          <BrandContext.Provider value={brand}>
+            <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_288px]">
+              <div className="overflow-hidden rounded-xl border border-border bg-muted">
+                <Toolbar editor={editor} fields={fields ?? []} onLink={() => setDialog("link")} />
+                <div className="px-3 py-6 sm:px-6">
+                  <div
+                    className="email-canvas mx-auto max-w-[600px] rounded-xl border border-border bg-card px-6 py-8 sm:px-10"
+                    style={
+                      docFont === "brand" ? { fontFamily: brandFontStack(brand.font) } : undefined
+                    }
+                  >
+                    <EditorContent editor={editor} />
+                  </div>
                 </div>
               </div>
+              <aside
+                aria-label="Blocks and settings"
+                className="flex flex-col gap-6 lg:sticky lg:top-6"
+              >
+                {selected ? (
+                  <BlockSettings editor={editor} block={selected} fields={fields ?? []} />
+                ) : null}
+                <BlockPanel editor={editor} brand={brand} onSaveBlock={() => setDialog("block")} />
+              </aside>
             </div>
-            <aside
-              aria-label="Blocks and settings"
-              className="flex flex-col gap-6 lg:sticky lg:top-6"
-            >
-              {selected ? (
-                <BlockSettings editor={editor} block={selected} fields={fields ?? []} />
-              ) : null}
-              <BlockPanel editor={editor} onSaveBlock={() => setDialog("block")} />
-            </aside>
-          </div>
+          </BrandContext.Provider>
         )}
       </div>
       <LinkDialog
@@ -884,7 +971,8 @@ function SourceEditor({ template }: { template: Template }) {
   const save = useSaveTemplate(template.id);
   const [savedHtml, setSavedHtml] = useState(template.html);
   const renderHtml = useMemo(() => async () => savedHtml, [savedHtml]);
-  const preview = usePreview(mode, renderHtml, draft, fields);
+  const brand = useLiveBrand();
+  const preview = usePreview(mode, renderHtml, draft, fields, brand);
 
   async function saveNow(): Promise<Template> {
     const saved = await save.mutateAsync({

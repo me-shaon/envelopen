@@ -159,6 +159,13 @@ test.describe("first campaign", () => {
     await expect(activity.getByRole("listitem").first()).toContainText("Test email sent.");
     await expect(activity).toContainText("Email provider connected.");
 
+    // A campaign needs the sender's postal address, which the brand kit holds (U13).
+    await page.getByRole("link", { name: "Brand" }).first().click();
+    await expect(page.getByRole("heading", { name: "Brand", level: 1 })).toBeVisible();
+    await page.getByLabel("Postal address").fill("1 Course Street, Springfield");
+    await page.getByRole("button", { name: "Save brand" }).click();
+    await expect(page.getByText("Brand saved.")).toBeVisible();
+
     // Create the campaign to the tag, confirm, and wait for sent.
     await page.getByRole("link", { name: "New campaign" }).first().click();
     await page.getByLabel("Campaign name").fill("Course launch");

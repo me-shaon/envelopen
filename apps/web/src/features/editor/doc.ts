@@ -4,9 +4,30 @@ import { NodeSelection } from "@tiptap/pm/state";
 
 // Helpers between the Tiptap editor and the email document.
 
-/** The editor JSON is an EmailDocument: the extensions produce only its node types. */
+/**
+ * The editor JSON is an EmailDocument: the extensions produce only its node types. The
+ * document keeps `attrs` only with the brand font, so a template without it saves the
+ * same JSON as before (R24).
+ */
 export function documentOf(editor: Editor): EmailDocument {
-  return editor.getJSON() as EmailDocument;
+  const { attrs, ...doc } = editor.getJSON() as EmailDocument;
+  return attrs?.font === "brand" ? { ...doc, attrs: { font: "brand" } } : doc;
+}
+
+/** The font setting of the document: "brand" or null for the default font. */
+export function documentFont(editor: Editor): "brand" | null {
+  return editor.state.doc.attrs.font === "brand" ? "brand" : null;
+}
+
+/** Sets the font setting of the document. Undo restores it. */
+export function setDocumentFont(editor: Editor, font: "brand" | null): void {
+  editor
+    .chain()
+    .command(({ tr }) => {
+      tr.setDocAttribute("font", font);
+      return true;
+    })
+    .run();
 }
 
 /** The top-level block that holds the selection, with its position. */

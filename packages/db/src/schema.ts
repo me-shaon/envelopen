@@ -486,6 +486,8 @@ export interface CampaignsTable {
   scheduled_tz: Defaulted<string | null>;
   /** The wall-clock time in `scheduled_tz` with its UTC offset, e.g. `2026-10-21T09:00+06:00`. */
   scheduled_local: Defaulted<string | null>;
+  /** JSON of the brand values at confirm (0022_brand_kit.sql). Null before confirm. */
+  brand_snapshot: Defaulted<string | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -800,6 +802,47 @@ export interface WelcomeSendsTable {
   updated_at: Defaulted<number>;
 }
 
+// Brand kit (U13, KTD10) ------------------------------------------------------------------
+
+export type BrandLogoContentType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+
+/** The brand kit of a workspace, one row per workspace (0022_brand_kit.sql). */
+export interface BrandKitsTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  name: Defaulted<string>;
+  /** The R2 key of the current logo, `brand/<workspace id>/<sha-256>.<ext>`. */
+  logo_key: Defaulted<string | null>;
+  logo_content_type: Defaulted<BrandLogoContentType | null>;
+  logo_size: Defaulted<number | null>;
+  logo_width: Defaulted<number | null>;
+  logo_height: Defaulted<number | null>;
+  /** `#rrggbb`. */
+  color_primary: Defaulted<string>;
+  color_accent: Defaulted<string>;
+  /** A font id from the web-safe allowlist (packages/email-render/src/brand.ts). */
+  font: Defaulted<string>;
+  footer_text: Defaulted<string>;
+  postal_address: Defaulted<string>;
+  /** JSON object from social network to https URL. */
+  social_links: Defaulted<string>;
+  created_at: Generated<number>;
+  updated_at: Defaulted<number>;
+}
+
+/** An uploaded logo with a copy of its bytes, for backups (0022_brand_kit.sql). */
+export interface BrandLogosTable {
+  id: Generated<number>;
+  workspace_id: Immutable<number>;
+  key: Immutable<string>;
+  content_type: Immutable<BrandLogoContentType>;
+  size: Immutable<number>;
+  width: Immutable<number | null>;
+  height: Immutable<number | null>;
+  bytes: Immutable<Uint8Array>;
+  created_at: Generated<number>;
+}
+
 // Backups (U4, KTD2) ---------------------------------------------------------------------
 
 export type BackupRunStatus = "running" | "succeeded" | "partial" | "failed";
@@ -966,6 +1009,8 @@ export interface Database {
   form_consents: FormConsentsTable;
   welcome_series: WelcomeSeriesTable;
   welcome_sends: WelcomeSendsTable;
+  brand_kits: BrandKitsTable;
+  brand_logos: BrandLogosTable;
 }
 
 export type TableName = keyof Database;
@@ -1032,6 +1077,9 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   // Welcome series (U10).
   welcome_series: "tenant",
   welcome_sends: "tenant",
+  // Brand kit (U13).
+  brand_kits: "tenant",
+  brand_logos: "tenant",
 };
 
 export const TENANT_TABLES: ReadonlySet<string> = new Set(

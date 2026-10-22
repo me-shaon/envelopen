@@ -3,6 +3,7 @@ import { getAdapter } from "@envelopen/providers";
 import { sql } from "kysely";
 import { z } from "zod";
 import { assertNoRestoreHold } from "../backup/restore-ack";
+import { campaignBrand, liveBrand } from "../brand/model";
 import { assertCampaignPolicy } from "../connections/policy-gate";
 import { normalizeEmail } from "../contacts/email";
 import { checkLists, checkTags } from "../contacts/writes";
@@ -338,7 +339,9 @@ export const campaignsPreview = defineOperation({
   async handler(input, { principal, db, services }) {
     const row = await loadCampaign(db, principal.workspaceId, input.id);
     const values = await contactValues(db, principal.workspaceId, input.contactId);
-    return personalizePreview(row, values, testLinkOrigin(services.appOrigin));
+    // A draft shows the live brand. A confirmed campaign shows its brand snapshot.
+    const brand = await campaignBrand(db, row, services.appOrigin);
+    return personalizePreview(row, values, testLinkOrigin(services.appOrigin), brand);
   },
 });
 
@@ -660,10 +663,22 @@ export const campaignsConfirm = defineOperation({
       .select(["tracking_opens", "tracking_clicks"])
       .where("id", "=", principal.workspaceId)
       .executeTakeFirstOrThrow();
+    // Freeze the brand (KTD10): the batches fill the brand tokens from this snapshot, so
+    // a later change of the brand kit does not reach this campaign (R19, AE5). The logo
+    // URL uses the link origin, which recipients can reach.
+    const brand = await liveBrand(db, principal.workspaceId, origin);
+    if (!brand.address.trim()) {
+      throw new OperationError(
+        "conflict",
+        "Add the postal address to the brand kit, then prepare the send again.",
+        { fix: "/brand" },
+      );
+    }
     const sendNow = token.mode === "send_now";
     const set: RowUpdate<"campaigns"> = {
       connection_id: policy.connectionId,
       link_origin: origin,
+      brand_snapshot: JSON.stringify(brand),
       ...combineTracking(campaign, workspace),
       scheduled_at: sendNow ? null : token.scheduled_at,
       scheduled_tz: sendNow ? null : token.scheduled_tz,
@@ -777,7 +792,8 @@ export const campaignsUnschedule = lifecycleOperation({
       campaign,
       "unschedule",
       "draft",
-      { scheduled_at: null, scheduled_tz: null, scheduled_local: null },
+      // A new confirm takes a new brand snapshot. Until then, the draft shows the live brand.
+      { scheduled_at: null, scheduled_tz: null, scheduled_local: null, brand_snapshot: null },
       "be unscheduled",
     ),
 });

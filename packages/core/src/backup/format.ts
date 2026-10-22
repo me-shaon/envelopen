@@ -28,9 +28,16 @@ export const BACKUP_FORMAT_VERSION = 1;
  * refuses a newer backup, and upgrades an older one row by row (restore-plan.ts). A
  * test keeps it equal to the highest migration file.
  */
-export const BACKUP_SCHEMA_VERSION = 21;
+export const BACKUP_SCHEMA_VERSION = 22;
 /** Rows per chunk. A chunk of 1,000 rows encrypts in a few milliseconds of CPU. */
 export const CHUNK_ROWS = 1_000;
+/**
+ * Tables with large rows read fewer rows per chunk. A brand logo row holds up to 1 MB of
+ * image bytes (U13), so a chunk reads at most 4 of them and the Worker memory stays small.
+ */
+export const CHUNK_ROWS_BY_TABLE: Readonly<Partial<Record<TableName, number>>> = {
+  brand_logos: 4,
+};
 
 /**
  * Tables that are not in a backup, with the reason. Every other table of TABLE_SCOPE is.

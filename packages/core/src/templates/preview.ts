@@ -1,5 +1,12 @@
 import type { DbConnection } from "@envelopen/db";
-import { missingMergeTags, previewValues, renderMergeTags } from "@envelopen/email-render";
+import {
+  applyBrand,
+  type BrandSnapshot,
+  DEFAULT_BRAND,
+  missingMergeTags,
+  previewValues,
+  renderMergeTags,
+} from "@envelopen/email-render";
 import { fieldTexts } from "../contacts/fields";
 import { loadContacts } from "../contacts/model";
 import { OperationError } from "../errors";
@@ -37,7 +44,7 @@ export function testLinkOrigin(appOrigin: string | undefined, trackingDomain?: s
 export interface MergeField {
   key: string;
   label: string;
-  kind: "standard" | "custom" | "reserved";
+  kind: "standard" | "custom" | "reserved" | "brand";
   sample: string | null;
 }
 
@@ -52,6 +59,13 @@ const RESERVED: MergeField[] = [
   { key: "preferences_url", label: "Preferences link", kind: "reserved", sample: null },
 ];
 
+/** Brand tokens that fit in text (U13). The editor offers them in the merge tag menu. */
+const BRAND_FIELDS: MergeField[] = [
+  { key: "brand.name", label: "Brand name", kind: "brand", sample: null },
+  { key: "brand.footer", label: "Brand footer text", kind: "brand", sample: null },
+  { key: "brand.address", label: "Postal address", kind: "brand", sample: null },
+];
+
 /** The tags a template can use: standard fields, the workspace's custom fields, links. */
 export async function mergeFields(db: DbConnection, workspaceId: number): Promise<MergeField[]> {
   const custom = await db.db
@@ -64,6 +78,7 @@ export async function mergeFields(db: DbConnection, workspaceId: number): Promis
     ...STANDARD,
     ...custom.map((field) => ({ ...field, kind: "custom" as const, sample: null })),
     ...RESERVED,
+    ...BRAND_FIELDS,
   ];
 }
 
@@ -101,19 +116,24 @@ export interface Preview {
   missing: string[];
 }
 
-/** Personalizes a stored template for a preview or a test send. */
+/**
+ * Personalizes a stored template for a preview or a test send. The brand tokens are
+ * filled first (U13): with the live brand for a draft, or a campaign's snapshot.
+ */
 export function personalizePreview(
   template: PreviewInput,
   fields: Readonly<Record<string, string | null>>,
   origin: string,
+  brand: BrandSnapshot = DEFAULT_BRAND,
 ): Preview {
   const values = previewValues(fields, origin);
-  const html = template.html ?? "";
+  const html = applyBrand(template.html ?? "", brand, "html");
+  const subject = applyBrand(template.subject ?? "", brand, "text");
   return {
-    subject: renderMergeTags(template.subject ?? "", values, "text"),
-    preheader: renderMergeTags(template.preheader ?? "", values, "text"),
+    subject: renderMergeTags(subject, values, "text"),
+    preheader: renderMergeTags(applyBrand(template.preheader ?? "", brand, "text"), values, "text"),
     html: renderMergeTags(html, values, "html"),
-    text: renderMergeTags(template.text ?? "", values, "text"),
-    missing: missingMergeTags(`${template.subject ?? ""} ${html}`, values),
+    text: renderMergeTags(applyBrand(template.text ?? "", brand, "text"), values, "text"),
+    missing: missingMergeTags(`${subject} ${html}`, values),
   };
 }

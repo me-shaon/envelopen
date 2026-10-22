@@ -57,6 +57,12 @@ async function apiPost(page: Page, path: string, data: unknown) {
   return (await res.json()) as Record<string, unknown>;
 }
 
+async function apiPut(page: Page, path: string, data: unknown) {
+  const res = await page.request.put(`${BASE}/api${path}`, { data, headers: { Origin: BASE } });
+  expect(res.ok(), await res.text()).toBe(true);
+  return (await res.json()) as Record<string, unknown>;
+}
+
 test.describe("campaigns", () => {
   test.describe.configure({ mode: "serial" });
   test.use({ baseURL: BASE, viewport: { width: 1360, height: 1000 } });
@@ -88,6 +94,16 @@ test.describe("campaigns", () => {
     const domain = await apiPost(page, "/domains", { domain: "mail.example.com" });
     expect(domain.status).toBe("verified");
     const list = await apiPost(page, "/lists", { name: "Course testers" });
+    // A campaign needs the postal address of the brand kit (U13).
+    await apiPut(page, "/brand", {
+      name: "",
+      colorPrimary: "#4a3c77",
+      colorAccent: "#ede9f8",
+      font: "system",
+      footer: "",
+      address: "1 Course Street, Springfield",
+      social: {},
+    });
     for (const [email, firstName] of [
       [OWNER.email, "Ada"],
       ["tester@example.com", "Grace"],

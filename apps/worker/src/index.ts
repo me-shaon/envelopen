@@ -6,6 +6,7 @@ import { createApiRouter } from "./api/router";
 import { AUTH_BASE_PATH } from "./auth/better-auth";
 import { createAuthRoutes } from "./auth/routes";
 import { betterAuthSessionResolver } from "./auth/session";
+import { createBrandRoutes } from "./brand/route";
 import { runCron } from "./cron";
 import { createFormRoutes } from "./forms/routes";
 import { createHookRoutes } from "./hooks";
@@ -66,6 +67,8 @@ app.route("/t", createTrackingRoutes());
 app.route("/u", createUnsubscribeRoutes());
 // Signup forms (U8): the hosted and embedded form, and the double opt-in confirmation.
 app.route("/f", createFormRoutes());
+// Brand logos (U13), loaded by emails. Content-addressed, so they cache for a year.
+app.route("/b", createBrandRoutes());
 
 export default {
   fetch: app.fetch,

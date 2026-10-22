@@ -1,16 +1,24 @@
-import type { Align, SocialLink } from "@envelopen/email-render/blocks/types";
-import { DEFAULT_BUTTON, DEFAULT_FOOTER_TEXT } from "@envelopen/email-render/blocks/types";
+import type { Align, SocialLink, SocialNetwork } from "@envelopen/email-render/blocks/types";
+import {
+  BRAND_COLOR_TOKENS,
+  DEFAULT_BUTTON,
+  DEFAULT_FOOTER_TEXT,
+  SOCIAL_NETWORKS,
+} from "@envelopen/email-render/blocks/types";
+import { brandFontStack } from "@envelopen/email-render/brand";
 import { type Extensions, mergeAttributes, Node } from "@tiptap/core";
 import { Placeholder } from "@tiptap/extensions";
 import { NodeViewWrapper, type ReactNodeViewProps, ReactNodeViewRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { ComponentType } from "react";
+import { useBrand } from "@/features/brand/shared";
 import { cn } from "@/lib/utils";
 
-// Tiptap v3 nodes for the origin block set (R26). Text blocks (heading, paragraph) are
-// the StarterKit nodes. Every other block is an atom: the canvas shows a likeness of
-// the email, and the settings panel edits its attributes. The JSON that these nodes
-// produce is the EmailDocument that packages/email-render renders.
+// Tiptap v3 nodes for the origin block set (R26) and the brand blocks (U13). Text blocks
+// (heading, paragraph) are the StarterKit nodes. Every other block is an atom: the canvas
+// shows a likeness of the email, and the settings panel edits its attributes. The JSON
+// that these nodes produce is the EmailDocument that packages/email-render renders. The
+// canvas shows brand tokens with the live brand (BrandContext).
 
 /** Blocks that a column can hold. Columns do not nest. */
 const COLUMN_CONTENT = "(paragraph|heading|image|button|divider|spacer|html)+";
@@ -109,15 +117,22 @@ function ImageView({ attrs }: { attrs: Record<string, unknown> }) {
   );
 }
 
+/** A color setting as the canvas shows it: a brand token becomes the live brand color. */
+export function useColor(value: unknown, fallback: string): string {
+  const brand = useBrand();
+  if (value === BRAND_COLOR_TOKENS.primary) return brand.colorPrimary;
+  if (value === BRAND_COLOR_TOKENS.accent) return brand.colorAccent;
+  return str(value) || fallback;
+}
+
 function ButtonView({ attrs }: { attrs: Record<string, unknown> }) {
+  const background = useColor(attrs.background, DEFAULT_BUTTON.background);
+  const color = useColor(attrs.color, DEFAULT_BUTTON.color);
   return (
     <div className={cn("py-2", alignClass(attrs.align))}>
       <span
         className="inline-block rounded-[9px] px-5 py-3 text-[15px] font-semibold"
-        style={{
-          background: str(attrs.background) || DEFAULT_BUTTON.background,
-          color: str(attrs.color) || DEFAULT_BUTTON.color,
-        }}
+        style={{ background, color }}
       >
         {str(attrs.label) || "Button"}
       </span>
@@ -174,6 +189,71 @@ function FooterView({ attrs }: { attrs: Record<string, unknown> }) {
   );
 }
 
+function BrandHeaderView({ attrs }: { attrs: Record<string, unknown> }) {
+  const brand = useBrand();
+  const width = Math.min(Math.max(Number(attrs.logoWidth) || 160, 40), 600);
+  return (
+    <div className={cn("py-2", alignClass(attrs.align ?? "center"))}>
+      {brand.logoUrl ? (
+        <img
+          src={brand.logoUrl}
+          alt={brand.name}
+          style={{ width }}
+          className="inline-block max-w-full"
+        />
+      ) : (
+        <span className="inline-flex h-12 items-center rounded-lg border border-dashed border-input px-3 text-[12.5px] text-muted-foreground">
+          No logo in the brand kit
+        </span>
+      )}
+      {attrs.showName === false ? null : (
+        <p
+          className="m-0 mt-2 text-[20px] leading-[1.3] font-semibold"
+          style={{ color: brand.colorPrimary, fontFamily: brandFontStack(brand.font) }}
+        >
+          {brand.name || "Brand name"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function BrandFooterView({ attrs }: { attrs: Record<string, unknown> }) {
+  const brand = useBrand();
+  const chosen = SOCIAL_NETWORKS.filter(
+    (network) => Array.isArray(attrs.networks) && attrs.networks.includes(network),
+  );
+  const shown = chosen.filter((network) => brand.social[network]);
+  return (
+    <div
+      className={cn(
+        "mt-4 border-t border-border pt-3 text-[13px] text-muted-foreground",
+        alignClass(attrs.align ?? "center"),
+      )}
+    >
+      {shown.length > 0 ? (
+        <p className="m-0 mb-3 flex flex-wrap justify-[inherit] gap-x-3 text-[14px]">
+          {shown.map((network) => (
+            <span key={network} style={{ color: brand.colorPrimary }}>
+              {NETWORK_LABELS[network]}
+            </span>
+          ))}
+        </p>
+      ) : null}
+      <p className="m-0 mb-2 whitespace-pre-line">
+        {brand.footer || "Footer text from the brand kit"}
+      </p>
+      <p className="m-0 mb-2 whitespace-pre-line">
+        {brand.address || "Postal address from the brand kit"}
+      </p>
+      <p className="m-0">
+        <span className="underline">Unsubscribe</span> ·{" "}
+        <span className="underline">Email preferences</span>
+      </p>
+    </div>
+  );
+}
+
 function HtmlView({ attrs }: { attrs: Record<string, unknown> }) {
   const html = str(attrs.html);
   return (
@@ -214,6 +294,31 @@ export const FooterBlock = atomBlock(
   FooterView,
 );
 export const HtmlBlock = atomBlock("html", "Raw HTML block", { html: "" }, HtmlView);
+export const BrandHeaderBlock = atomBlock(
+  "brandHeader",
+  "Brand header block",
+  { align: "center" satisfies Align, showName: true, logoWidth: 160 },
+  BrandHeaderView,
+);
+export const BrandFooterBlock = atomBlock(
+  "brandFooter",
+  "Brand footer block",
+  { align: "center" satisfies Align, networks: [] as SocialNetwork[] },
+  BrandFooterView,
+);
+
+/**
+ * The document node with the email's font setting (U13). `font: "brand"` renders the
+ * email with the brand font token. Null keeps the default font.
+ */
+export const EmailDocumentNode = Node.create({
+  name: "doc",
+  topNode: true,
+  content: "block+",
+  addAttributes() {
+    return { font: { default: null } };
+  },
+});
 
 export const Columns = Node.create({
   name: "columns",
@@ -294,6 +399,7 @@ export const MergeTag = Node.create({
 export function editorExtensions(): Extensions {
   return [
     StarterKit.configure({
+      document: false,
       heading: { levels: [1, 2, 3] },
       blockquote: false,
       bulletList: false,
@@ -307,6 +413,7 @@ export function editorExtensions(): Extensions {
       link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
     }),
     Placeholder.configure({ placeholder: "Write something, or add a block from the panel." }),
+    EmailDocumentNode,
     ImageBlock,
     ButtonBlock,
     DividerBlock,
@@ -314,6 +421,8 @@ export function editorExtensions(): Extensions {
     SocialBlock,
     FooterBlock,
     HtmlBlock,
+    BrandHeaderBlock,
+    BrandFooterBlock,
     Columns,
     Column,
     MergeTag,

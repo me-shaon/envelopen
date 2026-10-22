@@ -25,6 +25,7 @@ import { createDb, type DbConnection, isD1DailyLimitError, nextUtcMidnight } fro
 import {
   mergeTagNames,
   type PersonalizedMessage,
+  parseBrandSnapshot,
   personalize,
   prepareMessage,
   RESERVED_TAGS,
@@ -329,6 +330,9 @@ async function handlePointer(
     subject: campaign.subject ?? "",
     text: campaign.text,
     trackingOrigin: set.origin,
+    // The brand frozen at confirm (U13, KTD10). A campaign confirmed before the brand kit
+    // existed has no snapshot and no brand tokens, so the defaults change nothing.
+    brand: campaign.brand_snapshot ? parseBrandSnapshot(campaign.brand_snapshot) : null,
     // The tracking fixed at confirm. Without it, the switches as they are now.
     trackOpens:
       campaign.send_tracking_opens !== null

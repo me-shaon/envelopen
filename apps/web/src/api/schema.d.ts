@@ -932,6 +932,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/brand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the brand kit
+         * @description Returns the brand kit of the workspace: name, logo, colors, font, footer text, postal address, and social links. Templates use them through `{{ brand.* }}` tokens. Drafts show the live brand, and a confirmed campaign keeps the brand of its confirm time.
+         */
+        get: operations["brand.get"];
+        /**
+         * Change the brand kit
+         * @description Replaces the brand values except the logo. Colors must be hex colors, the font one of the web-safe fonts, and each social link an https URL. Drafts use the new values at once. Confirmed campaigns keep their snapshot.
+         */
+        put: operations["brand.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/brand/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload the brand logo
+         * @description Sets the brand logo. The file must be a PNG, JPEG, GIF, or WebP image of at most 1 MB. The type comes from the file's bytes, and SVG is refused. The logo is served at a fixed public URL. A replaced logo stays, so sent emails keep their logo.
+         */
+        post: operations["brand.upload_logo"];
+        /**
+         * Remove the brand logo
+         * @description Removes the logo from the brand kit. Templates then show no logo. The logo file stays, so sent emails and confirmed campaigns keep it.
+         */
+        delete: operations["brand.remove_logo"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/imports": {
         parameters: {
             query?: never;
@@ -2378,6 +2426,49 @@ export interface components {
                 sharedContacts: number;
             }[];
         };
+        Brand: {
+            /** @description Defaults to the workspace name when empty. */
+            name: string;
+            logo: {
+                url: string;
+                /** @enum {string} */
+                contentType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                size: number;
+                width: number | null;
+                height: number | null;
+            } | null;
+            /** @description `#rrggbb`. */
+            colorPrimary: string;
+            /** @description `#rrggbb`. */
+            colorAccent: string;
+            /** @enum {string} */
+            font: "system" | "helvetica" | "arial" | "verdana" | "tahoma" | "trebuchet" | "georgia" | "times" | "palatino" | "courier";
+            footer: string;
+            /** @description The postal address. A campaign cannot be confirmed without it. */
+            address: string;
+            social: components["schemas"]["BrandSocialLinks"];
+            /** @description The web-safe fonts that `font` can name. */
+            fonts: {
+                id: string;
+                label: string;
+                stack: string;
+            }[];
+            /** @description The values that fill the tokens now: the brand name after defaults. */
+            tokens: {
+                name: string;
+            };
+            updatedAt: number | null;
+        };
+        /** @description https URL by social network. */
+        BrandSocialLinks: {
+            website?: string;
+            x?: string;
+            linkedin?: string;
+            instagram?: string;
+            facebook?: string;
+            youtube?: string;
+            github?: string;
+        };
         Import: {
             id: number;
             /** @enum {string} */
@@ -2673,7 +2764,7 @@ export interface components {
                 key: string;
                 label: string;
                 /** @enum {string} */
-                kind: "standard" | "custom" | "reserved";
+                kind: "standard" | "custom" | "reserved" | "brand";
                 sample: string | null;
             }[];
         };
@@ -2926,7 +3017,7 @@ export interface components {
         };
         ChecklistItem: {
             /** @enum {string} */
-            id: "subject" | "preheader" | "content" | "unsubscribe_link" | "links" | "from_address" | "domain_auth" | "audience" | "connection" | "policy" | "free_budget" | "restore";
+            id: "subject" | "preheader" | "content" | "unsubscribe_link" | "postal_address" | "links" | "from_address" | "domain_auth" | "audience" | "connection" | "policy" | "free_budget" | "restore";
             label: string;
             /** @enum {string} */
             status: "pass" | "warn" | "fail";
@@ -9044,6 +9135,352 @@ export interface operations {
             };
             /** @description The Idempotency-Key was used with a different path or body. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "brand.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brand"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "brand.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The brand name. Empty uses the workspace name. */
+                    name: string;
+                    /** @description `#rrggbb` or `#rgb`. */
+                    colorPrimary: string;
+                    /** @description `#rrggbb` or `#rgb`. */
+                    colorAccent: string;
+                    /** @enum {string} */
+                    font: "system" | "helvetica" | "arial" | "verdana" | "tahoma" | "trebuchet" | "georgia" | "times" | "palatino" | "courier";
+                    footer: string;
+                    /** @description The sender's postal address. A campaign cannot be confirmed without it. */
+                    address: string;
+                    /**
+                     * @description An https URL by network. An empty value removes the link.
+                     * @default {}
+                     */
+                    social?: {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brand"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "brand.upload_logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    filename?: string;
+                    contentType?: string;
+                    /** @description The image bytes, base64. At most 1 MB before encoding. */
+                    content: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brand"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different path or body. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "brand.remove_logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brand"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

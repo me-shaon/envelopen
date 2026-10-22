@@ -136,6 +136,22 @@ function seedSource(): Promise<Seeded> {
         .values({ workspace_id: workspace.workspaceId, contact_id: contact.id, tag_id: tag.id })
         .execute();
     }
+    // Five brand logos with their bytes (U13): a chunk holds at most four of them.
+    for (let n = 1; n <= 5; n++) {
+      const bytes = new Uint8Array(1000 * n).fill(n);
+      await conn.db
+        .insertInto("brand_logos")
+        .values({
+          workspace_id: workspace.workspaceId,
+          key: `brand/${workspace.workspaceId}/${String(n).repeat(64)}.png`,
+          content_type: "image/png",
+          size: bytes.length,
+          width: 10,
+          height: 10,
+          bytes,
+        })
+        .execute();
+    }
     // A multiple choice field (U7) with options and one contact's value.
     await conn.db
       .insertInto("contact_fields")
@@ -413,6 +429,8 @@ const COMPARED = [
   "campaign_stats_daily",
   "campaign_stats_hourly",
   "workspace_stats_daily",
+  "brand_kits",
+  "brand_logos",
 ] as const;
 
 async function dataRows(db: D1Database): Promise<number> {
@@ -550,6 +568,16 @@ describe("restore into a fresh deployment", () => {
       "SELECT v.value FROM contact_field_values v JOIN contact_fields f ON f.id = v.field_id WHERE f.key = 'interests'",
     ).first<{ value: string }>();
     expect(value?.value).toBe(JSON.stringify([options.results[0]?.id, options.results[2]?.id]));
+    // The logo bytes come back exactly, so the logo route can serve them again (U13).
+    const logos = await env.RESTORE_DB.prepare(
+      "SELECT size, bytes FROM brand_logos ORDER BY id",
+    ).all<{ size: number; bytes: ArrayBuffer | number[] }>();
+    expect(logos.results).toHaveLength(5);
+    for (const [index, logo] of logos.results.entries()) {
+      const bytes = new Uint8Array(logo.bytes as ArrayBuffer);
+      expect(bytes.length).toBe(logo.size);
+      expect(bytes.every((byte) => byte === index + 1)).toBe(true);
+    }
     // The deferred reference is set after the connections.
     const workspace = await env.RESTORE_DB.prepare(
       "SELECT sending_connection_id FROM workspaces WHERE id = ?",

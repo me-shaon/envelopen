@@ -16,7 +16,9 @@ const SPA_MARKER = '<div id="root"></div>';
 const NAVIGATION = { accept: "text/html", "sec-fetch-mode": "navigate" };
 
 test.describe("asset routing", () => {
-  test("sends /api/*, /mcp, /t/*, /u/*, /f/*, and /hooks/* to the Worker", async ({ request }) => {
+  test("sends /api/*, /mcp, /t/*, /u/*, /f/*, /b/*, and /hooks/* to the Worker", async ({
+    request,
+  }) => {
     const health = await request.get(`${BASE}/api/health`, { headers: NAVIGATION });
     expect(await health.json()).toEqual({ status: "ok", version: VERSION });
 
@@ -26,6 +28,7 @@ test.describe("asset routing", () => {
       "/t/o/not-a-token.gif",
       "/u/not-a-token",
       "/f/not-a-form",
+      "/b/1/not-a-logo.png",
       "/hooks/resend/0/0",
     ];
     for (const path of paths) {

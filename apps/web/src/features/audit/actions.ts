@@ -128,6 +128,11 @@ const ACTIONS: Record<string, ActionText> = {
     notable: true,
   },
 
+  // Brand kit (U13).
+  "brand.update": { label: counted("Brand changed", "brand changes"), notable: true },
+  "brand.upload_logo": { label: counted("Brand logo uploaded", "brand logos uploaded") },
+  "brand.remove_logo": { label: counted("Brand logo removed", "brand logos removed") },
+
   // Templates.
   "templates.create": {
     label: counted("Template created", "templates created"),

@@ -21,8 +21,8 @@ import { decodeEntities } from "./merge-tags";
 // - URLs with schemes other than http, https, mailto, and tel (images: http, https,
 //   cid), after decoding character references and removing control characters, so
 //   `jav&#x61;script:` and `java\tscript:` are caught. A merge tag may not start a
-//   URL, except the unsubscribe and preference placeholders, so contact data cannot set
-//   a link's scheme.
+//   URL, except the unsubscribe and preference placeholders and the brand logo and social
+//   tokens, so contact data cannot set a link's scheme.
 // - CSS with `expression(`, `javascript:`, `behavior`, `-moz-binding`, `@import`, a
 //   non-http or unterminated `url(`, or a quoted `data:` string, after decoding CSS
 //   escapes and removing comments. A `<style>` element with a `<` in its text.
@@ -71,7 +71,10 @@ const ELEMENT_ATTRIBUTES: Record<string, Set<string>> = {
 const LINK_SCHEMES = new Set(["http", "https", "mailto", "tel"]);
 const IMAGE_SCHEMES = new Set(["http", "https", "cid"]);
 const META_HTTP_EQUIV = new Set(["content-type", "x-ua-compatible"]);
-const URL_PLACEHOLDER = /^\{\{\s*(unsubscribe_url|preferences_url)\s*\}\}$/;
+// The brand URLs are checked when the brand is saved and again when they are filled
+// (brand.ts): the logo URL is http or https, and each social link is https.
+const URL_PLACEHOLDER =
+  /^\{\{\s*(unsubscribe_url|preferences_url|brand\.logo_url|brand\.social\.(?:website|x|linkedin|instagram|facebook|youtube|github))\s*\}\}$/;
 
 /** Returns the URL to keep, or null when it must go. Pass the decoded attribute value. */
 export function safeUrl(value: string, schemes: ReadonlySet<string>): string | null {

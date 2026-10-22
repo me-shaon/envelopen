@@ -277,6 +277,9 @@ describe("templates (R26 to R29, R69)", () => {
       "custom:course",
       "reserved:unsubscribe_url",
       "reserved:preferences_url",
+      "brand:brand.name",
+      "brand:brand.footer",
+      "brand:brand.address",
     ]);
   });
 

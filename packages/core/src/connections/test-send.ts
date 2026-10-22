@@ -1,4 +1,5 @@
 import type { DbConnection } from "@envelopen/db";
+import { applyBrand } from "@envelopen/email-render";
 import {
   LIST_UNSUBSCRIBE,
   LIST_UNSUBSCRIBE_POST,
@@ -6,6 +7,7 @@ import {
   type OutgoingMessage,
 } from "@envelopen/providers";
 import { z } from "zod";
+import { liveBrand } from "../brand/model";
 import { normalizeEmail } from "../contacts/email";
 import { OperationError } from "../errors";
 import { defineOperation } from "../registry/operation";
@@ -242,12 +244,20 @@ export const campaignsSendTest = defineOperation({
       verifiedTrackingDomain(domain),
     );
     const mailbox = input.fromName ? `${input.fromName.replaceAll(/["<>]/g, "")} <${from}>` : from;
+    // A test uses the live brand (U13), with the logo on the link origin.
+    const brand = await liveBrand(db, workspaceId, origin);
+    const branded = (value: string | undefined, mode: "html" | "text") =>
+      value === undefined ? undefined : applyBrand(value, brand, mode);
     // A template test uses the preview's personalization, so it matches the preview.
-    let content = { subject: input.subject, html: input.html, text: input.text };
+    let content = {
+      subject: branded(input.subject, "text"),
+      html: branded(input.html, "html"),
+      text: branded(input.text, "text"),
+    };
     if (input.templateId !== undefined) {
       const template = await getTemplateRow(db.db, workspaceId, input.templateId);
       const values = await contactValues(db, workspaceId, input.contactId);
-      const preview = personalizePreview(template, values, origin);
+      const preview = personalizePreview(template, values, origin, brand);
       content = {
         subject: input.subject ?? (preview.subject || undefined),
         html: input.html ?? preview.html,

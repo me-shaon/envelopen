@@ -1,7 +1,7 @@
 // The block document of the editor (R26). The editor stores Tiptap JSON, and these
 // types describe the subset that Envelopen uses: the origin block set (heading,
 // paragraph, image, button, divider, spacer, two columns, social links, footer, and raw
-// HTML) and the inline content of text blocks. The renderer in ./render-blocks.tsx turns
+// HTML), the brand header and footer (U13), and the inline content of text blocks. The renderer in ./render-blocks.tsx turns
 // a document into React Email elements.
 //
 // This file has no dependencies, so the Worker, the browser, and the tests share it.
@@ -106,6 +106,25 @@ export interface HtmlNode {
   attrs: { html: string };
 }
 
+/**
+ * The brand header (U13): the brand logo and, when `showName` is on, the brand name.
+ * Both come from brand tokens, so a change of the brand kit reaches every draft.
+ */
+export interface BrandHeaderNode {
+  type: "brandHeader";
+  attrs: { align: Align; showName: boolean; logoWidth: number };
+}
+
+/**
+ * The brand footer (U13): the brand's social links (the chosen networks), footer text,
+ * and postal address, then the unsubscribe and preference links (R25). A network
+ * without a URL in the brand kit is left out when the email is filled.
+ */
+export interface BrandFooterNode {
+  type: "brandFooter";
+  attrs: { align: Align; networks: SocialNetwork[] };
+}
+
 /** Blocks that a column can hold. Columns do not nest. */
 export type ColumnChild =
   | HeadingNode
@@ -116,10 +135,22 @@ export type ColumnChild =
   | SpacerNode
   | HtmlNode;
 
-export type BlockNode = ColumnChild | ColumnsNode | SocialNode | FooterNode;
+export type BlockNode =
+  | ColumnChild
+  | ColumnsNode
+  | SocialNode
+  | FooterNode
+  | BrandHeaderNode
+  | BrandFooterNode;
+
+/** Document settings. `font: "brand"` sets the email's font to the brand font token. */
+export interface DocumentAttrs {
+  font?: "brand" | null;
+}
 
 export interface EmailDocument {
   type: "doc";
+  attrs?: DocumentAttrs;
   content: BlockNode[];
 }
 
@@ -135,12 +166,28 @@ export const BLOCK_TYPES = [
   "social",
   "footer",
   "html",
+  "brandHeader",
+  "brandFooter",
 ] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 const KNOWN_NODES = new Set<string>([...BLOCK_TYPES, "column", "text", "hardBreak", "mergeTag"]);
 
 export const DEFAULT_BUTTON = { background: "#1a1917", color: "#ffffff" } as const;
+
+/** The brand color tokens that a color setting can hold in place of a hex color (U13). */
+export const BRAND_COLOR_TOKENS = {
+  primary: "{{ brand.color_primary }}",
+  accent: "{{ brand.color_accent }}",
+} as const;
+
+/** Whether a color setting holds a brand color token. */
+export function isBrandColorToken(value: unknown): boolean {
+  return value === BRAND_COLOR_TOKENS.primary || value === BRAND_COLOR_TOKENS.accent;
+}
+
+/** The token that a document with `font: "brand"` uses for its font. */
+export const BRAND_FONT_TOKEN = "{{ brand.font }}";
 
 export const DEFAULT_FOOTER_TEXT = "You receive this email because you subscribed to our updates.";
 
@@ -176,6 +223,10 @@ export function defaultBlock(type: BlockType): BlockNode {
       return { type, attrs: { text: DEFAULT_FOOTER_TEXT } };
     case "html":
       return { type, attrs: { html: "" } };
+    case "brandHeader":
+      return { type, attrs: { align: "center", showName: true, logoWidth: 160 } };
+    case "brandFooter":
+      return { type, attrs: { align: "center", networks: [] } };
   }
 }
 

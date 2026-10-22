@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { type CSSProperties, Fragment, type ReactNode } from "react";
 import {
   Body,
   Button,
@@ -18,11 +18,16 @@ import { mergeTagText } from "../merge-tags";
 import {
   type Align,
   type BlockNode,
+  BRAND_COLOR_TOKENS,
+  BRAND_FONT_TOKEN,
   type ColumnChild,
   DEFAULT_BUTTON,
   type EmailDocument,
   type InlineNode,
+  isBrandColorToken,
+  SOCIAL_NETWORKS,
   type SocialLink,
+  type SocialNetwork,
 } from "./types";
 
 // React Email components for each block (KTD26). They run in the browser at save time
@@ -52,8 +57,15 @@ function align(value: unknown): Align {
   return value === "center" || value === "right" ? value : "left";
 }
 
+/** A hex color, or a brand color token that the send fills with a checked hex color. */
 function color(value: unknown, fallback: string): string {
+  if (isBrandColorToken(value)) return value as string;
   return typeof value === "string" && /^#[0-9a-f]{3,8}$/i.test(value) ? value : fallback;
+}
+
+function networks(value: unknown): SocialNetwork[] {
+  if (!Array.isArray(value)) return [];
+  return SOCIAL_NETWORKS.filter((network) => value.includes(network));
 }
 
 function str(value: unknown): string {
@@ -267,6 +279,100 @@ function Block({ node }: { node: BlockNode | ColumnChild }): ReactNode {
           </p>
         </Section>
       );
+    case "brandHeader": {
+      const width = Math.min(Math.max(Number(node.attrs?.logoWidth) || 160, 40), EMAIL_WIDTH);
+      return (
+        <Section style={{ margin: "0 0 24px", textAlign: align(node.attrs?.align ?? "center") }}>
+          {/* Filled from the brand kit. Without a logo, the image is removed (brand.ts). */}
+          <Img
+            src="{{ brand.logo_url }}"
+            alt="{{ brand.name }}"
+            width={width}
+            style={{ display: "inline-block", maxWidth: "100%", height: "auto", border: 0 }}
+          />
+          {node.attrs?.showName === false ? null : (
+            <p
+              style={{
+                margin: "8px 0 0",
+                fontSize: "20px",
+                lineHeight: "1.3",
+                fontWeight: 600,
+                color: BRAND_COLOR_TOKENS.primary,
+                fontFamily: BRAND_FONT_TOKEN,
+              }}
+            >
+              {"{{ brand.name }}"}
+            </p>
+          )}
+        </Section>
+      );
+    }
+    case "brandFooter": {
+      const chosen = networks(node.attrs?.networks);
+      const muted: CSSProperties = {
+        margin: "0 0 8px",
+        color: EMAIL_COLORS.muted,
+        whiteSpace: "pre-line",
+      };
+      return (
+        <Section
+          className="env-muted env-footer"
+          style={{
+            marginTop: "24px",
+            paddingTop: "16px",
+            borderTop: `1px solid ${EMAIL_COLORS.border}`,
+            fontSize: "13px",
+            lineHeight: "1.5",
+            color: EMAIL_COLORS.muted,
+            textAlign: align(node.attrs?.align ?? "center"),
+          }}
+        >
+          {chosen.length > 0 ? (
+            <p style={{ margin: "0 0 12px" }}>
+              {chosen.map((network, index) => (
+                // A link without a URL in the brand kit is removed when the email is filled.
+                <Fragment key={network}>
+                  {index > 0 ? " " : null}
+                  <Link
+                    className="env-link"
+                    href={`{{ brand.social.${network} }}`}
+                    style={{
+                      display: "inline-block",
+                      margin: "0 6px",
+                      color: BRAND_COLOR_TOKENS.primary,
+                      fontSize: "14px",
+                    }}
+                  >
+                    {SOCIAL_LABELS[network]}
+                  </Link>
+                </Fragment>
+              ))}
+            </p>
+          ) : null}
+          <p className="env-muted" style={muted}>
+            {"{{ brand.footer }}"}
+          </p>
+          <p className="env-muted" style={muted}>
+            {"{{ brand.address }}"}
+          </p>
+          <p className="env-muted" style={{ margin: 0, color: EMAIL_COLORS.muted }}>
+            <Link
+              href="{{ unsubscribe_url }}"
+              style={{ color: EMAIL_COLORS.muted, textDecoration: "underline" }}
+            >
+              Unsubscribe
+            </Link>
+            {" · "}
+            <Link
+              href="{{ preferences_url }}"
+              style={{ color: EMAIL_COLORS.muted, textDecoration: "underline" }}
+            >
+              Email preferences
+            </Link>
+          </p>
+        </Section>
+      );
+    }
     case "html":
       // The Worker sanitizes the whole email when the template is saved (KTD27).
       // biome-ignore lint/security/noDangerouslySetInnerHtml: raw HTML is this block's purpose.
@@ -322,7 +428,11 @@ export function EmailTemplate({
           >
             <Section
               className="env-pad env-text"
-              style={{ padding: "36px 40px", fontFamily: EMAIL_FONT }}
+              style={{
+                padding: "36px 40px",
+                // The brand font is a token that the send fills from a web-safe allowlist.
+                fontFamily: doc.attrs?.font === "brand" ? BRAND_FONT_TOKEN : EMAIL_FONT,
+              }}
             >
               <Blocks nodes={doc.content ?? []} />
             </Section>

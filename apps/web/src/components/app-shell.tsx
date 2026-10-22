@@ -9,6 +9,7 @@ import {
   type LucideIcon,
   MailPlusIcon,
   MenuIcon,
+  PaletteIcon,
   PlugIcon,
   PlusIcon,
   SendIcon,
@@ -44,6 +45,7 @@ interface NavItem {
     | "/templates"
     | "/forms"
     | "/welcome"
+    | "/brand"
     | "/connections"
     | "/settings";
   label: string;
@@ -59,7 +61,10 @@ const MAIN_NAV: NavItem[] = [
   { to: "/welcome", label: "Welcome series", icon: MailPlusIcon },
 ];
 
-const WORKSPACE_NAV: NavItem[] = [{ to: "/connections", label: "Connections", icon: PlugIcon }];
+const WORKSPACE_NAV: NavItem[] = [
+  { to: "/brand", label: "Brand", icon: PaletteIcon },
+  { to: "/connections", label: "Connections", icon: PlugIcon },
+];
 
 const navClass =
   "flex min-h-8 max-md:min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-sidebar-muted transition-[color,background-color,box-shadow] duration-(--duration-press) ease-out hover:text-sidebar-foreground [&:not([aria-current=page])]:hover:bg-sidebar-accent/60";

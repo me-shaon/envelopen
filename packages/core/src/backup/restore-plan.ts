@@ -62,6 +62,8 @@ export const RESTORE_ORDER: readonly TableName[] = [
   "provider_events",
   "templates",
   "saved_blocks",
+  "brand_kits",
+  "brand_logos",
   "campaigns",
   "contacts",
   "contact_fields",
@@ -107,6 +109,8 @@ export const FOREIGN_KEYS: Readonly<Partial<Record<TableName, readonly ForeignKe
   provider_events: [ws(), ref("connection_id", "provider_connections", "clear")],
   templates: [ws()],
   saved_blocks: [ws()],
+  brand_kits: [ws()],
+  brand_logos: [ws()],
   campaigns: [
     ws(),
     ref("parent_id", "campaigns", "clear"),
@@ -206,6 +210,8 @@ const identity: Upgrade = (_table, row) => row;
  * - 0020 adds `contact_fields.preference` and `forms.required_field_ids`. An older field
  *   stays off the preference page, and an older form requires no field.
  * - 0021 adds only new tables (welcome series and welcome sends). An older backup has none.
+ * - 0022 adds the brand tables and `campaigns.brand_snapshot`. An older campaign has no
+ *   snapshot, and an older backup has no brand kit and no logos.
  */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
@@ -217,6 +223,7 @@ export const UPGRADES: Readonly<Record<number, Upgrade>> = {
     return row;
   },
   21: identity,
+  22: (table, row) => (table === "campaigns" ? { brand_snapshot: null, ...row } : row),
 };
 
 /** Returns why a backup of `schemaVersion` cannot be restored here, or null. */

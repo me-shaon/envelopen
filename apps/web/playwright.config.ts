@@ -2,13 +2,13 @@ import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 
 // End-to-end tests of the admin app against `wrangler dev` with a local D1.
-// Eleven Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
-// one each for the contacts, providers, editor, campaigns, first-campaign, forms, and
-// welcome specs, so their owners and data start fresh, and two for the backup spec: the
-// source and the restore target, which has its own keys. The providers, editor,
-// campaigns, first-campaign, forms, and welcome Workers send their provider and DNS
-// requests to local mock servers (e2e/provider-mock.mjs), one each, so each spec sees
-// only its own sent emails.
+// Twelve Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
+// one each for the contacts, providers, editor, campaigns, first-campaign, forms,
+// welcome, and brand specs, so their owners and data start fresh, and two for the backup
+// spec: the source and the restore target, which has its own keys. The providers,
+// editor, campaigns, first-campaign, forms, welcome, and brand Workers send their
+// provider and DNS requests to local mock servers (e2e/provider-mock.mjs), one each, so
+// each spec sees only its own sent emails.
 // The secrets are random per run unless E2E_* variables set them. Playwright loads this
 // file before it starts the workers, so they inherit the same values.
 
@@ -37,6 +37,8 @@ export const FORMS_PORT = 8804;
 export const FORMS_MOCK_PORT = 8805;
 export const WELCOME_PORT = 8806;
 export const WELCOME_MOCK_PORT = 8807;
+export const BRAND_PORT = 8808;
+export const BRAND_MOCK_PORT = 8809;
 
 // The forms Worker uses Cloudflare's documented Turnstile test keys: the site key always
 // passes, and the secret accepts the test token. Siteverify goes to the provider mock.
@@ -195,6 +197,23 @@ export default defineConfig({
     {
       command: `node e2e/serve.mjs ${WELCOME_PORT} welcome 100000 http://127.0.0.1:${WELCOME_MOCK_PORT}`,
       url: `http://localhost:${WELCOME_PORT}/api/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      // The brand mock serves the DMARC record, so the sending domain verifies.
+      command: `node e2e/provider-mock.mjs ${BRAND_MOCK_PORT} --dmarc`,
+      url: `http://127.0.0.1:${BRAND_MOCK_PORT}/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      command: `node e2e/serve.mjs ${BRAND_PORT} brand 100000 http://127.0.0.1:${BRAND_MOCK_PORT}`,
+      url: `http://localhost:${BRAND_PORT}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: "ignore",

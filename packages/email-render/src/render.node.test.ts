@@ -1,5 +1,13 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { BLOCK_TYPES, type BlockNode, defaultBlock, type EmailDocument } from "./blocks/types";
+import {
+  BLOCK_TYPES,
+  type BlockNode,
+  type BlockType,
+  defaultBlock,
+  type EmailDocument,
+} from "./blocks/types";
+import { applyBrand, DEFAULT_BRAND } from "./brand";
 import { renderBlocks, renderEmail } from "./render";
 
 // The renderer runs in the browser at save time (KTD26). These tests run it in Node.
@@ -107,5 +115,84 @@ describe("renderEmail", () => {
     );
     expect(html).not.toContain("<img");
     expect(html).toContain("height:160px");
+  });
+
+  it("renders a document without brand blocks to the same bytes as v0.3.0 (R24)", async () => {
+    // The origin block set of v0.3.0. The SHA-256 values come from the v0.3.0 renderer.
+    const origin: BlockType[] = [
+      "heading",
+      "paragraph",
+      "image",
+      "button",
+      "divider",
+      "spacer",
+      "columns",
+      "social",
+      "footer",
+      "html",
+    ];
+    const value: EmailDocument = {
+      type: "doc",
+      content: [
+        ...origin.map(defaultBlock),
+        {
+          type: "heading",
+          attrs: { level: 1 },
+          content: [
+            { type: "text", text: "Hi " },
+            { type: "mergeTag", attrs: { field: "first_name", fallback: "there" } },
+          ],
+        },
+        {
+          type: "button",
+          attrs: {
+            label: "Book",
+            href: "https://x.io/book",
+            align: "center",
+            background: "#8fb2b0",
+            color: "#141312",
+          },
+        },
+      ],
+    };
+    const { html, text } = await renderEmail(value, { preheader: "Preheader" });
+    const sha = (input: string) => createHash("sha256").update(input).digest("hex");
+    expect(sha(html)).toBe("b09c6db1ae528be3fa4aaec3063ad8689aacf23cee949af8a922335a8a684ea7");
+    expect(sha(text)).toBe("47a6222f8dae3cd633c622a1bbcf811150560c3acf99c574165f05e1add1a461");
+    // Brand substitution leaves a template without brand tokens as it is.
+    expect(applyBrand(html, { ...DEFAULT_BRAND, name: "Acme" }, "html")).toBe(html);
+    expect(applyBrand(text, { ...DEFAULT_BRAND, name: "Acme" }, "text")).toBe(text);
+  });
+
+  it("renders the brand blocks, the brand font, and brand button colors as tokens", async () => {
+    const { html, text } = await renderEmail({
+      type: "doc",
+      attrs: { font: "brand" },
+      content: [
+        defaultBlock("brandHeader"),
+        {
+          type: "button",
+          attrs: {
+            label: "Shop",
+            href: "https://x.io/shop",
+            align: "left",
+            background: "{{ brand.color_primary }}",
+            color: "{{ brand.color_accent }}",
+          },
+        },
+        { type: "brandFooter", attrs: { align: "center", networks: ["x", "github"] } },
+      ],
+    });
+    expect(html).toContain('src="{{ brand.logo_url }}"');
+    expect(html).toContain("{{ brand.name }}</p>");
+    expect(html).toContain("font-family:{{ brand.font }}");
+    expect(html).toContain("background:{{ brand.color_primary }}");
+    expect(html).toContain("color:{{ brand.color_accent }}");
+    expect(html).toContain('href="{{ brand.social.x }}"');
+    expect(html).toContain('href="{{ brand.social.github }}"');
+    expect(html).toContain("{{ brand.footer }}");
+    expect(html).toContain("{{ brand.address }}");
+    expect(html).toContain('href="{{ unsubscribe_url }}"');
+    expect(text).toContain("{{ brand.name }}");
   });
 });

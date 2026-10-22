@@ -156,7 +156,7 @@ test.describe("brand kit", () => {
     await expect(preview.getByRole("link", { name: "X", exact: true })).toBeVisible();
     await expect(preview.getByText("Acme Studio").first()).toHaveCSS("color", "rgb(17, 34, 51)");
     await page.getByRole("button", { name: "Save brand" }).click();
-    await expect(page.getByText("Brand saved.")).toBeVisible();
+    await expect(page.getByTestId("toast").getByText("Brand saved.").first()).toBeVisible();
 
     // A hostile social link is refused with the field named.
     await page.getByLabel("X", { exact: true }).fill("javascript:alert(1)");
@@ -164,7 +164,7 @@ test.describe("brand kit", () => {
     await expect(page.getByText("Each social link must be a full https URL")).toBeVisible();
     await page.getByLabel("X", { exact: true }).fill("https://x.com/acme");
     await page.getByRole("button", { name: "Save brand" }).click();
-    await expect(page.getByText("Brand saved.").first()).toBeVisible();
+    await expect(page.getByTestId("toast").getByText("Brand saved.").first()).toBeVisible();
 
     // An SVG, also one named .png, is refused by its bytes.
     const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>');
@@ -178,7 +178,7 @@ test.describe("brand kit", () => {
       .locator("#brand-logo")
       .setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: PNG });
     await expect(page.getByTestId("brand-logo")).toBeVisible();
-    await expect(page.getByText("Logo saved.")).toBeVisible();
+    await expect(page.getByTestId("toast").getByText("Logo saved.").first()).toBeVisible();
     const src = await page.getByTestId("brand-logo").getAttribute("src");
     expect(src).toMatch(/\/b\/\d+\/[0-9a-f]{64}\.png$/);
     const logo = await page.request.get(src ?? "");

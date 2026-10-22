@@ -166,7 +166,7 @@ test.describe("first campaign", () => {
     await expect(page.getByRole("heading", { name: "Brand", level: 1 })).toBeVisible();
     await page.getByLabel("Postal address").fill("1 Course Street, Springfield");
     await page.getByRole("button", { name: "Save brand" }).click();
-    await expect(page.getByText("Brand saved.")).toBeVisible();
+    await expect(page.getByTestId("toast").getByText("Brand saved.").first()).toBeVisible();
 
     // Create the campaign to the tag, confirm, and wait for sent.
     await page.getByRole("link", { name: "New campaign" }).first().click();

@@ -44,6 +44,11 @@ export interface CredentialField {
   defaultValue?: string;
   /** A regular expression (source) that a value must match. */
   pattern?: string;
+  /**
+   * The allowed values, for a field that the form shows as a choice (the Mailgun
+   * region). A value must be one of them. Give `defaultValue` too.
+   */
+  options?: readonly { value: string; label: string }[];
 }
 
 export interface ProviderCapabilities {
@@ -228,7 +233,20 @@ export interface WebhookRequest {
   body: string;
 }
 
-export type WebhookVerification = { ok: true } | { ok: false; reason: string };
+/**
+ * A value that the provider signs once per delivery, for example the Mailgun token.
+ * Envelopen records it in D1 and rejects a second request with the same value, because
+ * the signature does not cover the body.
+ */
+export interface WebhookNonce {
+  value: string;
+  /** Unix milliseconds. After this time, the timestamp check rejects the request anyway. */
+  expiresAt: number;
+}
+
+export type WebhookVerification =
+  | { ok: true; nonce?: WebhookNonce }
+  | { ok: false; reason: string };
 
 /** A provider event in Envelopen's terms. */
 export interface NormalizedEvent {
@@ -349,6 +367,12 @@ export interface ProviderAdapter {
    * secret into Envelopen. `none`: the provider has no webhook.
    */
   readonly manualSecret: "envelopen" | "provider" | "none";
+  /**
+   * For `manualSecret: "provider"`: the credential field that holds the provider's
+   * webhook secret, when the connect form asks for it (the Mailgun signing key). Manual
+   * setup then stores it too, so the owner does not paste it twice.
+   */
+  readonly webhookSecretField?: string;
 
   /** Checks the credentials with a cheap API call that sends nothing. */
   connect(credentials: Credentials, ctx: AdapterContext): Promise<ConnectionCheck>;

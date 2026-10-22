@@ -2668,6 +2668,12 @@ export interface components {
                 hint: string | null;
                 placeholder: string | null;
                 pattern: string | null;
+                /** @description The allowed values, for a field that the form shows as a choice. */
+                options: {
+                    value: string;
+                    label: string;
+                }[] | null;
+                defaultValue: string | null;
             }[];
             autoWebhook: boolean;
             eventTypes: string[];

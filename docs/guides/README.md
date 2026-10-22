@@ -40,6 +40,7 @@ Envelopen v1 uses D1 only. Postgres (Supabase or other Postgres through Hyperdri
 | [Cloudflare Email](provider-cloudflare-email.md) | Transactional only | 2026-10-19 |
 | [SMTP (Gmail, Google Workspace, custom)](provider-smtp.md) | Campaigns (Gmail and Workspace after a policy warning) | 2026-10-22 |
 | [Brevo (SMTP preset with webhooks)](provider-brevo.md) | Campaigns | 2026-10-22 |
+| [Mailgun](provider-mailgun.md) | Campaigns | 2026-10-22 |
 
 A transactional-only provider always sends system email, such as test sends. The send checklist blocks a campaign through it until the owner accepts the provider policy warning. The Gmail and Google Workspace presets of SMTP have the same gate.
 

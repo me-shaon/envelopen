@@ -8,6 +8,7 @@ import type { ProviderEventRef } from "./model";
 //   are deleted. The rollups stay, so the dashboards keep their history. Applied
 //   provider events go too, but never before 30 days, because the soft-bounce rule
 //   counts them (R44).
+// - Webhook nonces (Mailgun tokens) go when their timestamp window ends.
 // - Rescue: a provider event that no flush applied (the hand-off to the EventBuffer
 //   failed) goes to the buffer again after a few minutes.
 //
@@ -24,10 +25,14 @@ export const RETENTION_BATCH = 2000;
 /** How long the ids of committed EventBuffer flushes stay. A replay comes much sooner. */
 export const FLUSH_ID_RETENTION_MS = 7 * DAY_MS;
 
+/** Nonces that one run deletes, as a multiple of the limit of the other tables. */
+export const NONCE_LIMIT_FACTOR = 5;
+
 export interface RetentionResult {
   emailEvents: number;
   providerEvents: number;
   eventFlushes: number;
+  webhookNonces: number;
 }
 
 export async function purgeExpiredEvents(
@@ -54,10 +59,17 @@ export async function purgeExpiredEvents(
   const flushes = await sql`DELETE FROM event_flushes WHERE rowid IN (
   SELECT rowid FROM event_flushes WHERE created_at < ${now - FLUSH_ID_RETENTION_MS}
   LIMIT ${limit})`.execute(any);
+  // After its window, the signature check rejects a token anyway (migration 0025). One
+  // Mailgun event adds one nonce, so a large campaign adds many in an hour: this table
+  // gets a larger limit.
+  const nonces = await sql`DELETE FROM webhook_nonces WHERE rowid IN (
+  SELECT rowid FROM webhook_nonces WHERE expires_at < ${now}
+  LIMIT ${limit * NONCE_LIMIT_FACTOR})`.execute(any);
   return {
     emailEvents: Number(events.numAffectedRows ?? 0),
     providerEvents: Number(provider.numAffectedRows ?? 0),
     eventFlushes: Number(flushes.numAffectedRows ?? 0),
+    webhookNonces: Number(nonces.numAffectedRows ?? 0),
   };
 }
 

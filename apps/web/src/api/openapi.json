@@ -2628,6 +2628,34 @@
                     "string",
                     "null"
                   ]
+                },
+                "options": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "label"
+                    ]
+                  },
+                  "description": "The allowed values, for a field that the form shows as a choice."
+                },
+                "defaultValue": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "required": [
@@ -2637,7 +2665,9 @@
                 "required",
                 "hint",
                 "placeholder",
-                "pattern"
+                "pattern",
+                "options",
+                "defaultValue"
               ]
             }
           },

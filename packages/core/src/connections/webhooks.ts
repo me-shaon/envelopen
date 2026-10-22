@@ -3,7 +3,9 @@ import {
   getAdapter,
   isSnsUrl,
   type NormalizedEvent,
+  type ProviderAdapter,
   type ProviderUnsubscribe,
+  type WebhookNonce,
   type WebhookRequest,
 } from "@envelopen/providers";
 import { normalizeEmail } from "../contacts/email";
@@ -27,6 +29,9 @@ import { adapterContext, decryptWebhookSecret, refsOf } from "./model";
 // - An unsubscribe that the provider reports (Brevo's own link, KTD13) unsubscribes the
 //   contact from every list at once, with the source `provider:<id>`. It is not a
 //   provider event, and a replay changes nothing.
+// - A provider whose signature covers a one-time token and not the body (Mailgun) gets
+//   the token recorded in `webhook_nonces` before anything else. A second request with
+//   that token answers 401 and records nothing, also when its body differs.
 // - `admit` caps the verified requests of one connection. The hook route passes it for
 //   providers whose webhook has no signature (the Brevo bearer token).
 
@@ -94,6 +99,60 @@ export async function receiveProviderWebhook(
     return { status: 429, ...none };
   }
 
+  // A provider that signs a one-time token and not the body (Mailgun): the token is
+  // good once. The insert is the check, so two requests with one token cannot both pass.
+  const nonce = verified.nonce;
+  if (nonce && !(await claimNonce(deps, row, nonce))) return { status: 401, ...none };
+  try {
+    return await processVerified(deps, adapter, row, refs, request);
+  } catch (error) {
+    // Nothing is stored, so the provider's retry must pass. Release the token.
+    if (nonce) await releaseNonce(deps, row, nonce.value).catch(() => undefined);
+    throw error;
+  }
+}
+
+/** Records a webhook nonce. False when the connection has seen it before. */
+async function claimNonce(
+  deps: WebhookDeps,
+  row: { id: number; workspace_id: number },
+  nonce: WebhookNonce,
+): Promise<boolean> {
+  const value = nonce.value.slice(0, 200);
+  const result = await deps.db.db
+    .insertInto("webhook_nonces")
+    .values({
+      workspace_id: row.workspace_id,
+      connection_id: row.id,
+      nonce: value,
+      expires_at: nonce.expiresAt,
+    })
+    .onConflict((conflict) => conflict.columns(["connection_id", "nonce"]).doNothing())
+    .returning("nonce")
+    .executeTakeFirst();
+  return result !== undefined;
+}
+
+async function releaseNonce(
+  deps: WebhookDeps,
+  row: { id: number; workspace_id: number },
+  value: string,
+): Promise<void> {
+  await deps.db.db
+    .deleteFrom("webhook_nonces")
+    .where("workspace_id", "=", row.workspace_id)
+    .where("connection_id", "=", row.id)
+    .where("nonce", "=", value.slice(0, 200))
+    .execute();
+}
+
+async function processVerified(
+  deps: WebhookDeps,
+  adapter: ProviderAdapter,
+  row: { id: number; workspace_id: number },
+  refs: Record<string, string>,
+  request: WebhookRequest,
+): Promise<WebhookOutcome> {
   const parsed = adapter.parseEvents(request);
   let confirmedSubscription = false;
   if (parsed.confirmSubscriptionUrl) {

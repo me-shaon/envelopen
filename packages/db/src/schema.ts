@@ -608,6 +608,14 @@ interface StatCounters {
   unsubscribes: Defaulted<number>;
 }
 
+/** A one-time webhook token that the hook route has seen (migration 0025, Mailgun). */
+export interface WebhookNoncesTable {
+  workspace_id: Immutable<number>;
+  connection_id: number;
+  nonce: string;
+  expires_at: number;
+}
+
 /** An EventBuffer flush group that D1 committed, so a replay of it is skipped. */
 export interface EventFlushesTable {
   workspace_id: Immutable<number>;
@@ -1006,6 +1014,7 @@ export interface Database {
   campaign_stats_daily: CampaignStatsDailyTable;
   workspace_stats_daily: WorkspaceStatsDailyTable;
   event_flushes: EventFlushesTable;
+  webhook_nonces: WebhookNoncesTable;
   auth_user: AuthUserTable;
   auth_session: AuthSessionTable;
   auth_account: AuthAccountTable;
@@ -1092,6 +1101,8 @@ export const TABLE_SCOPE: Readonly<Record<TableName, "global" | "tenant">> = {
   // Brand kit (U13).
   brand_kits: "tenant",
   brand_logos: "tenant",
+  // Webhook nonces (U20).
+  webhook_nonces: "tenant",
 };
 
 export const TENANT_TABLES: ReadonlySet<string> = new Set(

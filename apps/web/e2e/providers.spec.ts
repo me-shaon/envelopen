@@ -38,6 +38,22 @@ async function signIn(page: Page) {
   await expect(page.getByRole("heading", { name: "Finish setting up" })).toBeVisible();
 }
 
+/** The Mailgun signing key that the spec enters, and signs its events with. */
+const MAILGUN_SIGNING_KEY = "mg-e2e-signing-key-0123456789";
+
+/** A signed Mailgun webhook body, as Mailgun posts it. */
+function mailgunBody(
+  eventData: Record<string, unknown>,
+  token: string,
+  timestampMs = Date.now(),
+): string {
+  const timestamp = String(Math.floor(timestampMs / 1000));
+  const signature = createHmac("sha256", MAILGUN_SIGNING_KEY)
+    .update(`${timestamp}${token}`)
+    .digest("hex");
+  return JSON.stringify({ signature: { timestamp, token, signature }, "event-data": eventData });
+}
+
 /** A Svix-signed Resend webhook, as Resend sends it. */
 function svixHeaders(id: string, body: string): Record<string, string> {
   const timestamp = String(Math.floor(Date.now() / 1000));
@@ -75,7 +91,7 @@ test.describe("providers", () => {
     await step.getByRole("link", { name: "Connect a provider", exact: true }).click();
 
     await expect(page.getByText("No provider connected")).toBeVisible();
-    await expect(page.getByTestId("provider-card")).toHaveCount(6);
+    await expect(page.getByTestId("provider-card")).toHaveCount(7);
     await page.getByRole("button", { name: "Connect Resend" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("API key").fill("re_e2e_key_123456");
@@ -210,5 +226,60 @@ test.describe("providers", () => {
       "data-status",
       "done",
     );
+  });
+
+  test("connects Mailgun in the EU region and verifies its signed events", async ({
+    page,
+    request,
+  }) => {
+    await signIn(page);
+    await page.goto("/connections");
+    await page.getByRole("button", { name: "Connect Mailgun" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("API key").fill("mg-e2e-api-key-0123456789");
+    await dialog.getByLabel("Sending domain").fill("mail.example.com");
+    await expect(dialog.getByLabel("Region")).toHaveValue("us");
+    await dialog.getByLabel("Region").selectOption("eu");
+    await dialog.getByLabel("HTTP webhook signing key").fill(MAILGUN_SIGNING_KEY);
+    await expectNoSeriousViolations(page);
+    await dialog.getByRole("button", { name: "Connect" }).click();
+
+    const card = page.locator('[data-testid="connection-card"][data-provider="mailgun"]');
+    await expect(card).toContainText("Connected");
+    await expect(card).toContainText("Envelopen created the webhook");
+
+    // Every Mailgun request went to the EU API.
+    const calls = (await (await request.get(`${MOCK}/mailgun-calls`)).json()) as {
+      method: string;
+      host: string;
+      path: string;
+      body: string;
+    }[];
+    expect(calls.map((call) => `${call.method} ${call.host}${call.path}`)).toEqual([
+      "GET api.eu.mailgun.net/v3/domains/mail.example.com",
+      "POST api.eu.mailgun.net/v4/domains/mail.example.com/webhooks",
+    ]);
+    expect(new URLSearchParams(calls[1]?.body).get("url")).toBe(`${BASE}/hooks/mailgun/1/3`);
+
+    const hook = `${BASE}/hooks/mailgun/1/3`;
+    const headers = { "content-type": "application/json" };
+    const failed = {
+      id: "e2e-failed-1",
+      event: "failed",
+      severity: "permanent",
+      reason: "bounce",
+      timestamp: Date.now() / 1000,
+      recipient: "gone@example.org",
+      message: { headers: { "message-id": "e2e-1@mail.example.com" } },
+    };
+    const body = mailgunBody(failed, "e2etokenfirst0001");
+    const first = await request.post(hook, { headers, data: body });
+    expect(first.status()).toBe(200);
+    expect(await first.json()).toEqual({ received: 1, stored: 1 });
+    // The same token again is a replay.
+    expect((await request.post(hook, { headers, data: body })).status()).toBe(401);
+    // A timestamp older than 5 minutes is refused.
+    const stale = mailgunBody(failed, "e2etokenstale0001", Date.now() - 6 * 60 * 1000);
+    expect((await request.post(hook, { headers, data: stale })).status()).toBe(401);
   });
 });

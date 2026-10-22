@@ -60,6 +60,13 @@ const ProviderSchema = z
         hint: z.string().nullable(),
         placeholder: z.string().nullable(),
         pattern: z.string().nullable(),
+        options: z
+          .array(z.object({ value: z.string(), label: z.string() }))
+          .nullable()
+          .meta({
+            description: "The allowed values, for a field that the form shows as a choice.",
+          }),
+        defaultValue: z.string().nullable(),
       }),
     ),
     autoWebhook: z.boolean(),
@@ -112,6 +119,8 @@ function describeProvider(adapter: ProviderAdapter): z.input<typeof ProviderSche
       hint: field.hint ?? null,
       placeholder: field.placeholder ?? null,
       pattern: field.pattern ?? null,
+      options: field.options ? field.options.map((option) => ({ ...option })) : null,
+      defaultValue: field.defaultValue ?? null,
     })),
     autoWebhook: adapter.capabilities.autoWebhook,
     eventTypes: [...adapter.capabilities.eventTypes],
@@ -232,6 +241,13 @@ export function validateCredentials(
       else if (field.defaultValue) credentials[field.name] = field.defaultValue;
       continue;
     }
+    if (field.options && !field.options.some((option) => option.value === value)) {
+      problems.push({
+        field: field.name,
+        message: `${field.label} must be one of: ${field.options.map((option) => option.value).join(", ")}.`,
+      });
+      continue;
+    }
     if (field.pattern && !new RegExp(field.pattern).test(value)) {
       problems.push({ field: field.name, message: `${field.label} does not look right.` });
       continue;
@@ -327,12 +343,21 @@ async function configureEvents(
       reason = `${adapter.name} did not answer the webhook setup.`;
     }
   }
+  // The provider's own secret, when the connect form asked for it (Mailgun's signing key).
+  const providerSecret = adapter.webhookSecretField
+    ? credentials[adapter.webhookSecretField]?.trim()
+    : undefined;
+  const manualSecret =
+    adapter.manualSecret === "envelopen"
+      ? generated
+      : adapter.manualSecret === "provider" && providerSecret
+        ? providerSecret
+        : null;
   return {
     eventsSetup: "manual",
-    secretEncrypted:
-      adapter.manualSecret === "envelopen"
-        ? await encryptWebhookSecret(ctx.services, workspaceId, generated, row.id)
-        : null,
+    secretEncrypted: manualSecret
+      ? await encryptWebhookSecret(ctx.services, workspaceId, manualSecret, row.id)
+      : null,
     refs: withBase,
     reason,
   };

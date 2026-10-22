@@ -1,4 +1,5 @@
 import { cloudflareAdapter } from "./cloudflare";
+import { mailgunAdapter } from "./mailgun";
 import { postmarkAdapter } from "./postmark";
 import { resendAdapter } from "./resend";
 import { sesAdapter } from "./ses";
@@ -13,6 +14,20 @@ export {
   verifyBrevoWebhook,
 } from "./brevo/webhooks";
 export { cloudflareAdapter } from "./cloudflare";
+export {
+  classifyMailgunError,
+  MAILGUN_REGIONS,
+  type MailgunRegion,
+  mailgunAdapter,
+  mailgunBaseUrl,
+} from "./mailgun";
+export {
+  MAILGUN_WEBHOOK_EVENTS,
+  MAILGUN_WEBHOOK_WINDOW_MS,
+  mailgunSignature,
+  parseMailgunEvents,
+  verifyMailgunWebhook,
+} from "./mailgun/webhooks";
 export { postmarkAdapter, postmarkAuthorization } from "./postmark";
 export { resendAdapter } from "./resend";
 export { svixSign, verifySvix } from "./resend/svix-verify";
@@ -49,6 +64,7 @@ export const ADAPTERS: readonly ProviderAdapter[] = [
   toSendAdapter,
   cloudflareAdapter,
   smtpAdapter,
+  mailgunAdapter,
 ];
 
 const BY_ID = new Map(ADAPTERS.map((adapter) => [adapter.id, adapter]));

@@ -215,6 +215,7 @@ const identity: Upgrade = (_table, row) => row;
  * - 0023 adds `provider_connections.daily_cap`. An older connection has no cap.
  * - 0024 adds the sending windows of campaigns and batches, and `signups.deferred_origin`.
  *   An older campaign has no windows, and no older confirmation email waits.
+ * - 0025 adds only the webhook nonces, which are not in a backup.
  */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
@@ -236,6 +237,7 @@ export const UPGRADES: Readonly<Record<number, Upgrade>> = {
     if (table === "signups") return { deferred_origin: null, ...row };
     return row;
   },
+  25: identity,
 };
 
 /** Returns why a backup of `schemaVersion` cannot be restored here, or null. */

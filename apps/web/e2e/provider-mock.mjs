@@ -30,6 +30,8 @@ const ZONE = {
 const TYPE_CODES = { A: 1, CNAME: 5, MX: 15, TXT: 16 };
 
 const sent = [];
+/** The requests that reached the mock Mailgun (US and EU), for the spec to inspect. */
+const mailgunCalls = [];
 /** The Turnstile siteverify calls, for the spec to inspect. */
 const siteverify = [];
 /** The token that Cloudflare's always-passing test widget gives. */
@@ -38,6 +40,46 @@ const TEST_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
 function json(res, status, body) {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(body));
+}
+
+/** Mailgun answers for one region's host, in the shapes of fixtures/mailgun.ts. */
+function mailgunRoutes(host) {
+  const record = (req, body) => {
+    const url = new URL(req.url, "http://mock");
+    mailgunCalls.push({
+      method: req.method,
+      host,
+      path: url.pathname.slice(host.length + 1),
+      query: url.search,
+      body,
+    });
+  };
+  return {
+    [`GET /${host}/v3/domains/${DOMAIN}`]: (req, res, body) => {
+      record(req, body);
+      json(res, 200, {
+        domain: { name: DOMAIN, state: "active", type: "custom" },
+        receiving_dns_records: [],
+        sending_dns_records: [],
+      });
+    },
+    [`POST /${host}/v4/domains/${DOMAIN}/webhooks`]: (req, res, body) => {
+      record(req, body);
+      const url = new URLSearchParams(body).get("url");
+      json(res, 200, { webhooks: { delivered: { urls: [url] }, permanent_fail: { urls: [url] } } });
+    },
+    [`DELETE /${host}/v4/domains/${DOMAIN}/webhooks`]: (req, res, body) => {
+      record(req, body);
+      json(res, 200, { webhooks: {} });
+    },
+    [`POST /${host}/v3/${DOMAIN}/messages`]: (req, res, body) => {
+      record(req, body);
+      json(res, 200, {
+        id: `<e2e-${mailgunCalls.length}@${DOMAIN}>`,
+        message: "Queued. Thank you.",
+      });
+    },
+  };
 }
 
 const routes = {
@@ -110,6 +152,9 @@ const routes = {
       metadata: { result_with_testing_key: true },
     });
   },
+  "GET /mailgun-calls": (_req, res) => json(res, 200, mailgunCalls),
+  ...mailgunRoutes("api.mailgun.net"),
+  ...mailgunRoutes("api.eu.mailgun.net"),
   "GET /api.tosend.com/v2/info": (_req, res) =>
     json(res, 200, {
       account: { id: "acc_1", status: "active", credit_balance: 9800 },

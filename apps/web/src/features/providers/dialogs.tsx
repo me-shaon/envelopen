@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@/components/
 import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Pill } from "@/components/ui/pill";
 import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
@@ -16,7 +17,8 @@ import { errorText } from "@/features/contacts/shared";
 import { PresetFields, PresetPicker, presetPayload } from "./presets";
 import { type Connection, type ConnectionDetail, CopyValue, Note, type Provider } from "./shared";
 
-// The connect flow (one field where the provider allows, KTD13; presets for SMTP, U18),
+// The connect flow (one field where the provider allows, KTD13; presets for SMTP, U18;
+// a choice field such as the Mailgun region, U20),
 // the manual webhook steps with the token rotation (Brevo, KTD13), and the policy
 // warning of a transactional-only provider (R62) or a Gmail preset (R29).
 
@@ -115,17 +117,33 @@ export function ConnectDialog({
                 label={field.required ? field.label : `${field.label} (optional)`}
                 hint={field.hint ?? undefined}
               >
-                <Input
-                  id={id}
-                  name={field.name}
-                  type={field.secret ? "password" : "text"}
-                  required={field.required}
-                  placeholder={field.placeholder ?? undefined}
-                  pattern={field.pattern ?? undefined}
-                  aria-describedby={field.hint ? `${id}-hint` : undefined}
-                  className={field.secret ? "font-mono text-[12.5px]" : undefined}
-                  spellCheck={false}
-                />
+                {field.options ? (
+                  <NativeSelect
+                    id={id}
+                    name={field.name}
+                    required={field.required}
+                    defaultValue={field.defaultValue ?? field.options[0]?.value}
+                    aria-describedby={field.hint ? `${id}-hint` : undefined}
+                  >
+                    {field.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                ) : (
+                  <Input
+                    id={id}
+                    name={field.name}
+                    type={field.secret ? "password" : "text"}
+                    required={field.required}
+                    placeholder={field.placeholder ?? undefined}
+                    pattern={field.pattern ?? undefined}
+                    aria-describedby={field.hint ? `${id}-hint` : undefined}
+                    className={field.secret ? "font-mono text-[12.5px]" : undefined}
+                    spellCheck={false}
+                  />
+                )}
               </Field>
             );
           })}

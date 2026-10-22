@@ -3,6 +3,11 @@ import { env } from "cloudflare:workers";
 import { createCredentialCipher, createEmailHasher, type Services } from "@envelopen/core";
 import { createDb } from "@envelopen/db";
 import { svixSign, toSendSignature } from "@envelopen/providers";
+import {
+  mailgunEventData,
+  mailgunFixtures,
+  mailgunHook,
+} from "@envelopen/providers/conformance/fixtures/mailgun";
 import { resendFixtures } from "@envelopen/providers/conformance/fixtures/resend";
 import { brevoEvent, brevoFixtures } from "@envelopen/providers/conformance/fixtures/smtp";
 import { toSendFixtures } from "@envelopen/providers/conformance/fixtures/tosend";
@@ -26,7 +31,7 @@ async function services(): Promise<Partial<Services>> {
   };
 }
 
-async function connection(provider: "resend" | "tosend" | "smtp", secret: string) {
+async function connection(provider: "resend" | "tosend" | "smtp" | "mailgun", secret: string) {
   const workspaceId = await createWorkspace(`Hooks ${provider}`);
   const deps = await services();
   const cipher = deps.credentials;
@@ -298,5 +303,108 @@ describe("Brevo webhooks of SMTP connections (KTD13)", () => {
       .where("workspace_id", "=", workspaceId)
       .execute();
     expect(rows).toEqual([]);
+  });
+});
+
+describe("Mailgun webhooks (U20, KTD15)", () => {
+  async function hook(
+    data: Record<string, unknown>,
+    options: { token?: string; timestampMs?: number } = {},
+  ) {
+    const request = await mailgunHook(data, { timestampMs: Date.now(), ...options });
+    return request.body;
+  }
+
+  async function count(table: "provider_events" | "suppressions", workspaceId: number) {
+    const rows = await createDb(env)
+      .db.selectFrom(table)
+      .select("workspace_id")
+      .where("workspace_id", "=", workspaceId)
+      .execute();
+    return rows.length;
+  }
+
+  it("stores a permanent failure and suppresses the address", async () => {
+    const { workspaceId, connectionId, deps } = await connection(
+      "mailgun",
+      mailgunFixtures.signingKey,
+    );
+    const body = await hook(
+      mailgunEventData("failed", { severity: "permanent", reason: "bounce" }, "gone@example.org"),
+      { token: "tokenpermanent1" },
+    );
+    const response = await post(`mailgun/${workspaceId}/${connectionId}`, body, {}, deps);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ received: 1, stored: 1 });
+    const hashEmail = deps.hashEmail;
+    if (!hashEmail) throw new Error("No hasher.");
+    const suppression = await createDb(env)
+      .db.selectFrom("suppressions")
+      .select(["reason", "source"])
+      .where("workspace_id", "=", workspaceId)
+      .where("email_hash", "=", await hashEmail("gone@example.org"))
+      .executeTakeFirst();
+    expect(suppression).toEqual({ reason: "hard_bounce", source: "provider:mailgun" });
+  });
+
+  it("rejects a reused token, also with another body, and records nothing for it", async () => {
+    const { workspaceId, connectionId, deps } = await connection(
+      "mailgun",
+      mailgunFixtures.signingKey,
+    );
+    const path = `mailgun/${workspaceId}/${connectionId}`;
+    const body = await hook(mailgunEventData("delivered"), { token: "tokenreused1" });
+    expect((await post(path, body, {}, deps)).status).toBe(200);
+    // The same request again: the token was used.
+    expect((await post(path, body, {}, deps)).status).toBe(401);
+    // A captured signature with a forged event: the signature covers only the token.
+    const forged = JSON.parse(body);
+    forged["event-data"] = mailgunEventData(
+      "failed",
+      { severity: "permanent", reason: "bounce" },
+      "victim@example.org",
+    );
+    expect((await post(path, JSON.stringify(forged), {}, deps)).status).toBe(401);
+    expect(await count("provider_events", workspaceId)).toBe(1);
+    expect(await count("suppressions", workspaceId)).toBe(0);
+  });
+
+  it("stores a replayed event once when Mailgun sends it with a new token", async () => {
+    const { workspaceId, connectionId, deps } = await connection(
+      "mailgun",
+      mailgunFixtures.signingKey,
+    );
+    const path = `mailgun/${workspaceId}/${connectionId}`;
+    const data = mailgunEventData("delivered");
+    const first = await post(path, await hook(data, { token: "tokenfirst1" }), {}, deps);
+    expect(await first.json()).toEqual({ received: 1, stored: 1 });
+    const again = await post(path, await hook(data, { token: "tokensecond1" }), {}, deps);
+    expect(await again.json()).toEqual({ received: 1, stored: 0 });
+  });
+
+  it("rejects an old timestamp and a wrong signing key", async () => {
+    const { workspaceId, connectionId, deps } = await connection(
+      "mailgun",
+      mailgunFixtures.signingKey,
+    );
+    const path = `mailgun/${workspaceId}/${connectionId}`;
+    const old = await hook(mailgunEventData("delivered"), {
+      token: "tokenold1",
+      timestampMs: Date.now() - 6 * 60 * 1000,
+    });
+    expect((await post(path, old, {}, deps)).status).toBe(401);
+    const wrong = await mailgunHook(mailgunEventData("delivered"), {
+      key: "not-the-key",
+      token: "tokenwrong1",
+      timestampMs: Date.now(),
+    });
+    expect((await post(path, wrong.body, {}, deps)).status).toBe(401);
+    expect(await count("provider_events", workspaceId)).toBe(0);
+    const nonces = await createDb(env)
+      .db.selectFrom("webhook_nonces")
+      .select("nonce")
+      .where("workspace_id", "=", workspaceId)
+      .execute();
+    expect(nonces).toEqual([]);
   });
 });

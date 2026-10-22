@@ -294,7 +294,7 @@ export function ConnectionsPage() {
           <SectionHeader
             id="providers-title"
             title="Add a provider"
-            aside="SES, Resend, Postmark, and SMTP send campaigns"
+            aside="SES, Resend, Postmark, Mailgun, and SMTP send campaigns"
           />
           {providers.isError ? (
             <p role="alert" className="m-0 text-[13px] text-muted-foreground">

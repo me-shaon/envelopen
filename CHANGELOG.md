@@ -21,6 +21,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 - Brevo webhooks for bounces, complaints, blocked messages, and unsubscribes, with a rotatable bearer token.
 - Guides for SMTP and Brevo.
 - Daily caps per connection: a campaign larger than the cap sends over several 24-hour days, and the confirm step shows the sending days and the expected end date.
+- A Mailgun provider connection for US and EU accounts, with signed webhooks for deliveries, bounces, complaints, and unsubscribes.
 
 ## [0.4.0] - 2026-10-22
 

@@ -31,11 +31,12 @@ An adapter is a plain object. It holds data that describes the provider, and fun
 | `name` | The provider name that the owner sees. |
 | `policy` | `campaign` when the provider terms allow bulk marketing email. Otherwise `transactional-only`. |
 | `policyWarning` | Required for `transactional-only`. Not allowed for `campaign`. The owner must accept this text before a campaign. |
-| `credentialFields` | The connect form. Use one field when the provider allows it. Mark a key or token as `secret: true`. At least one field is `required`. Use `apiKey` for a single API key, and `apiToken` for a bearer token. `pattern` is a regular expression source. Anchor it with `^` and `$`. |
+| `credentialFields` | The connect form. Use one field when the provider allows it. Mark a key or token as `secret: true`. At least one field is `required`. Use `apiKey` for a single API key, and `apiToken` for a bearer token. `pattern` is a regular expression source. Anchor it with `^` and `$`. For a choice, such as a region, set `options` (value and label pairs) and `defaultValue`. The form then shows a select, and Envelopen accepts only a listed value. |
 | `capabilities` | What the provider can do. See [Capabilities](#capabilities). |
 | `facts` | Rate, plan needs, notes, and the documentation URL. Set `requiresWorkersPaid` to true only when the provider cannot work on Workers Free, for example when it needs a paid binding. Each note is one full sentence that ends with a period. Notes tell the owner about rate limits, quotas, missing events, and costs. `docsUrl` starts with `https://`. |
 | `dns` | The SPF include and the DKIM selectors for the domain checks. Use `null` and `[]` when they do not apply. |
 | `manualSecret` | Who makes the webhook secret in manual setup. `envelopen`: the owner copies the Envelopen secret into the provider. `provider`: the owner pastes the provider secret into Envelopen. `none`: the provider has no webhook. |
+| `webhookSecretField` | Optional, for `provider`. The credential field that holds the provider's webhook secret, when the connect form asks for it (Mailgun asks for its signing key). Manual setup then stores the secret too, so the owner does not paste it twice. |
 
 ### Functions
 
@@ -122,7 +123,7 @@ The kit skips a check that a capability turns off. For example, it skips the ide
 2. Create `packages/providers/src/<id>/index.ts`.
 3. Write `connect` with the cheapest read call of the API.
 4. Write `sendBatch`. Map each provider error to an outcome and a reason.
-5. Write `verifyWebhook`. Compare signatures with `timingSafeEqual` from `src/shared/encoding.ts`. If the signature has a timestamp, reject a timestamp outside the window in both directions (past and future).
+5. Write `verifyWebhook`. Compare signatures with `timingSafeEqual` from `src/shared/encoding.ts`. If the signature has a timestamp, reject a timestamp outside the window in both directions (past and future). If the signature covers a one-time token and not the body (Mailgun), return the token as `nonce` with the end of the window as `expiresAt`. The hook route records it in D1 and rejects a second request with the same token.
 6. Write `parseEvents`. Skip event types that are not in `ProviderEventType`. Do not return an error for them.
 7. Give each event a stable `eventId`, so a repeated delivery has the same id. Use the provider's event id when it has one.
 8. Put a short provider detail in `detail`, for example the bounce subtype. Leave it out when the provider gives none.

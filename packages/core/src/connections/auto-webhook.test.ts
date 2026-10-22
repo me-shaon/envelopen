@@ -1,5 +1,11 @@
 import type { DbConnection } from "@envelopen/db";
 import { postmarkAuthorization, svixSign } from "@envelopen/providers";
+import {
+  MAILGUN_EU,
+  mailgunEventData,
+  mailgunFixtures,
+  mailgunHook,
+} from "@envelopen/providers/conformance/fixtures/mailgun";
 import { postmarkFixtures } from "@envelopen/providers/conformance/fixtures/postmark";
 import { resendFixtures } from "@envelopen/providers/conformance/fixtures/resend";
 import { sesFixtures, TOPIC_ARN } from "@envelopen/providers/conformance/fixtures/ses";
@@ -581,5 +587,87 @@ describe("workspace isolation and scopes", () => {
       .where("id", "=", workspaceId)
       .executeTakeFirstOrThrow();
     expect(workspace.sending_connection_id).toBeNull();
+  });
+});
+
+describe("Mailgun connect (U20, KTD15)", () => {
+  const credentials = {
+    apiKey: mailgunFixtures.credentials.apiKey,
+    domain: "mail.example.com",
+    region: "eu",
+    webhookSigningKey: mailgunFixtures.signingKey,
+  };
+
+  it("checks the EU API, creates the webhook, and verifies events with the signing key", async () => {
+    const setup = await owner("Mailgun");
+    const { mock, services } = await servicesWith([
+      mailgunFixtures.domainOk(MAILGUN_EU),
+      mailgunFixtures.webhookCreated(MAILGUN_EU),
+    ]);
+    const created = await runOperation(
+      setup.principal,
+      connectionsCreate,
+      { provider: "mailgun", credentials },
+      { db: setup.db, services },
+    );
+    expect(created).toMatchObject({ provider: "mailgun", status: "active", eventsSetup: "auto" });
+    expect(mock.calls.map((call) => new URL(call.url).host)).toEqual([
+      "api.eu.mailgun.net",
+      "api.eu.mailgun.net",
+    ]);
+    const request = await mailgunHook(mailgunEventData("complained"), { timestampMs: Date.now() });
+    const target = {
+      provider: "mailgun",
+      workspaceId: setup.workspaceId,
+      connectionId: created.id,
+    };
+    const outcome = await receiveProviderWebhook({ db: setup.db, services }, target, request);
+    expect(outcome).toMatchObject({ status: 200, stored: 1 });
+    const replay = await receiveProviderWebhook({ db: setup.db, services }, target, request);
+    expect(replay).toMatchObject({ status: 401, stored: 0 });
+  });
+
+  it("keeps the signing key when the webhook setup falls back to manual steps", async () => {
+    const setup = await owner("Mailgun manual");
+    const { services } = await servicesWith([
+      mailgunFixtures.domainOk(MAILGUN_EU),
+      {
+        label: "webhook create refused",
+        method: "POST",
+        url: `${MAILGUN_EU}/v4/domains/mail.example.com/webhooks`,
+        response: { status: 400, body: { message: "Webhook already exists" } },
+      },
+    ]);
+    const created = await runOperation(
+      setup.principal,
+      connectionsCreate,
+      { provider: "mailgun", credentials },
+      { db: setup.db, services },
+    );
+    expect(created).toMatchObject({
+      eventsSetup: "manual",
+      webhook: { secretSource: "provider", needsSecret: false, secret: null },
+    });
+    const request = await mailgunHook(mailgunEventData("delivered"), { timestampMs: Date.now() });
+    const outcome = await receiveProviderWebhook(
+      { db: setup.db, services },
+      { provider: "mailgun", workspaceId: setup.workspaceId, connectionId: created.id },
+      request,
+    );
+    expect(outcome).toMatchObject({ status: 200, stored: 1 });
+  });
+
+  it("refuses a region that is not US or EU before any provider call", async () => {
+    const setup = await owner("Mailgun region");
+    const { mock, services } = await servicesWith([]);
+    await expect(
+      runOperation(
+        setup.principal,
+        connectionsCreate,
+        { provider: "mailgun", credentials: { ...credentials, region: "ap" } },
+        { db: setup.db, services },
+      ),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect(mock.calls).toEqual([]);
   });
 });

@@ -21,6 +21,8 @@ import { createServices } from "../services";
 // Answers:
 // - 200 for a verified request, also when it has no event that Envelopen keeps.
 // - 401 for a failed verification, and 404 for an unknown connection. Both record nothing.
+//   Mailgun signs a one-time token, not the body, so a reused token is a failed
+//   verification too (`webhook_nonces` in D1, KTD15).
 // - 413 for a body above 256 KB. Provider events are a few KB.
 // - 429 when a connection whose webhook has no signature is over its cap.
 //

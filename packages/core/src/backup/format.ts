@@ -28,7 +28,7 @@ export const BACKUP_FORMAT_VERSION = 1;
  * refuses a newer backup, and upgrades an older one row by row (restore-plan.ts). A
  * test keeps it equal to the highest migration file.
  */
-export const BACKUP_SCHEMA_VERSION = 24;
+export const BACKUP_SCHEMA_VERSION = 25;
 /** Rows per chunk. A chunk of 1,000 rows encrypts in a few milliseconds of CPU. */
 export const CHUNK_ROWS = 1_000;
 /**
@@ -45,6 +45,7 @@ export const CHUNK_ROWS_BY_TABLE: Readonly<Partial<Record<TableName, number>>> =
  * - backup_runs: the history of this deployment's backups, not data to restore.
  * - key_derivations: passphrase derivations in progress, with sealed secrets.
  * - restore_runs, restore_tables: the restores into this deployment (U5).
+ * - webhook_nonces: one-time webhook tokens that expire within minutes (U20).
  */
 export const BACKUP_EXCLUDED_TABLES: Readonly<Partial<Record<TableName, string>>> = {
   auth_session: "Session tokens. A restore signs every user out.",
@@ -52,6 +53,7 @@ export const BACKUP_EXCLUDED_TABLES: Readonly<Partial<Record<TableName, string>>
   key_derivations: "Short-lived passphrase derivations with sealed secrets.",
   restore_runs: "The restore history of the source deployment.",
   restore_tables: "The restore progress of the source deployment.",
+  webhook_nonces: "One-time webhook tokens that expire within minutes.",
 };
 
 /** The tables in a backup, in TABLE_SCOPE order. */

@@ -450,6 +450,17 @@ async function seed() {
     emails: sendable.slice(20, 23).map((contact) => contact.email),
   });
 
+  step("Setting the brand kit");
+  await api("PUT", "/api/brand", {
+    name: "Acme Demo",
+    colorPrimary: "#4b3f8f",
+    colorAccent: "#e39a78",
+    font: "system",
+    footer: "You get this email because you joined the Acme Demo list.",
+    address: "Acme Demo, 1 Example Street, Example City",
+    social: { website: "https://example.com" },
+  });
+
   step("Creating two templates and sending a test to the owner");
   const newsletter = await api("POST", "/api/templates", TEMPLATES.newsletter);
   const announcement = await api("POST", "/api/templates", TEMPLATES.announcement);

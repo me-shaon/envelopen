@@ -100,10 +100,13 @@ Envelopen skips addresses that are unsubscribed or suppressed. See [Import conta
 
 ### 4. Create a template and send a test
 
+First, set up your brand kit in **Brand**. The gallery templates use its logo, colors, font, and footer. You cannot confirm a campaign until the brand kit has a postal address. See [Brand and templates](docs/guides/brand-and-templates.md).
+
 1. Open **Templates**, and select **New template**.
-2. Type a name and a subject, and write the email with blocks.
-3. Select **Save**.
-4. Select **Send test**, and select **Send test** in the dialog.
+2. Select a template from the gallery, or select **Blank**.
+3. Type a name and a subject, and change the blocks.
+4. Select **Save**.
+5. Select **Send test**, and select **Send test** in the dialog.
 
 Check the test email in your inbox. See [Send a test email](docs/guides/test-send.md) for the unsubscribe header check.
 
@@ -218,6 +221,7 @@ All guides are in [docs/guides](docs/guides/README.md):
 - [Import contacts](docs/guides/import-contacts.md)
 - [Signup forms](docs/guides/signup-forms.md)
 - [Welcome series](docs/guides/welcome-series.md)
+- [Brand and templates](docs/guides/brand-and-templates.md)
 - [Send a test email](docs/guides/test-send.md)
 - [Connect an MCP client](docs/guides/mcp.md)
 - [Update Envelopen](docs/guides/updating.md)

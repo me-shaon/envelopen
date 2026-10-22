@@ -14,6 +14,7 @@ Vendors change their limits and prices often. Each guide shows the date of the l
 | [Import contacts](import-contacts.md) | CSV files, column mapping, choice fields, consent basis, tags, lists, and export. |
 | [Signup forms](signup-forms.md) | Turnstile, the hosted page, the iframe embed, double opt-in, consent records, custom fields, and the preference page. |
 | [Welcome series](welcome-series.md) | Steps and waits, what starts and stops a series, test sends, and the reserved D1 budget. |
+| [Brand and templates](brand-and-templates.md) | The brand kit, brand tokens, the template gallery, the block builder, and saved blocks. |
 | [Send a test email](test-send.md) | Test addresses, test sends, and the unsubscribe headers in Gmail. |
 | [Connect an MCP client](mcp.md) | API keys, scope presets, and the confirm flow for agents. |
 | [Update Envelopen](updating.md) | The update workflow, update modes, manual updates, backups, and rollback. |

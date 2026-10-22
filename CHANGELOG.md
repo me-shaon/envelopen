@@ -12,15 +12,41 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
 ### Added
 
-- A brand kit (name, logo, colors, font, footer, postal address, and social links) that templates and drafts use and confirmed campaigns keep; a campaign needs the postal address before confirm.
-- A drag-and-drop builder in the template editor: a block library with ready sections, drag handles, sections with 1 to 3 columns, keyboard move up and move down, and a desktop and mobile canvas.
-- A template gallery with ten starter templates that use the brand kit, with live previews when you create a template; button text on a brand color is dark or white for a contrast of 4.5:1 or more.
+- A brand kit in **Brand**: name, logo, colors, font, footer, postal address, and social links.
+- Brand tokens such as `{{ brand.color_primary }}` for templates, with brand header and brand footer blocks.
+- A template gallery with ten starter templates that use the brand kit, with live previews.
+- A drag-and-drop block library with ready sections and saved blocks.
+- Sections with 1 to 3 columns, and a panel block with a background color.
+- Button text on a brand color that is white or dark, with a contrast of 4.5:1 or more.
+- Keyboard moves for blocks: Alt+Shift+Up and Alt+Shift+Down.
+- A desktop and mobile canvas, and a block library sheet on narrow screens.
+- A guide for the brand kit and templates.
+
+### Changed
+
+- Drafts, previews, test sends, and welcome emails use the live brand kit.
+- A confirmed campaign keeps a snapshot of the brand kit.
+- The send checklist needs a postal address in the brand kit.
+- **New template** opens the gallery. The welcome series starter email is the gallery welcome email.
+- Backups include the brand kit and the logo files.
+
+### Fixed
+
+- The demo seeds a brand kit with a postal address, so its campaigns can be confirmed.
+
+### Security
+
+- Logos must be PNG, JPEG, GIF, or WebP by their content, up to 1 MB. SVG is refused.
+- The logo route sends the stored type with `nosniff` and a sandbox Content-Security-Policy.
+- Brand values are checked and escaped before they go into an email.
 
 ### Manual steps
 
-- Add a postal address in Brand before you confirm a campaign.
+- Add a postal address in **Brand** before you confirm a campaign.
 
 ## [0.3.0] - 2026-10-21
 
@@ -113,7 +139,8 @@ The first release of Envelopen: self-hosted email campaigns on Cloudflare Worker
 - Erase also removes the contact from stored batch data.
 - Unsubscribe links use the tracking domain only after it is verified.
 
-[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/me-shaon/envelopen/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/me-shaon/envelopen/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/me-shaon/envelopen/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/me-shaon/envelopen/releases/tag/v0.1.0

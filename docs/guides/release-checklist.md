@@ -243,6 +243,45 @@ Expected result: on Free, welcome emails wait past 70% of the daily D1 writes, a
 7. After 00:00 UTC, check that the welcome email arrives.
 8. Select **Workers Paid**, and select **Save plan**. Check that the usage view shows the plan as Paid. Set the plan back to **Workers Free**.
 
+## 19. Gallery templates in real mail apps (v0.4)
+
+Expected result: each template keeps its layout, logo, colors, and readable button labels in each mail app, with a dark brand and with a light brand.
+
+1. In **Brand**, upload a PNG logo. Set **Primary color** to a dark color (for example `#1f2a44`) and **Accent color** to a light color (for example `#f4ead5`). Add a **Postal address** and two **Social links**.
+2. Create a template from each of these gallery templates: **Newsletter**, **Product update**, **Event invite**, and **Plain letter**.
+3. Send a test of each template to your Gmail address, your Outlook address, and an address that Apple Mail reads.
+4. Open each email in Gmail on the web, in the Gmail app on a phone, in Outlook (desktop and web), and in Apple Mail on a Mac and an iPhone.
+5. Check the logo, the brand colors, the font, the panel, the footer with the postal address, and the social links.
+6. Check that each button label is easy to read on its button.
+7. On a phone, check that the columns show one below the other. Record the indent of 12 px on stacked columns (a known issue).
+8. Set **Primary color** to a light color (for example `#ffd84d`) and **Accent color** to a dark color (for example `#24323f`). Select **Save brand**.
+9. Do steps 3 to 6 again. Check that button labels on the light color are dark.
+10. Record each mail app and each problem, with a screenshot.
+
+## 20. Logo response headers (v0.4)
+
+Expected result: the logo URL returns the image with its stored type, `nosniff`, and a long cache time.
+
+1. In **Brand**, copy the address of the current logo image.
+2. Run `curl -sI "<logo-url>"`.
+3. Check that `Content-Type` is the image type of the upload, for example `image/png`.
+4. Check that the response has `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`, and `Cache-Control: public, max-age=31536000, immutable`.
+5. Change one character of the hash in the URL, and run `curl -sI` again. Check that the response is 404 with `nosniff`.
+6. Select **Replace logo**, and upload another file. Check that the old URL still returns the old image.
+
+## 21. Confirm without a postal address (v0.4)
+
+Expected result: the send checklist blocks the confirm until the brand kit has a postal address.
+
+1. In **Brand**, clear **Postal address**, and select **Save brand**.
+2. Create a draft campaign to a list that holds only your own address.
+3. Select **Review and send**, then **Check and continue**.
+4. Check that the check **Postal address** fails, and that the dialog does not let you send.
+5. Select **Add the postal address in Brand**. Check that the **Brand** page opens.
+6. Type the postal address, and select **Save brand**.
+7. Check the send again. Check that **Postal address** passes and that the confirm works.
+8. After the confirm, change the postal address in **Brand**. Check that the sent email shows the address from the time of confirm.
+
 ## Release process
 
 A release is a `vX.Y.Z` tag on `main`. The release workflow (`.github/workflows/release.yml`) checks the tag, runs the checks, and creates the GitHub release. The update workflow in each copy then finds the release.
@@ -281,4 +320,4 @@ The plan leaves these questions for a deployed check. Record the answers here:
 - The time and the CPU of the passphrase derivation on Free (check 14).
 - Whether Turnstile in an iframe needs the hostname of the embedding website in the widget (check 15).
 
-Last checked: 2026-10-21
+Last checked: 2026-10-22

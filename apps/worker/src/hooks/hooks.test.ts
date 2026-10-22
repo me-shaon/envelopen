@@ -4,11 +4,13 @@ import { createCredentialCipher, createEmailHasher, type Services } from "@envel
 import { createDb } from "@envelopen/db";
 import { svixSign, toSendSignature } from "@envelopen/providers";
 import { resendFixtures } from "@envelopen/providers/conformance/fixtures/resend";
+import { brevoEvent, brevoFixtures } from "@envelopen/providers/conformance/fixtures/smtp";
 import { toSendFixtures } from "@envelopen/providers/conformance/fixtures/tosend";
 import { describe, expect, it } from "vitest";
 import { createWorkspace } from "../../test/helpers";
+import type { AttemptLimiter } from "../auth/rate-limit-do";
 import { outboundFetch } from "../services";
-import { createHookRoutes } from "./index";
+import { createHookRoutes, HOOK_TOKEN_RULE } from "./index";
 
 const KEY = btoa(String.fromCharCode(...new Array(32).fill(3)));
 const ORIGIN = "https://envelopen.test";
@@ -24,7 +26,7 @@ async function services(): Promise<Partial<Services>> {
   };
 }
 
-async function connection(provider: "resend" | "tosend", secret: string) {
+async function connection(provider: "resend" | "tosend" | "smtp", secret: string) {
   const workspaceId = await createWorkspace(`Hooks ${provider}`);
   const deps = await services();
   const cipher = deps.credentials;
@@ -42,8 +44,8 @@ async function connection(provider: "resend" | "tosend", secret: string) {
         workspaceId,
         purpose: "webhook_secret",
       }),
-      events_setup: "auto",
-      provider_refs: "{}",
+      events_setup: provider === "smtp" ? "manual" : "auto",
+      provider_refs: provider === "smtp" ? JSON.stringify(brevoFixtures.refs) : "{}",
       status: "active",
       status_detail: null,
       policy_warning_accepted_at: null,
@@ -59,8 +61,12 @@ async function post(
   body: string,
   headers: Record<string, string>,
   deps: Partial<Services>,
+  limiter?: AttemptLimiter,
 ) {
-  const app = createHookRoutes({ createServices: () => deps });
+  const app = createHookRoutes({
+    createServices: () => deps,
+    ...(limiter ? { limiter: () => limiter } : {}),
+  });
   const ctx = createExecutionContext();
   const response = await app.request(
     `${ORIGIN}/${path}`,
@@ -224,5 +230,73 @@ describe("outbound mock for end-to-end tests", () => {
     expect(() => outboundFetch({ OUTBOUND_MOCK_ORIGIN: "https://evil.example" })).toThrow(
       /localhost/,
     );
+  });
+});
+
+describe("Brevo webhooks of SMTP connections (KTD13)", () => {
+  /** A limiter that allows `allowed` requests and records the keys. */
+  function countingLimiter(allowed: number) {
+    const keys: string[] = [];
+    const limiter: AttemptLimiter = {
+      async record(key, rule) {
+        keys.push(key);
+        expect(rule).toEqual(HOOK_TOKEN_RULE);
+        return { allowed: keys.length <= allowed, count: keys.length, retryAfterMs: 0 };
+      },
+      async check() {
+        return { allowed: true, count: 0, retryAfterMs: 0 };
+      },
+      async reset() {},
+    };
+    return { limiter, keys };
+  }
+
+  it("stores an event with the right bearer token and rejects a wrong one", async () => {
+    const { workspaceId, connectionId, deps } = await connection("smtp", brevoFixtures.token);
+    const { limiter, keys } = countingLimiter(10);
+    const body = JSON.stringify(brevoEvent("hard_bounce"));
+    const path = `smtp/${workspaceId}/${connectionId}`;
+    const ok = await post(
+      path,
+      body,
+      { authorization: `Bearer ${brevoFixtures.token}` },
+      deps,
+      limiter,
+    );
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ received: 1, stored: 1 });
+    expect(keys).toEqual([`hook:${workspaceId}:${connectionId}`]);
+    const wrong = await post(path, body, { authorization: "Bearer not-the-token" }, deps, limiter);
+    expect(wrong.status).toBe(401);
+    // A failed verification is not counted against the connection.
+    expect(keys).toHaveLength(1);
+    const inPath = await post(
+      `${path}/${brevoFixtures.token}`,
+      body,
+      { authorization: `Bearer ${brevoFixtures.token}` },
+      deps,
+      limiter,
+    );
+    expect(inPath.status).toBe(404);
+  });
+
+  it("answers 429 when the connection is over its cap, and stores nothing", async () => {
+    const { workspaceId, connectionId, deps } = await connection("smtp", brevoFixtures.token);
+    const { limiter } = countingLimiter(0);
+    const response = await post(
+      `smtp/${workspaceId}/${connectionId}`,
+      JSON.stringify(brevoEvent("spam")),
+      { authorization: `Bearer ${brevoFixtures.token}` },
+      deps,
+      limiter,
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("60");
+    const rows = await createDb(env)
+      .db.selectFrom("provider_events")
+      .select("id")
+      .where("workspace_id", "=", workspaceId)
+      .execute();
+    expect(rows).toEqual([]);
   });
 });

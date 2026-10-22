@@ -1226,8 +1226,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Accept the transactional-only warning
-         * @description Lets campaigns use a transactional-only connection (R62). Only the owner can accept, and the audit log records who accepted and when.
+         * Accept the connection's policy warning
+         * @description Lets campaigns use a transactional-only connection (R62), or a connection whose preset has a policy warning, such as Gmail (R29). Only the owner can accept, and the audit log records who accepted and when.
          */
         post: operations["connections.accept_policy"];
         delete?: never;
@@ -1270,6 +1270,26 @@ export interface paths {
          * @description For manual setup with a provider that makes its own signing secret, such as Resend: paste the secret so Envelopen can verify the webhooks.
          */
         post: operations["connections.set_webhook_secret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/{id}/webhook-secret/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate the webhook token
+         * @description Makes a new webhook secret for a connection whose provider uses Envelopen's secret, such as the Brevo bearer token. The old secret stops working at once. Update the webhook in the provider with the new secret.
+         */
+        post: operations["connections.rotate_webhook_secret"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2619,6 +2639,34 @@ export interface components {
             requiresWorkersPaid: boolean;
             notes: string[];
             docsUrl: string;
+            presets: components["schemas"]["ProviderPreset"][];
+        };
+        ProviderPreset: {
+            id: string;
+            label: string;
+            description: string;
+            fixed: {
+                [key: string]: string;
+            };
+            fieldHints: {
+                [key: string]: {
+                    label: string | null;
+                    hint: string | null;
+                    placeholder: string | null;
+                };
+            };
+            defaultDailyCap: number | null;
+            capSource: {
+                label: string;
+                url: string;
+            } | null;
+            policyWarning: string | null;
+            notes: string[];
+            links: {
+                label: string;
+                url: string;
+            }[];
+            webhook: boolean;
         };
         ConnectionList: {
             items: components["schemas"]["Connection"][];
@@ -2639,9 +2687,13 @@ export interface components {
             eventsSetup: "auto" | "manual" | "none";
             /** @description This connection sends all email of the workspace. */
             selected: boolean;
-            /** @description For a transactional-only provider: the warning to accept. */
+            /** @description The warning to accept before campaigns: of a transactional-only provider, or of the connection's preset (Gmail, R29). */
             policyWarning: string | null;
             policyWarningAcceptedAt: number | null;
+            /** @description The preset of an SMTP connection: gmail, workspace, brevo, or custom. */
+            preset: string | null;
+            /** @description The most messages that the connection sends in 24 hours, or null for no cap. */
+            dailyCap: number | null;
             requiresWorkersPaid: boolean;
             lastCheckedAt: number | null;
             createdAt: number;
@@ -2662,9 +2714,13 @@ export interface components {
             eventsSetup: "auto" | "manual" | "none";
             /** @description This connection sends all email of the workspace. */
             selected: boolean;
-            /** @description For a transactional-only provider: the warning to accept. */
+            /** @description The warning to accept before campaigns: of a transactional-only provider, or of the connection's preset (Gmail, R29). */
             policyWarning: string | null;
             policyWarningAcceptedAt: number | null;
+            /** @description The preset of an SMTP connection: gmail, workspace, brevo, or custom. */
+            preset: string | null;
+            /** @description The most messages that the connection sends in 24 hours, or null for no cap. */
+            dailyCap: number | null;
             requiresWorkersPaid: boolean;
             lastCheckedAt: number | null;
             createdAt: number;
@@ -10391,6 +10447,8 @@ export interface operations {
                     credentials: {
                         [key: string]: string;
                     };
+                    /** @description The most messages in 24 hours. Leave it out for the preset's default (SMTP), or null for no cap. */
+                    dailyCap?: number | null;
                 };
             };
         };
@@ -11056,6 +11114,82 @@ export interface operations {
             };
             /** @description The Idempotency-Key was used with a different path or body. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "connections.rotate_webhook_secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionDetail"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

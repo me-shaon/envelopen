@@ -35,11 +35,17 @@ export const ConnectionSchema = z
     selected: z
       .boolean()
       .meta({ description: "This connection sends all email of the workspace." }),
-    policyWarning: z
-      .string()
-      .nullable()
-      .meta({ description: "For a transactional-only provider: the warning to accept." }),
+    policyWarning: z.string().nullable().meta({
+      description:
+        "The warning to accept before campaigns: of a transactional-only provider, or of the connection's preset (Gmail, R29).",
+    }),
     policyWarningAcceptedAt: z.number().int().nullable(),
+    preset: z.string().nullable().meta({
+      description: "The preset of an SMTP connection: gmail, workspace, brevo, or custom.",
+    }),
+    dailyCap: z.number().int().nullable().meta({
+      description: "The most messages that the connection sends in 24 hours, or null for no cap.",
+    }),
     requiresWorkersPaid: z.boolean(),
     lastCheckedAt: z.number().int().nullable(),
     createdAt: z.number().int(),
@@ -69,6 +75,30 @@ export function adapterOf(row: { provider: string }): ProviderAdapter {
   return adapter;
 }
 
+/**
+ * The warning that the owner accepts before campaigns use the connection: the adapter's
+ * transactional-only warning (R62), or the warning of the connection's preset (R29), or
+ * null when the connection needs none.
+ */
+export function connectionWarning(
+  row: Pick<ConnectionRow, "provider" | "policy" | "provider_refs">,
+): string | null {
+  const adapter = getAdapter(row.provider);
+  if (row.policy === "transactional-only") {
+    return adapter?.policyWarning ?? "This provider permits transactional email only.";
+  }
+  return adapter?.connectionPolicyWarning?.(refsOf(row)) ?? null;
+}
+
+/** Whether the connection receives provider webhooks. */
+export function connectionHasWebhook(
+  adapter: ProviderAdapter,
+  row: Pick<ConnectionRow, "provider_refs">,
+): boolean {
+  if (adapter.manualSecret === "none") return false;
+  return adapter.connectionHasWebhook?.(refsOf(row)) ?? true;
+}
+
 export function toConnection(row: ConnectionRow, selectedId: number | null): Connection {
   const adapter = getAdapter(row.provider);
   return {
@@ -83,8 +113,10 @@ export function toConnection(row: ConnectionRow, selectedId: number | null): Con
     warnings: parseJson<string[]>(row.warnings, []),
     eventsSetup: row.events_setup,
     selected: row.id === selectedId,
-    policyWarning: row.policy === "transactional-only" ? (adapter?.policyWarning ?? null) : null,
+    policyWarning: connectionWarning(row),
     policyWarningAcceptedAt: row.policy_warning_accepted_at,
+    preset: adapter?.presets ? (refsOf(row).preset ?? null) : null,
+    dailyCap: row.daily_cap,
     requiresWorkersPaid: adapter?.facts.requiresWorkersPaid ?? false,
     lastCheckedAt: row.last_checked_at,
     createdAt: row.created_at,

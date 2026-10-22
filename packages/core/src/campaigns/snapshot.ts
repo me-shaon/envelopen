@@ -1,7 +1,8 @@
 import type { DbConnection } from "@envelopen/db";
-import { getAdapter } from "@envelopen/providers";
+import { batchSizeFor, getAdapter } from "@envelopen/providers";
 import { sql } from "kysely";
 import type { CampaignJob, SendQueue } from "../services";
+import { readWorkersPlan } from "../settings/operations";
 import {
   type AudienceCounts,
   exclusionCountsOf,
@@ -115,7 +116,8 @@ WHERE workspace_id = ${job.workspaceId} AND id = ${job.campaignId} AND snapshot_
   return {
     state: "run",
     cut: fixed?.snapshot_max_contact_id ?? 0,
-    batchSize: adapter.capabilities.batchSize,
+    // SMTP sends smaller batches on Workers Free (Trial 1 of U17). The plan is the owner's setting.
+    batchSize: batchSizeFor(adapter, await readWorkersPlan(db)),
   };
 }
 

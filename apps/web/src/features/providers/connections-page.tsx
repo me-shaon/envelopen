@@ -60,8 +60,9 @@ function ConnectionCard({
     },
   });
   const status = CONNECTION_STATUS[connection.status];
+  // R62 for a transactional-only provider, R29 for a preset such as Gmail.
   const needsAcceptance =
-    connection.policy === "transactional-only" && connection.policyWarningAcceptedAt === null;
+    connection.policyWarning !== null && connection.policyWarningAcceptedAt === null;
 
   return (
     <li
@@ -81,7 +82,13 @@ function ConnectionCard({
             <PolicyPill policy={connection.policy} />
           </div>
           <span className="text-[13px] text-muted-foreground">
-            {[connection.accountLabel, `Checked ${formatDateTime(connection.lastCheckedAt)}`]
+            {[
+              connection.accountLabel,
+              connection.dailyCap === null
+                ? null
+                : `Daily limit ${connection.dailyCap.toLocaleString("en-US")}`,
+              `Checked ${formatDateTime(connection.lastCheckedAt)}`,
+            ]
               .filter(Boolean)
               .join(" · ")}
           </span>
@@ -139,11 +146,14 @@ function ConnectionCard({
             </Button>
           </span>
         </Note>
-      ) : connection.policy === "transactional-only" ? (
+      ) : connection.policyWarning !== null ? (
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <ShieldCheckIcon className="size-3.5" aria-hidden="true" />
-          You accepted the transactional-only warning on{" "}
-          {formatDateTime(connection.policyWarningAcceptedAt)}.
+          You accepted the{" "}
+          {connection.policy === "transactional-only"
+            ? "transactional-only warning"
+            : "sending policy warning"}{" "}
+          on {formatDateTime(connection.policyWarningAcceptedAt)}.
         </span>
       ) : null}
       {connection.requiresWorkersPaid ? (
@@ -189,10 +199,16 @@ function ProviderCard({
       <p className="m-0 text-[13px] leading-normal text-muted-foreground">{provider.notes[0]}</p>
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
         <span className="text-xs text-muted-foreground">
-          {provider.fields.filter((field) => field.required).length === 1
-            ? "One field"
-            : `${provider.fields.filter((field) => field.required).length} fields`}
-          {provider.autoWebhook ? " · Automatic webhook" : " · Manual events"}
+          {provider.presets.length > 0
+            ? `${provider.presets.length} presets · Events with Brevo`
+            : provider.fields.filter((field) => field.required).length === 1
+              ? "One field"
+              : `${provider.fields.filter((field) => field.required).length} fields`}
+          {provider.presets.length > 0
+            ? ""
+            : provider.autoWebhook
+              ? " · Automatic webhook"
+              : " · Manual events"}
         </span>
         <Button size="sm" variant="outline" onClick={() => onConnect(provider)}>
           Connect<span className="sr-only"> {provider.name}</span>
@@ -269,7 +285,7 @@ export function ConnectionsPage() {
           <SectionHeader
             id="providers-title"
             title="Add a provider"
-            aside="SES, Resend, and Postmark send campaigns"
+            aside="SES, Resend, Postmark, and SMTP send campaigns"
           />
           {providers.isError ? (
             <p role="alert" className="m-0 text-[13px] text-muted-foreground">

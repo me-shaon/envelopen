@@ -89,7 +89,9 @@ export interface RateLimiterClient {
 
 export interface ConsumerDeps {
   db: DbConnection;
-  services: Pick<Services, "credentials" | "outboundFetch">;
+  /** `connectSocket` is the outbound TCP of SMTP connections (KTD12). */
+  services: Pick<Services, "credentials" | "outboundFetch"> &
+    Partial<Pick<Services, "connectSocket">>;
   signer: TokenSigner;
   usage: {
     /** The platform_limit flag in force, and the ledger flag. One UsageMeter call. */
@@ -495,7 +497,11 @@ export async function consumerDeps(env: Env, db: DbConnection): Promise<Consumer
   const meter = usageMeter(env);
   return {
     db,
-    services: { credentials: services.credentials, outboundFetch: services.outboundFetch ?? fetch },
+    services: {
+      credentials: services.credentials,
+      outboundFetch: services.outboundFetch ?? fetch,
+      ...(services.connectSocket ? { connectSocket: services.connectSocket } : {}),
+    },
     signer: await tokenSigner(env),
     usage: {
       gate: async () => {

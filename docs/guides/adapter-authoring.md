@@ -234,6 +234,17 @@ Sign `valid()` with the provider's algorithm. Write a small signer in the fixtur
 
 `events` is a list of `{ label, request(), expected }`. `parseEvents` gets a request that is already verified, so the event requests do not need a signature. Signed requests also work. `expected` lists the fields to compare for each event, in order. Use `expected: []` for a body that the adapter must skip, for example an open event. Together, the event fixtures must give every type in `capabilities.eventTypes`.
 
+### SMTP adapters
+
+An adapter that sends over TCP uses `ctx.connect`, not `ctx.fetch`. Its fixtures set `smtp` in place of `exchanges`. The value is the behavior of the in-process mock server in `conformance/mock-smtp.ts`, for example a `reply` function that answers `RCPT` with a 550.
+
+- Each send fixture sets `smtp`. The kit passes the mock's `connect` and a fetch that fails.
+- `connect.smtp` sets the server for a good login (`ok`) and a wrong login (`badKey`). Leave `connect.ok` and `connect.badKey` empty.
+- `emailHeaders` gets one request per accepted message. The body is the message source. Read it with `parseMail` from `conformance/mock-smtp.ts`.
+- For a timeout, the kit lets the server ignore the final dot of DATA. For a server error, it answers the greeting with 421.
+
+See `conformance/fixtures/smtp.ts` for a full example.
+
 ### Skip a check
 
 Add the check id and a reason to `skip`:

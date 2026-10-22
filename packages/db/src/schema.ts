@@ -152,6 +152,8 @@ export interface ProviderConnectionsTable {
   /** JSON array of warnings from the last check. */
   warnings: Defaulted<string | null>;
   last_checked_at: Defaulted<number | null>;
+  /** The most messages in 24 hours, or null for no cap (migration 0023, U19 enforces it). */
+  daily_cap: Defaulted<number | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }

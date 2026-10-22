@@ -129,7 +129,9 @@ export interface TestServices extends Services {
 }
 
 /** Services as the Worker builds them, with a job recorder in place of the Workflow. */
-export async function testServices(options: { fetch?: typeof fetch } = {}): Promise<TestServices> {
+export async function testServices(
+  options: { fetch?: typeof fetch; connect?: SocketConnect } = {},
+): Promise<TestServices> {
   const signer = await createFileLinkSigner(TEST_SIGNING_KEY);
   const jobs: ImportJob[] = [];
   const campaignJobs: CampaignJob[] = [];
@@ -148,7 +150,7 @@ export async function testServices(options: { fetch?: typeof fetch } = {}): Prom
     },
     credentials: await createCredentialCipher([{ version: 1, secret: TEST_ENCRYPTION_KEY }]),
     outboundFetch: options.fetch ?? noNetwork,
-    connectSocket: noSockets,
+    connectSocket: options.connect ?? noSockets,
     appOrigin: TEST_ORIGIN,
     jobs,
     campaignJobs,

@@ -1,9 +1,9 @@
 import type { DbConnection } from "@envelopen/db";
 import { getAdapter } from "@envelopen/providers";
 import { OperationError } from "../errors";
-import { type ConnectionRow, selectedConnectionId } from "./model";
+import { type ConnectionRow, connectionWarning, selectedConnectionId } from "./model";
 
-// The provider policy gate (R62, AE8, KTD14). The campaign engine (U9) calls
+// The provider policy gate (R62, R29, AE8, KTD14). The campaign engine (U9) calls
 // `assertCampaignPolicy` in prepare, before it issues a confirm token. System email
 // (owner alerts) skips the gate: a transactional-only connection can always send it.
 
@@ -60,13 +60,18 @@ export async function checkCampaignPolicy(
       warning: null,
     };
   }
-  if (row.policy === "transactional-only" && row.policy_warning_accepted_at === null) {
-    const warning =
-      getAdapter(row.provider)?.policyWarning ?? "This provider permits transactional email only.";
+  const warning = connectionWarning(row);
+  if (warning !== null && row.policy_warning_accepted_at === null) {
+    // R62: a transactional-only provider. R29: a preset with a policy, such as Gmail.
+    // Both allow campaigns after the owner accepts the warning.
+    const name = getAdapter(row.provider)?.name ?? row.provider;
     return {
       allowed: false,
       code: "policy_warning",
-      message: `${row.name} is a transactional-only provider. Accept its warning before you send a campaign through it.`,
+      message:
+        row.policy === "transactional-only"
+          ? `${row.name} is a transactional-only provider. Accept its warning before you send a campaign through it.`
+          : `${row.name} (${name}) has a sending policy warning. Accept it before you send a campaign through it.`,
       connectionId: row.id,
       warning,
     };

@@ -1,6 +1,6 @@
 import type { DbConnection } from "@envelopen/db";
 import { extractLinks, mergeTagNames } from "@envelopen/email-render";
-import { getAdapter } from "@envelopen/providers";
+import { batchSizeFor, getAdapter } from "@envelopen/providers";
 import { z } from "zod";
 import { readRestoreAck } from "../backup/restore-ack";
 import { loadBrand } from "../brand/model";
@@ -377,7 +377,7 @@ export async function runChecklist(input: ChecklistInput): Promise<Checklist> {
 
 async function budgetItem(input: ChecklistInput, policy: CampaignPolicy): Promise<ChecklistItem> {
   const provider = policy.allowed ? getAdapter(policy.provider) : undefined;
-  const batchSize = provider?.capabilities.batchSize ?? 50;
+  const batchSize = provider ? batchSizeFor(provider, "free") : 50;
   const recipients = input.estimate.recipients;
   const n = (value: number) => value.toLocaleString("en-US");
   const writes =

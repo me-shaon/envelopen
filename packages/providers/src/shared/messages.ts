@@ -74,6 +74,10 @@ export async function sendBatch(
   ctx: SendContext,
 ): Promise<SendBatchResult> {
   assertMessages(messages, adapter.capabilities.batchSize);
+  // TODO(release-checklist check 23, Trial 2 of U17, KTD13): if the owner's check shows
+  // that the Brevo relay replaces List-Unsubscribe and List-Unsubscribe-Post, accept
+  // Brevo's own unsubscribe header for this preset only. The preset is in
+  // `ctx.refs.preset` ("brevo"). Do not relax the header rule for any other connection.
   const result = await adapter.sendBatch(messages, credentials, ctx);
   const byId = new Map<string, RecipientResult>();
   for (const item of result.results) byId.set(item.recipientId, item);

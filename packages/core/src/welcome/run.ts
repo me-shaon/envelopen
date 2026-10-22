@@ -45,7 +45,9 @@ import { parseSteps, WELCOME_TOKEN_CAMPAIGN, type WelcomeJob, welcomeRecipientId
 
 export interface WelcomeStepDeps {
   db: DbConnection;
-  services: Pick<Services, "credentials" | "outboundFetch" | "hashEmail">;
+  /** `connectSocket` is the outbound TCP of SMTP connections (KTD12). */
+  services: Pick<Services, "credentials" | "outboundFetch" | "hashEmail"> &
+    Partial<Pick<Services, "connectSocket">>;
   signer: TokenSigner;
   /** The platform_limit flag and the ledger flag of the UsageMeter. */
   usage(): Promise<{ limited: boolean; unsubscribesPending: boolean }>;

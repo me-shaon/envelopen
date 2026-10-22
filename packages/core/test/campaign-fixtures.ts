@@ -68,7 +68,16 @@ export async function seedCampaignWorkspace(
         ? { serverToken: "pm-token", messageStream: "broadcast" }
         : provider === "cloudflare"
           ? { accountId: "acc", apiToken: "token" }
-          : { apiKey: "re_test_key" };
+          : provider === "smtp"
+            ? // The defaults of the in-process mock SMTP server (conformance/mock-smtp.ts).
+              {
+                preset: "custom",
+                host: "smtp.example.com",
+                port: "587",
+                username: "user",
+                password: "secret",
+              }
+            : { apiKey: "re_test_key" };
   const connection = await conn.db
     .insertInto("provider_connections")
     .values({

@@ -75,7 +75,7 @@ test.describe("providers", () => {
     await step.getByRole("link", { name: "Connect a provider", exact: true }).click();
 
     await expect(page.getByText("No provider connected")).toBeVisible();
-    await expect(page.getByTestId("provider-card")).toHaveCount(5);
+    await expect(page.getByTestId("provider-card")).toHaveCount(6);
     await page.getByRole("button", { name: "Connect Resend" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("API key").fill("re_e2e_key_123456");

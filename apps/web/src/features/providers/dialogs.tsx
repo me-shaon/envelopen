@@ -13,10 +13,12 @@ import { Pill } from "@/components/ui/pill";
 import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
+import { PresetFields, PresetPicker, presetPayload } from "./presets";
 import { type Connection, type ConnectionDetail, CopyValue, Note, type Provider } from "./shared";
 
-// The connect flow (one field where the provider allows, KTD13), the manual webhook
-// steps, and the transactional-only warning (R62).
+// The connect flow (one field where the provider allows, KTD13; presets for SMTP, U18),
+// the manual webhook steps with the token rotation (Brevo, KTD13), and the policy
+// warning of a transactional-only provider (R62) or a Gmail preset (R29).
 
 export function ConnectDialog({
   provider,
@@ -29,11 +31,15 @@ export function ConnectDialog({
 }) {
   const queryClient = useQueryClient();
   const { current } = useCurrentWorkspace();
+  const [presetId, setPresetId] = useState<string | null>(null);
+  const presets = provider?.presets ?? [];
+  const preset = presets.find((item) => item.id === presetId) ?? presets[0] ?? null;
   const connect = useMutation({
-    mutationFn: (credentials: Record<string, string>) =>
-      unwrap(api.POST("/connections", { body: { provider: provider?.id ?? "", credentials } })),
+    mutationFn: (body: { credentials: Record<string, string>; dailyCap?: number | null }) =>
+      unwrap(api.POST("/connections", { body: { provider: provider?.id ?? "", ...body } })),
     onSuccess: async (connection) => {
       await queryClient.invalidateQueries({ queryKey: ["ws", current.id] });
+      setPresetId(null);
       onConnected(connection);
     },
   });
@@ -41,29 +47,39 @@ export function ConnectDialog({
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    if (provider && preset) {
+      connect.mutate(presetPayload(provider, preset, data));
+      return;
+    }
     const credentials: Record<string, string> = {};
     for (const field of provider?.fields ?? []) {
       const value = String(data.get(field.name) ?? "").trim();
       if (value) credentials[field.name] = value;
     }
-    connect.mutate(credentials);
+    connect.mutate({ credentials });
   }
 
   return (
     <Dialog
       open={provider !== null}
       onOpenChange={(open) => {
-        if (!open) connect.reset();
+        if (!open) {
+          connect.reset();
+          setPresetId(null);
+        }
         onOpenChange(open);
       }}
     >
-      <DialogContent className="max-w-[500px]">
+      {/* The SMTP presets make a long form, so the dialog scrolls on short screens. */}
+      <DialogContent className="max-h-[calc(100dvh-32px)] max-w-[500px] overflow-y-auto">
         <DialogHeader
           title={`Connect ${provider?.name ?? ""}`}
           description={
-            provider?.autoWebhook
-              ? "Envelopen checks the key, then creates the webhook for bounces and complaints."
-              : "Envelopen checks the key. You set up events by hand afterwards."
+            preset
+              ? "Envelopen signs in to the SMTP server to check the login. It sends no email."
+              : provider?.autoWebhook
+                ? "Envelopen checks the key, then creates the webhook for bounces and complaints."
+                : "Envelopen checks the key. You set up events by hand afterwards."
           }
         />
         <form className="flex flex-col gap-5" onSubmit={onSubmit} autoComplete="off">
@@ -77,7 +93,20 @@ export function ConnectDialog({
           {provider?.requiresWorkersPaid ? (
             <Note tone="lavender">This provider needs the Workers Paid plan.</Note>
           ) : null}
-          {(provider?.fields ?? []).map((field) => {
+          {provider && preset ? (
+            <>
+              <PresetPicker
+                presets={presets}
+                value={preset.id}
+                onChange={(id) => {
+                  connect.reset();
+                  setPresetId(id);
+                }}
+              />
+              <PresetFields key={preset.id} provider={provider} preset={preset} />
+            </>
+          ) : null}
+          {(preset ? [] : (provider?.fields ?? [])).map((field) => {
             const id = `field-${field.name}`;
             return (
               <Field
@@ -153,8 +182,15 @@ export function WebhookDialog({
       await invalidate();
     },
   });
+  const rotate = useMutation({
+    mutationFn: (id: number) =>
+      unwrap(api.POST("/connections/{id}/webhook-secret/rotate", { params: { path: { id } } })),
+    onSuccess: invalidate,
+  });
   const data = detail.data;
   const webhook = data?.webhook;
+  // A token in the Authorization header, not a signature (the Brevo preset of SMTP).
+  const bearer = data?.provider === "smtp" && webhook?.secretSource === "envelopen";
 
   return (
     <Dialog
@@ -163,11 +199,12 @@ export function WebhookDialog({
         if (!open) {
           retry.reset();
           saveSecret.reset();
+          rotate.reset();
         }
         onOpenChange(open);
       }}
     >
-      <DialogContent className="max-w-[560px]">
+      <DialogContent className="max-h-[calc(100dvh-32px)] max-w-[560px] overflow-y-auto">
         <DialogHeader
           title={data ? `${data.name} events` : "Events"}
           description={
@@ -179,7 +216,11 @@ export function WebhookDialog({
         {detail.isError ? <FormError message={errorText(detail.error)} /> : null}
         {data && webhook ? (
           <div className="flex flex-col gap-4">
-            <FormError message={errorText(retry.error) ?? errorText(saveSecret.error)} />
+            <FormError
+              message={
+                errorText(retry.error) ?? errorText(saveSecret.error) ?? errorText(rotate.error)
+              }
+            />
             {webhook.url ? (
               <div className="flex flex-col gap-1.5">
                 <span className="text-[13px] font-medium">Webhook URL</span>
@@ -188,8 +229,31 @@ export function WebhookDialog({
             ) : null}
             {webhook.secret ? (
               <div className="flex flex-col gap-1.5">
-                <span className="text-[13px] font-medium">Webhook secret</span>
-                <CopyValue label="webhook secret" value={webhook.secret} testId="webhook-secret" />
+                <span className="text-[13px] font-medium">
+                  {bearer ? "Bearer token" : "Webhook secret"}
+                </span>
+                <CopyValue
+                  label={bearer ? "bearer token" : "webhook secret"}
+                  value={webhook.secret}
+                  testId="webhook-secret"
+                />
+                {bearer ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      pending={rotate.isPending}
+                      onClick={() => rotate.mutate(data.id)}
+                    >
+                      Rotate the token
+                    </Button>
+                    <span role="status" className="text-xs text-muted-foreground">
+                      {rotate.isSuccess
+                        ? "Envelopen made a new token. The old token no longer works. Update the webhook in Brevo."
+                        : "Brevo sends this token in the Authorization header. The URL holds no secret."}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {webhook.steps.length > 0 ? (
@@ -251,7 +315,10 @@ export function WebhookDialog({
           <div className="h-32 rounded-xl bg-muted" />
         )}
         <DialogFooter>
-          {data && data.eventsSetup === "manual" && data.webhook.secretSource !== "none" ? (
+          {data &&
+          data.eventsSetup === "manual" &&
+          data.webhook.secretSource !== "none" &&
+          data.provider !== "smtp" ? (
             <Button
               variant="outline"
               pending={retry.isPending}
@@ -305,7 +372,13 @@ export function PolicyDialog({
       }}
     >
       <DialogContent className="max-w-[480px]">
-        <DialogHeader title="Use a transactional provider for campaigns?" />
+        <DialogHeader
+          title={
+            connection?.policy === "campaign"
+              ? `Send campaigns through ${connection.name}?`
+              : "Use a transactional provider for campaigns?"
+          }
+        />
         <div className="flex flex-col gap-4">
           <FormError message={errorText(accept.error)} />
           <Note tone="salmon">

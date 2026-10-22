@@ -49,6 +49,12 @@ export interface CredentialField {
 export interface ProviderCapabilities {
   /** Recipients per `sendBatch` call. It must fit 10 ms CPU and 50 subrequests on Free (KTD20). */
   batchSize: number;
+  /**
+   * A smaller batch for the Workers Free plan, when one batch of `batchSize` does not fit
+   * Free's CPU limit (SMTP, Trial 1 of U17). The campaign snapshot reads the owner's
+   * Workers plan setting and uses this size on Free.
+   */
+  batchSizeOnFree?: number;
   /** The provider accepts an idempotency key, so an uncertain batch can retry (R70). */
   idempotency: boolean;
   /** How long the provider remembers an idempotency key, in milliseconds. */
@@ -238,8 +244,21 @@ export interface NormalizedEvent {
   detail?: string;
 }
 
+/** A recipient who unsubscribed through the provider, for example from Brevo's own link. */
+export interface ProviderUnsubscribe {
+  eventId: string;
+  email: string;
+  providerMessageId: string | null;
+  occurredAt: number;
+}
+
 export interface ParsedWebhook {
   events: NormalizedEvent[];
+  /**
+   * Unsubscribes that the provider reports. Envelopen applies them as unsubscribes of the
+   * contact, not as provider events.
+   */
+  unsubscribes?: ProviderUnsubscribe[];
   /** SNS: confirm the subscription with a GET of this URL, after verification. */
   confirmSubscriptionUrl?: string;
 }
@@ -273,6 +292,30 @@ export interface WebhookTarget {
   secret: string;
 }
 
+/** A preset of the connect form (SMTP: Gmail, Google Workspace, Brevo, custom). */
+export interface ProviderPreset {
+  id: string;
+  label: string;
+  /** One sentence for the connect form. */
+  description: string;
+  /** Fixed values of credential fields, by field name. The form shows them read-only. */
+  fixed: Readonly<Record<string, string>>;
+  /** Labels and hints that replace the field's own for this preset, by field name. */
+  fieldHints: Readonly<Record<string, { label?: string; hint?: string; placeholder?: string }>>;
+  /** The default daily cap. The owner can change it. Null for no default. */
+  defaultDailyCap: number | null;
+  /** Where the cap comes from, for the form. */
+  capSource: { label: string; url: string } | null;
+  /** The warning that the owner accepts before the first campaign (R29). */
+  policyWarning: string | null;
+  /** Short notes for the form, one sentence each. */
+  notes: readonly string[];
+  /** Links for the form, for example the app password page. */
+  links: readonly { label: string; url: string }[];
+  /** The connection receives provider webhooks (bounces and complaints). */
+  webhook: boolean;
+}
+
 export interface ProviderAdapter {
   /** Stable id, used in URLs and stored in `provider_connections.provider`. */
   readonly id: string;
@@ -280,6 +323,22 @@ export interface ProviderAdapter {
   readonly policy: ProviderPolicy;
   /** For `transactional-only` adapters: the warning that the owner must accept (R62). */
   readonly policyWarning?: string;
+  /**
+   * Presets of the connect form, for adapters that talk to many services (SMTP). Each
+   * preset fills fields and carries its own cap, policy warning, and webhook.
+   */
+  readonly presets?: readonly ProviderPreset[];
+  /**
+   * For a `campaign` adapter: a warning that one connection needs from its settings, for
+   * example the Gmail preset (R29). The owner accepts it before the first campaign, like
+   * the warning of a transactional-only adapter. Null when the connection needs none.
+   */
+  connectionPolicyWarning?(refs: ProviderRefs): string | null;
+  /**
+   * Whether one connection receives webhooks, when it depends on its settings (an SMTP
+   * preset). Without it, every connection of an adapter with a webhook receives them.
+   */
+  connectionHasWebhook?(refs: ProviderRefs): boolean;
   readonly credentialFields: readonly CredentialField[];
   readonly capabilities: ProviderCapabilities;
   readonly facts: ProviderFacts;

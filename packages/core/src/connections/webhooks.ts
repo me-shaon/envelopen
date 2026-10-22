@@ -3,6 +3,7 @@ import {
   getAdapter,
   isSnsUrl,
   type NormalizedEvent,
+  type ProviderUnsubscribe,
   type WebhookRequest,
 } from "@envelopen/providers";
 import { normalizeEmail } from "../contacts/email";
@@ -23,10 +24,18 @@ import { adapterContext, decryptWebhookSecret, refsOf } from "./model";
 //   campaign recipients by `provider_message_id`, writes the raw events and rollups, and
 //   sets `processed_at` (events/flush.ts). The cron hands over rows that stay
 //   unprocessed, for example when that hand-off failed (events/retention.ts).
+// - An unsubscribe that the provider reports (Brevo's own link, KTD13) unsubscribes the
+//   contact from every list at once, with the source `provider:<id>`. It is not a
+//   provider event, and a replay changes nothing.
+// - `admit` caps the verified requests of one connection. The hook route passes it for
+//   providers whose webhook has no signature (the Brevo bearer token).
 
 export interface WebhookOutcome {
-  /** HTTP status for the provider: 200 stops its retries, 401 and 404 mean "not for us". */
-  status: 200 | 401 | 404;
+  /**
+   * HTTP status for the provider: 200 stops its retries, 401 and 404 mean "not for us",
+   * and 429 asks the provider to send it again later.
+   */
+  status: 200 | 401 | 404 | 429;
   received: number;
   stored: number;
   confirmedSubscription: boolean;
@@ -37,6 +46,11 @@ export interface WebhookOutcome {
 export interface WebhookDeps {
   db: DbConnection;
   services: Partial<Services>;
+  /**
+   * Counts one verified request of the connection. False when the connection is over
+   * its cap: the request is answered 429 and records nothing.
+   */
+  admit?(target: { workspaceId: number; connectionId: number }): Promise<boolean>;
 }
 
 const SUPPRESS = { bounce_hard: "hard_bounce", complaint: "complaint" } as const;
@@ -76,6 +90,9 @@ export async function receiveProviderWebhook(
     adapterContext(deps.services, refs),
   );
   if (!verified.ok) return { status: 401, ...none };
+  if (deps.admit && !(await deps.admit({ workspaceId: row.workspace_id, connectionId: row.id }))) {
+    return { status: 429, ...none };
+  }
 
   const parsed = adapter.parseEvents(request);
   let confirmedSubscription = false;
@@ -88,9 +105,13 @@ export async function receiveProviderWebhook(
     );
   }
   const events = await storeEvents(deps, row.workspace_id, row.id, adapter.id, parsed.events);
+  const unsubscribes = parsed.unsubscribes ?? [];
+  if (unsubscribes.length > 0) {
+    await applyProviderUnsubscribes(deps, row.workspace_id, adapter.id, unsubscribes);
+  }
   return {
     status: 200,
-    received: parsed.events.length,
+    received: parsed.events.length + unsubscribes.length,
     stored: events.length,
     confirmedSubscription,
     events,
@@ -215,4 +236,61 @@ async function storeEvents(
       occurredAt: added.occurred_at,
     })),
   );
+}
+
+/**
+ * Unsubscribes the contacts behind provider unsubscribe events from every list, like a
+ * one-click unsubscribe (events/subscription.ts), and stops their welcome series. A
+ * contact that is unsubscribed already does not change. Returns the contacts changed.
+ */
+export async function applyProviderUnsubscribes(
+  deps: WebhookDeps,
+  workspaceId: number,
+  provider: string,
+  unsubscribes: readonly ProviderUnsubscribe[],
+): Promise<number> {
+  const hashEmail = requireService(deps.services, "hashEmail");
+  const hashes = new Set<string>();
+  for (const item of unsubscribes.slice(0, 100)) {
+    const email = normalizeEmail(item.email);
+    if (email) hashes.add(await hashEmail(email));
+  }
+  if (hashes.size === 0) return 0;
+  const { db } = deps;
+  const contacts = await db.db
+    .selectFrom("contacts")
+    .select(["id", "unsubscribed_at"])
+    .where("workspace_id", "=", workspaceId)
+    .where("email_hash", "in", [...hashes])
+    .execute();
+  const ids = contacts.filter((row) => row.unsubscribed_at === null).map((row) => row.id);
+  if (ids.length === 0) return 0;
+  const source = `provider:${provider}`;
+  const now = Date.now();
+  await db.atomic([
+    db.db
+      .updateTable("contacts")
+      .set({
+        unsubscribed_at: now,
+        unsubscribe_source: source,
+        unsubscribe_campaign_id: null,
+        updated_at: now,
+      })
+      .where("workspace_id", "=", workspaceId)
+      .where("id", "in", ids)
+      .where("unsubscribed_at", "is", null),
+    db.db
+      .updateTable("list_members")
+      .set({
+        status: "unsubscribed",
+        status_source: source,
+        status_at: now,
+        status_campaign_id: null,
+      })
+      .where("workspace_id", "=", workspaceId)
+      .where("contact_id", "in", ids)
+      .where("status", "=", "subscribed"),
+  ]);
+  if (deps.services.welcome) await stopWelcome(db, deps.services.welcome, workspaceId, ids);
+  return ids.length;
 }

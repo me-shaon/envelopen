@@ -15,6 +15,8 @@ import {
   adapterOf,
   type ConnectionRow,
   ConnectionSchema,
+  connectionHasWebhook,
+  connectionWarning,
   decryptCredentials,
   decryptWebhookSecret,
   encryptCredentials,
@@ -69,6 +71,30 @@ const ProviderSchema = z
     requiresWorkersPaid: z.boolean(),
     notes: z.array(z.string()),
     docsUrl: z.string(),
+    presets: z.array(
+      z
+        .object({
+          id: z.string(),
+          label: z.string(),
+          description: z.string(),
+          fixed: z.record(z.string(), z.string()),
+          fieldHints: z.record(
+            z.string(),
+            z.object({
+              label: z.string().nullable(),
+              hint: z.string().nullable(),
+              placeholder: z.string().nullable(),
+            }),
+          ),
+          defaultDailyCap: z.number().int().nullable(),
+          capSource: z.object({ label: z.string(), url: z.string() }).nullable(),
+          policyWarning: z.string().nullable(),
+          notes: z.array(z.string()),
+          links: z.array(z.object({ label: z.string(), url: z.string() })),
+          webhook: z.boolean(),
+        })
+        .meta({ id: "ProviderPreset" }),
+    ),
   })
   .meta({ id: "Provider" });
 
@@ -96,6 +122,28 @@ function describeProvider(adapter: ProviderAdapter): z.input<typeof ProviderSche
     requiresWorkersPaid: adapter.facts.requiresWorkersPaid,
     notes: [...adapter.facts.notes],
     docsUrl: adapter.facts.docsUrl,
+    presets: (adapter.presets ?? []).map((preset) => ({
+      id: preset.id,
+      label: preset.label,
+      description: preset.description,
+      fixed: { ...preset.fixed },
+      fieldHints: Object.fromEntries(
+        Object.entries(preset.fieldHints).map(([name, hint]) => [
+          name,
+          {
+            label: hint.label ?? null,
+            hint: hint.hint ?? null,
+            placeholder: hint.placeholder ?? null,
+          },
+        ]),
+      ),
+      defaultDailyCap: preset.defaultDailyCap,
+      capSource: preset.capSource,
+      policyWarning: preset.policyWarning,
+      notes: [...preset.notes],
+      links: preset.links.map((link) => ({ ...link })),
+      webhook: preset.webhook,
+    })),
   };
 }
 
@@ -148,7 +196,7 @@ async function detailOf(ctx: OperationContext, row: ConnectionRow) {
     (ctx.services.appOrigin ? webhookBaseUrl(ctx.services.appOrigin, row) : null);
   const manual = row.events_setup === "manual";
   const url =
-    adapter.manualSecret === "none" || !base
+    !connectionHasWebhook(adapter, row) || !base
       ? null
       : webhookUrl(adapter, base, adapter.manualSecret === "envelopen" ? secret : null);
   return {
@@ -157,7 +205,7 @@ async function detailOf(ctx: OperationContext, row: ConnectionRow) {
       url,
       // An auto-created secret stays hidden. Manual setup needs it in the provider dashboard.
       secret: manual && adapter.manualSecret === "envelopen" ? secret : null,
-      secretSource: adapter.manualSecret,
+      secretSource: connectionHasWebhook(adapter, row) ? adapter.manualSecret : "none",
       needsSecret: manual && adapter.manualSecret === "provider" && secret === null,
       steps:
         row.events_setup === "auto"
@@ -244,7 +292,8 @@ async function configureEvents(
   credentials: Credentials,
   refs: ProviderRefs,
 ): Promise<EventsResult> {
-  if (adapter.manualSecret === "none") {
+  // An SMTP connection receives webhooks only with the Brevo preset (KTD13).
+  if (!connectionHasWebhook(adapter, { provider_refs: JSON.stringify(refs) })) {
     return { eventsSetup: "none", secretEncrypted: null, refs, reason: null };
   }
   const origin = requireService(ctx.services, "appOrigin");
@@ -361,6 +410,10 @@ export const connectionsCreate = defineOperation({
     provider: z.string().min(1).max(40),
     name: z.string().trim().min(1).max(100).optional(),
     credentials: z.record(z.string(), z.string().max(4096)),
+    dailyCap: z.number().int().min(1).max(10_000_000).nullable().optional().meta({
+      description:
+        "The most messages in 24 hours. Leave it out for the preset's default (SMTP), or null for no cap.",
+    }),
   }),
   output: ConnectionDetailSchema,
   async handler(input, ctx) {
@@ -375,12 +428,15 @@ export const connectionsCreate = defineOperation({
     if (!check.ok) throw checkError(adapter, check);
 
     const sealed = await encryptCredentials(ctx.services, principal.workspaceId, credentials);
+    const preset = adapter.presets?.find((item) => item.id === check.refs?.preset);
+    const dailyCap =
+      input.dailyCap === undefined ? (preset?.defaultDailyCap ?? null) : input.dailyCap;
     const inserted = await db.db
       .insertInto("provider_connections")
       .values({
         workspace_id: principal.workspaceId,
         provider: adapter.id,
-        name: input.name ?? adapter.name,
+        name: input.name ?? (preset && preset.id !== "custom" ? preset.label : adapter.name),
         policy: adapter.policy,
         credentials_encrypted: sealed.ciphertext,
         credentials_key_version: sealed.version,
@@ -393,6 +449,7 @@ export const connectionsCreate = defineOperation({
         account_label: check.account,
         warnings: JSON.stringify(check.warnings),
         last_checked_at: now,
+        daily_cap: dailyCap,
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -522,10 +579,11 @@ export const connectionsSelect = defineOperation({
 
 export const connectionsAcceptPolicy = defineOperation({
   id: "connections.accept_policy",
-  summary: "Accept the transactional-only warning",
+  summary: "Accept the connection's policy warning",
   description:
-    "Lets campaigns use a transactional-only connection (R62). Only the owner can " +
-    "accept, and the audit log records who accepted and when.",
+    "Lets campaigns use a transactional-only connection (R62), or a connection whose " +
+    "preset has a policy warning, such as Gmail (R29). Only the owner can accept, and " +
+    "the audit log records who accepted and when.",
   method: "post",
   path: "/connections/{id}/accept-policy",
   scope: "workspace:admin",
@@ -537,7 +595,7 @@ export const connectionsAcceptPolicy = defineOperation({
   output: ConnectionSchema,
   async handler(input, { principal, db, now }) {
     const row = await loadConnection(db, principal.workspaceId, input.id);
-    if (row.policy !== "transactional-only") {
+    if (connectionWarning(row) === null) {
       throw new OperationError(
         "conflict",
         "This connection is a campaign provider. It has no warning to accept.",
@@ -667,6 +725,61 @@ export const connectionsSetWebhookSecret = defineOperation({
       .execute();
     const selected = await selectedConnectionId(db, principal.workspaceId);
     return toConnection(await loadConnection(db, principal.workspaceId, row.id), selected);
+  },
+  auditTarget: (_input, output) => ({ targetType: "provider_connection", targetId: output.id }),
+});
+
+export const connectionsRotateWebhookSecret = defineOperation({
+  id: "connections.rotate_webhook_secret",
+  summary: "Rotate the webhook token",
+  description:
+    "Makes a new webhook secret for a connection whose provider uses Envelopen's secret, " +
+    "such as the Brevo bearer token. The old secret stops working at once. Update the " +
+    "webhook in the provider with the new secret.",
+  method: "post",
+  path: "/connections/{id}/webhook-secret/rotate",
+  scope: "workspace:admin",
+  risk: "write",
+  mcp: NEVER_MCP,
+  sensitiveOutput: true,
+  input: idInput,
+  output: ConnectionDetailSchema,
+  async handler(input, ctx) {
+    const { principal, db, now } = ctx;
+    const row = await loadConnection(db, principal.workspaceId, input.id);
+    const adapter = adapterOf(row);
+    if (adapter.manualSecret !== "envelopen" || !connectionHasWebhook(adapter, row)) {
+      throw new OperationError("conflict", "This connection has no webhook secret to rotate.");
+    }
+    if (row.events_setup === "auto") {
+      throw new OperationError(
+        "conflict",
+        `Envelopen manages the webhook of ${row.name}. Remove and connect it again to change the secret.`,
+      );
+    }
+    const workspaceId = principal.workspaceId;
+    const cipher = requireService(ctx.services, "credentials");
+    const credentials = await decryptCredentials(ctx.services, row);
+    const sealed = await encryptCredentials(ctx.services, workspaceId, credentials, row.id);
+    await db.db
+      .updateTable("provider_connections")
+      .set({
+        // The secret and the credentials keep one key version, as in set_webhook_secret.
+        webhook_secret_encrypted: await encryptWebhookSecret(
+          ctx.services,
+          workspaceId,
+          randomSecret(),
+          row.id,
+        ),
+        credentials_encrypted: sealed.ciphertext,
+        credentials_key_version: cipher.version,
+        events_setup: "manual",
+        updated_at: now,
+      })
+      .where("workspace_id", "=", workspaceId)
+      .where("id", "=", row.id)
+      .execute();
+    return detailOf(ctx, await loadConnection(db, workspaceId, row.id));
   },
   auditTarget: (_input, output) => ({ targetType: "provider_connection", targetId: output.id }),
 });

@@ -15,6 +15,11 @@ The release workflow uses the section of a version as the notes of its GitHub re
 ### Added
 
 - An internal SMTP client and socket capability for provider adapters, with a local SMTP mock for development.
+- An SMTP provider connection with Gmail, Google Workspace, Brevo, and custom SMTP presets.
+- A daily sending limit for each connection, with a default from the preset. A later update enforces it.
+- A policy warning for the Gmail and Google Workspace presets. The owner accepts it before the first campaign.
+- Brevo webhooks for bounces, complaints, blocked messages, and unsubscribes, with a rotatable bearer token.
+- Guides for SMTP and Brevo.
 
 ## [0.4.0] - 2026-10-22
 

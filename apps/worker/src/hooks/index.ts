@@ -1,6 +1,11 @@
 import { receiveProviderWebhook, type Services } from "@envelopen/core";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { Hono } from "hono";
+import {
+  type AttemptLimiter,
+  type AttemptRule,
+  durableAttemptLimiter,
+} from "../auth/rate-limit-do";
 import { readBodyLimited } from "../body";
 import { type EventSink, eventSink } from "../do/events";
 import { createServices } from "../services";
@@ -17,13 +22,24 @@ import { createServices } from "../services";
 // - 200 for a verified request, also when it has no event that Envelopen keeps.
 // - 401 for a failed verification, and 404 for an unknown connection. Both record nothing.
 // - 413 for a body above 256 KB. Provider events are a few KB.
+// - 429 when a connection whose webhook has no signature is over its cap.
+//
+// The SMTP adapter's Brevo preset authenticates with a bearer token, not a signature
+// (KTD13). A leaked token must not flood the event tables, so its verified requests are
+// counted per connection in the AuthRateLimiter Durable Object (HOOK_TOKEN_RULE).
 
 const MAX_BODY_BYTES = 256 * 1024;
+
+/** Verified requests per connection and minute, for webhooks with a bearer token. */
+export const HOOK_TOKEN_RULE: AttemptRule = { limit: 600, windowMs: 60 * 1000 };
+/** Providers whose webhook authenticates with a token, not a signature of the body. */
+const TOKEN_PROVIDERS = new Set(["smtp"]);
 
 export interface HookRoutesOptions {
   createDb?: (env: Env) => DbConnection;
   createServices?: (env: Env, request: Request) => Partial<Services>;
   sink?: (env: Env) => EventSink;
+  limiter?: (env: Env) => AttemptLimiter;
 }
 
 export function createHookRoutes(options: HookRoutesOptions = {}) {
@@ -46,8 +62,29 @@ export function createHookRoutes(options: HookRoutesOptions = {}) {
 
     const db = (options.createDb ?? ((env: Env) => createDb(env)))(c.env);
     const services = (options.createServices ?? createServices)(c.env, c.req.raw);
+    // A token provider's token goes in the Authorization header, never in the path.
+    if (TOKEN_PROVIDERS.has(provider) && c.req.param("token") !== undefined) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    const limiter = TOKEN_PROVIDERS.has(provider)
+      ? (options.limiter ?? ((env: Env) => durableAttemptLimiter(env.AUTH_RATE_LIMITER)))(c.env)
+      : null;
     const outcome = await receiveProviderWebhook(
-      { db, services },
+      {
+        db,
+        services,
+        ...(limiter
+          ? {
+              admit: async (target) =>
+                (
+                  await limiter.record(
+                    `hook:${target.workspaceId}:${target.connectionId}`,
+                    HOOK_TOKEN_RULE,
+                  )
+                ).allowed,
+            }
+          : {}),
+      },
       { provider, workspaceId, connectionId },
       {
         url: c.req.url,
@@ -65,6 +102,10 @@ export function createHookRoutes(options: HookRoutesOptions = {}) {
           console.error("Event hand-off failed", error),
         ),
       );
+    }
+    if (outcome.status === 429) {
+      c.header("Retry-After", "60");
+      return c.json({ error: "rate_limited" }, 429);
     }
     if (outcome.status !== 200) {
       return c.json(

@@ -69,7 +69,12 @@ export class WelcomeWorkflow extends WorkflowEntrypoint<Env, WelcomeJob> {
     const meter = usageMeter(this.env);
     return {
       db,
-      services: { credentials, hashEmail, outboundFetch: services.outboundFetch ?? fetch },
+      services: {
+        credentials,
+        hashEmail,
+        outboundFetch: services.outboundFetch ?? fetch,
+        ...(services.connectSocket ? { connectSocket: services.connectSocket } : {}),
+      },
       signer: await tokenSigner(this.env),
       usage: async () => {
         const status = await meter.status();

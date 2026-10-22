@@ -11,6 +11,7 @@ import {
 } from "@envelopen/core";
 import { addContacts } from "@envelopen/core/testing/campaign-fixtures";
 import { getAdapter } from "@envelopen/providers";
+import { mockSmtp, parseMail } from "@envelopen/providers/conformance/mock-smtp";
 import { describe, expect, it } from "vitest";
 import {
   batchRow,
@@ -37,7 +38,7 @@ import {
   pendingUnsubscribedContacts,
 } from "../do/unsubscribes";
 import { usageMeter, usageReader } from "../do/usage";
-import { MAX_RATE_WAIT_MS, processPointer } from "./send-consumer";
+import { consumerDeps, MAX_RATE_WAIT_MS, processPointer } from "./send-consumer";
 
 // The send consumer (U9). The execution note of the plan asks for the redelivery,
 // stale-generation, and pause tests first: they are the first three groups here.
@@ -801,5 +802,35 @@ describe("snapshot and send-time rules", () => {
       expect((await processPointer(deps, queue.sent[0])).result).toBe("sent");
       expect((await campaignRow(db, seeded.workspaceId, campaignId)).status).toBe("sent");
     }
+  });
+});
+
+describe("SMTP connections (U18)", () => {
+  it("sends a campaign batch over the socket capability, 20 per batch on Workers Free", async () => {
+    const { db, seeded, campaignId, pointers } = await sendingCampaign({
+      provider: "smtp",
+      contacts: 25,
+    });
+    expect(pointers).toHaveLength(2);
+    const server = mockSmtp();
+    const base = await testDeps(db);
+    const deps = await testDeps(db, {
+      services: { ...base.services, connectSocket: server.connect },
+    });
+    for (const pointer of pointers)
+      expect((await processPointer(deps, pointer)).result).toBe("sent");
+    expect(deps.mock.calls).toHaveLength(0);
+    // One SMTP connection per batch.
+    expect(server.sessions).toHaveLength(2);
+    expect(server.messages).toHaveLength(25);
+    const mail = parseMail(server.messages[0]?.data ?? "");
+    expect(mail.headers.get("list-unsubscribe")).toMatch(/^<https:\/\/.+\/u\/.+>$/);
+    expect(mail.headers.get("list-unsubscribe-post")).toBe("List-Unsubscribe=One-Click");
+    expect((await campaignRow(db, seeded.workspaceId, campaignId)).status).toBe("sent");
+  });
+
+  it("passes the Worker's socket capability to the consumer", async () => {
+    const deps = await consumerDeps(env, campaignDb());
+    expect(deps.services.connectSocket).toEqual(expect.any(Function));
   });
 });

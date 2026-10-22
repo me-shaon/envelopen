@@ -2,10 +2,11 @@ import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 
 // End-to-end tests of the admin app against `wrangler dev` with a local D1.
-// Twelve Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
+// Thirteen Workers run: one in password mode, one in passkey mode (PBKDF2 below 100000),
 // one each for the contacts, providers, editor, campaigns, first-campaign, forms,
-// welcome, and brand specs, so their owners and data start fresh, and two for the backup
-// spec: the source and the restore target, which has its own keys. The providers,
+// welcome, brand, and smtp specs, so their owners and data start fresh, and two for the
+// backup spec: the source and the restore target, which has its own keys. The smtp
+// Worker also sends its SMTP connections to a local SMTP mock (e2e/smtp-mock.mjs). The providers,
 // editor, campaigns, first-campaign, forms, welcome, and brand Workers send their
 // provider and DNS requests to local mock servers (e2e/provider-mock.mjs), one each, so
 // each spec sees only its own sent emails.
@@ -39,6 +40,11 @@ export const WELCOME_PORT = 8806;
 export const WELCOME_MOCK_PORT = 8807;
 export const BRAND_PORT = 8808;
 export const BRAND_MOCK_PORT = 8809;
+export const SMTP_PORT = 8810;
+export const SMTP_PROVIDER_MOCK_PORT = 8811;
+/** The SMTP mock (e2e/smtp-mock.mjs) and the HTTP port that lists its messages. */
+export const SMTP_MOCK_PORT = 8812;
+export const SMTP_MOCK_HTTP_PORT = 8813;
 
 // The forms Worker uses Cloudflare's documented Turnstile test keys: the site key always
 // passes, and the secret accepts the test token. Siteverify goes to the provider mock.
@@ -214,6 +220,31 @@ export default defineConfig({
     {
       command: `node e2e/serve.mjs ${BRAND_PORT} brand 100000 http://127.0.0.1:${BRAND_MOCK_PORT}`,
       url: `http://localhost:${BRAND_PORT}/api/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      // The smtp mock serves the DNS records of the sending domain.
+      command: `node e2e/provider-mock.mjs ${SMTP_PROVIDER_MOCK_PORT} --dmarc`,
+      url: `http://127.0.0.1:${SMTP_PROVIDER_MOCK_PORT}/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      command: `node e2e/smtp-mock.mjs ${SMTP_MOCK_PORT} ${SMTP_MOCK_HTTP_PORT}`,
+      url: `http://127.0.0.1:${SMTP_MOCK_HTTP_PORT}/messages`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      command: `node e2e/serve.mjs ${SMTP_PORT} smtp 100000 http://127.0.0.1:${SMTP_PROVIDER_MOCK_PORT} 127.0.0.1:${SMTP_MOCK_PORT}`,
+      url: `http://localhost:${SMTP_PORT}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: "ignore",

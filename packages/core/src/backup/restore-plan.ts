@@ -212,6 +212,7 @@ const identity: Upgrade = (_table, row) => row;
  * - 0021 adds only new tables (welcome series and welcome sends). An older backup has none.
  * - 0022 adds the brand tables and `campaigns.brand_snapshot`. An older campaign has no
  *   snapshot, and an older backup has no brand kit and no logos.
+ * - 0023 adds `provider_connections.daily_cap`. An older connection has no cap.
  */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
@@ -224,6 +225,7 @@ export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   },
   21: identity,
   22: (table, row) => (table === "campaigns" ? { brand_snapshot: null, ...row } : row),
+  23: (table, row) => (table === "provider_connections" ? { daily_cap: null, ...row } : row),
 };
 
 /** Returns why a backup of `schemaVersion` cannot be restored here, or null. */

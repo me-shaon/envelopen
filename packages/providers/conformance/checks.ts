@@ -17,10 +17,16 @@ import {
 import { campaignBatch } from "./fixtures/messages";
 import type { CheckId, ConformanceFixtures, SendFixture } from "./fixtures/types";
 import { type CapturedRequest, mockFetch, type RecordedExchange } from "./mock-fetch";
+import { type MockSmtpOptions, mockSmtp } from "./mock-smtp";
 
 // The checks of the conformance kit (KTD15), as plain functions. Each check returns a
 // result and never throws, so the kit can test itself: a broken adapter must fail.
 // `suite.ts` wraps these checks in Vitest.
+//
+// SMTP adapters (fixtures with `smtp`) run the same checks against the in-process mock
+// SMTP server. Only the transport differs: the kit passes the mock's `connect` and a
+// fetch that fails, a timeout is a reply that never comes, and a server error is a 421.
+// The unsubscribe header check reads the captured message source.
 
 export type CheckStatus =
   | { status: "pass" }
@@ -121,6 +127,9 @@ const throwingFetch = (error: () => Error): typeof fetch =>
     throw error();
   }) as typeof fetch;
 
+/** The fetch of an SMTP check: an SMTP adapter must not make HTTP requests. */
+const noHttp = throwingFetch(() => new TypeError("An SMTP adapter made an HTTP request."));
+
 export function conformanceChecks(
   adapter: ProviderAdapter,
   fixtures: ConformanceFixtures,
@@ -133,9 +142,19 @@ export function conformanceChecks(
     return { fetch: fetcher, refs, ...(now === undefined ? {} : { now: () => now }) };
   }
 
+  /** The context of an SMTP call: the mock server's `connect`, and no HTTP. */
+  function smtpContext(connect: SendContext["connect"], refs = fixtures.refs ?? {}): SendContext {
+    return { ...context(noHttp, refs), connect, timeoutMs: fixtures.smtpTimeoutMs ?? 500 };
+  }
+
   async function send(
     fixture: SendFixture,
-    options: { idempotencyKey?: string; fetch?: typeof fetch; exchanges?: RecordedExchange[] } = {},
+    options: {
+      idempotencyKey?: string;
+      fetch?: typeof fetch;
+      exchanges?: RecordedExchange[];
+      smtp?: MockSmtpOptions;
+    } = {},
   ): Promise<{
     messages: OutgoingMessage[];
     result: SendBatchResult;
@@ -145,7 +164,24 @@ export function conformanceChecks(
     // The same check as `sendBatch`, but the kit calls the adapter directly, so a
     // missing or reordered result is a failure here and not repaired.
     assertMessages(messages, caps.batchSize);
-    const mock = mockFetch(options.exchanges ?? fixture.exchanges);
+    const smtpOptions = options.smtp ?? fixture.smtp;
+    if (smtpOptions) {
+      const server = mockSmtp(smtpOptions);
+      const result = await adapter.sendBatch(
+        messages,
+        fixtures.credentials,
+        smtpContext(server.connect),
+      );
+      // One captured "request" per accepted message, with the message source as the body.
+      const calls = server.messages.map((message) => ({
+        method: "DATA",
+        url: `smtp://${server.sessions[0]?.target.hostname ?? "unknown"}`,
+        headers: new Headers(),
+        body: message.data,
+      }));
+      return { messages, result, calls };
+    }
+    const mock = mockFetch(options.exchanges ?? fixture.exchanges ?? []);
     const ctx = {
       ...context(options.fetch ?? mock.fetch),
       ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
@@ -463,7 +499,10 @@ export function conformanceChecks(
       async (problems) => {
         const key = "conformance-idempotency-key-1";
         const fixture = fixtures.send.allSent;
-        const exchanges = fixture.exchanges.map((exchange) => ({ ...exchange, times: undefined }));
+        const exchanges = (fixture.exchanges ?? []).map((exchange) => ({
+          ...exchange,
+          times: undefined,
+        }));
         const first = await send(fixture, { idempotencyKey: key, exchanges });
         const second = await send(fixture, { idempotencyKey: key, exchanges });
         const calls = [...first.calls, ...second.calls];
@@ -501,14 +540,22 @@ export function conformanceChecks(
       const fixture = fixtures.send.uncertain;
       if (!fixture) return missing(problems, "send.uncertain", "send.uncertain");
       const runs = [
-        { label: "5xx", run: await send(fixture) },
+        { label: fixture.smtp ? "421" : "5xx", run: await send(fixture) },
         {
           label: "timeout",
-          run: await send(fixture, {
-            fetch: throwingFetch(
-              () => new DOMException("The operation timed out.", "TimeoutError"),
-            ),
-          }),
+          run: fixture.smtp
+            ? // The server takes the first message and never answers the final dot.
+              await send(fixture, {
+                smtp: {
+                  ...fixture.smtp,
+                  reply: (command) => (command.verb === "DATA_END" ? "timeout" : undefined),
+                },
+              })
+            : await send(fixture, {
+                fetch: throwingFetch(
+                  () => new DOMException("The operation timed out.", "TimeoutError"),
+                ),
+              }),
         },
       ];
       for (const { label, run } of runs) {
@@ -644,8 +691,13 @@ export function conformanceChecks(
     }),
 
     check("connect.ok", "connects with a good key", async (problems) => {
-      const mock = mockFetch(fixtures.connect.ok);
-      const result = await adapter.connect(fixtures.credentials, context(mock.fetch));
+      const smtp = fixtures.connect.smtp;
+      const result = await adapter.connect(
+        fixtures.credentials,
+        smtp
+          ? smtpContext(mockSmtp(smtp.ok).connect)
+          : context(mockFetch(fixtures.connect.ok).fetch),
+      );
       if (!result.ok) {
         problems.push(`connect failed: ${result.reason}, ${result.message}`);
         return;
@@ -657,8 +709,13 @@ export function conformanceChecks(
     }),
 
     check("connect.bad-key", "rejects a bad key", async (problems) => {
-      const mock = mockFetch(fixtures.connect.badKey);
-      const result = await adapter.connect(fixtures.credentials, context(mock.fetch));
+      const smtp = fixtures.connect.smtp;
+      const result = await adapter.connect(
+        fixtures.credentials,
+        smtp
+          ? smtpContext(mockSmtp(smtp.badKey).connect)
+          : context(mockFetch(fixtures.connect.badKey).fetch),
+      );
       const want = fixtures.connect.badKeyReason ?? "auth";
       if (result.ok) problems.push("connect accepted a bad key.");
       else if (result.reason !== want)
@@ -670,6 +727,31 @@ export function conformanceChecks(
       "connect.server-error",
       "reports a provider 5xx and a network error",
       async (problems) => {
+        const smtp = fixtures.connect.smtp;
+        if (smtp) {
+          // A 421 greeting is the SMTP form of a 503.
+          const busy = mockSmtp({
+            ...smtp.ok,
+            reply: (command) =>
+              command.verb === "CONNECT" ? "421 4.3.2 Service not available" : undefined,
+          });
+          const server = await adapter.connect(fixtures.credentials, smtpContext(busy.connect));
+          if (server.ok) problems.push("connect passed while the server answered 421.");
+          else if (server.reason !== "server_error") {
+            problems.push(`After a 421, the reason is ${server.reason}, not server_error.`);
+          }
+          const offline = await adapter.connect(
+            fixtures.credentials,
+            smtpContext(() => {
+              throw new TypeError("Network connection lost.");
+            }),
+          );
+          if (offline.ok) problems.push("connect passed without a network.");
+          else if (offline.reason !== "network") {
+            problems.push(`Without a network, the reason is ${offline.reason}, not network.`);
+          }
+          return;
+        }
         // The same requests as `connect.ok`, answered with 503.
         const down = fixtures.connect.ok.map((exchange) => ({
           ...exchange,

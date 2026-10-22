@@ -2677,6 +2677,12 @@
           },
           "docsUrl": {
             "type": "string"
+          },
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderPreset"
+            }
           }
         },
         "required": [
@@ -2693,7 +2699,129 @@
           "ratePerSecond",
           "requiresWorkersPaid",
           "notes",
-          "docsUrl"
+          "docsUrl",
+          "presets"
+        ]
+      },
+      "ProviderPreset": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "fixed": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "fieldHints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "hint": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "placeholder": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "hint",
+                "placeholder"
+              ]
+            }
+          },
+          "defaultDailyCap": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "capSource": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "url"
+            ]
+          },
+          "policyWarning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label",
+                "url"
+              ]
+            }
+          },
+          "webhook": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "fixed",
+          "fieldHints",
+          "defaultDailyCap",
+          "capSource",
+          "policyWarning",
+          "notes",
+          "links",
+          "webhook"
         ]
       },
       "ConnectionList": {
@@ -2775,13 +2903,27 @@
               "string",
               "null"
             ],
-            "description": "For a transactional-only provider: the warning to accept."
+            "description": "The warning to accept before campaigns: of a transactional-only provider, or of the connection's preset (Gmail, R29)."
           },
           "policyWarningAcceptedAt": {
             "type": [
               "integer",
               "null"
             ]
+          },
+          "preset": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The preset of an SMTP connection: gmail, workspace, brevo, or custom."
+          },
+          "dailyCap": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The most messages that the connection sends in 24 hours, or null for no cap."
           },
           "requiresWorkersPaid": {
             "type": "boolean"
@@ -2810,6 +2952,8 @@
           "selected",
           "policyWarning",
           "policyWarningAcceptedAt",
+          "preset",
+          "dailyCap",
           "requiresWorkersPaid",
           "lastCheckedAt",
           "createdAt"
@@ -2880,13 +3024,27 @@
               "string",
               "null"
             ],
-            "description": "For a transactional-only provider: the warning to accept."
+            "description": "The warning to accept before campaigns: of a transactional-only provider, or of the connection's preset (Gmail, R29)."
           },
           "policyWarningAcceptedAt": {
             "type": [
               "integer",
               "null"
             ]
+          },
+          "preset": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The preset of an SMTP connection: gmail, workspace, brevo, or custom."
+          },
+          "dailyCap": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The most messages that the connection sends in 24 hours, or null for no cap."
           },
           "requiresWorkersPaid": {
             "type": "boolean"
@@ -2918,6 +3076,8 @@
           "selected",
           "policyWarning",
           "policyWarningAcceptedAt",
+          "preset",
+          "dailyCap",
           "requiresWorkersPaid",
           "lastCheckedAt",
           "createdAt",
@@ -16098,6 +16258,15 @@
                       "type": "string",
                       "maxLength": 4096
                     }
+                  },
+                  "dailyCap": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 10000000,
+                    "description": "The most messages in 24 hours. Leave it out for the preset's default (SMTP), or null for no cap."
                   }
                 },
                 "required": [
@@ -16639,8 +16808,8 @@
     "/connections/{id}/accept-policy": {
       "post": {
         "operationId": "connections.accept_policy",
-        "summary": "Accept the transactional-only warning",
-        "description": "Lets campaigns use a transactional-only connection (R62). Only the owner can accept, and the audit log records who accepted and when.",
+        "summary": "Accept the connection's policy warning",
+        "description": "Lets campaigns use a transactional-only connection (R62), or a connection whose preset has a policy warning, such as Gmail (R29). Only the owner can accept, and the audit log records who accepted and when.",
         "tags": [
           "connections"
         ],
@@ -16990,6 +17159,107 @@
           },
           "422": {
             "description": "The Idempotency-Key was used with a different path or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/connections/{id}/webhook-secret/rotate": {
+      "post": {
+        "operationId": "connections.rotate_webhook_secret",
+        "summary": "Rotate the webhook token",
+        "description": "Makes a new webhook secret for a connection whose provider uses Envelopen's secret, such as the Brevo bearer token. The old secret stops working at once. Update the webhook in the provider with the new secret.",
+        "tags": [
+          "connections"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "workspace:admin",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "never",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
             "content": {
               "application/json": {
                 "schema": {

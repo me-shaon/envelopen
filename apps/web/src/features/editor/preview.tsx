@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 export type PreviewMode = "desktop" | "mobile" | "dark";
 
-const MODES: { id: PreviewMode; label: string; icon: typeof MonitorIcon }[] = [
+export const MODES: { id: PreviewMode; label: string; icon: typeof MonitorIcon }[] = [
   { id: "desktop", label: "Desktop", icon: MonitorIcon },
   { id: "mobile", label: "Mobile", icon: SmartphoneIcon },
   { id: "dark", label: "Dark mode", icon: MoonIcon },
@@ -25,7 +25,8 @@ export function Segmented<T extends string>({
 }: {
   label: string;
   value: T;
-  options: { id: T; label: string; icon?: typeof MonitorIcon }[];
+  /** `name` is the accessible name when the visible label is short, such as "3". */
+  options: { id: T; label: string; name?: string; icon?: typeof MonitorIcon }[];
   onChange: (value: T) => void;
 }) {
   return (
@@ -39,6 +40,7 @@ export function Segmented<T extends string>({
             key={option.id}
             type="button"
             aria-pressed={active}
+            aria-label={option.name}
             onClick={() => onChange(option.id)}
             className={cn(
               "inline-flex min-h-7 max-sm:min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] transition-colors",
@@ -61,13 +63,20 @@ export function EmailPreview({
   subject,
   preheader,
   missing,
+  mode: shownMode,
+  onModeChange,
 }: {
   html: string | null;
   subject: string;
   preheader: string;
   missing: string[];
+  /** The preview size, when the page keeps it, such as the builder's width toggle (U14). */
+  mode?: PreviewMode;
+  onModeChange?: (mode: PreviewMode) => void;
 }) {
-  const [mode, setMode] = useState<PreviewMode>("desktop");
+  const [ownMode, setOwnMode] = useState<PreviewMode>("desktop");
+  const mode = shownMode ?? ownMode;
+  const setMode = onModeChange ?? setOwnMode;
   const dark = mode === "dark";
   const srcDoc = html === null ? "" : dark ? forceDarkMode(html) : html;
   return (

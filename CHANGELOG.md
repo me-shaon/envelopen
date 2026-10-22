@@ -15,6 +15,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 ### Added
 
 - A brand kit (name, logo, colors, font, footer, postal address, and social links) that templates and drafts use and confirmed campaigns keep; a campaign needs the postal address before confirm.
+- A drag-and-drop builder in the template editor: a block library with ready sections, drag handles, sections with 1 to 3 columns, keyboard move up and move down, and a desktop and mobile canvas.
 
 ### Manual steps
 

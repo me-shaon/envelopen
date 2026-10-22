@@ -608,4 +608,32 @@
   .email-canvas .ProseMirror .ProseMirror-selectednode[data-merge-tag] {
     outline: 2px solid var(--ring);
   }
+
+  /* A section or a text block selected as a whole, after a move or a drag (U14). */
+  .email-canvas .ProseMirror > .ProseMirror-selectednode:not([data-drag-handle]) {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  .email-canvas .ProseMirror > [data-block="columns"].ProseMirror-selectednode {
+    border-style: solid;
+    border-color: transparent;
+  }
+
+  /* The drag handle beside the block under the pointer. It needs a mouse. */
+  .block-drag-handle {
+    z-index: 5;
+    transition: opacity var(--duration-press) ease-out;
+  }
+
+  .block-drag-handle[data-dragging="true"] {
+    opacity: 0.4;
+  }
+
+  @media (pointer: coarse) {
+    .block-drag-handle {
+      display: none;
+    }
+  }
 }

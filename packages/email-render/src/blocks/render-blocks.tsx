@@ -25,6 +25,7 @@ import {
   type EmailDocument,
   type InlineNode,
   isBrandColorToken,
+  MAX_COLUMNS,
   SOCIAL_NETWORKS,
   type SocialLink,
   type SocialNetwork,
@@ -40,6 +41,9 @@ const text: CSSProperties = {
   lineHeight: "1.6",
   color: EMAIL_COLORS.text,
 };
+
+/** The width of each column in a section of 1, 2, or 3 columns. */
+const COLUMN_WIDTHS: Record<number, string> = { 1: "100%", 2: "50%", 3: "33.33%" };
 
 const HEADING_SIZES = { 1: "28px", 2: "22px", 3: "18px" } as const;
 
@@ -189,21 +193,24 @@ function Block({ node }: { node: BlockNode | ColumnChild }): ReactNode {
       );
     }
     case "columns": {
-      const columns = (node.content ?? []).slice(0, 2);
+      // A section has 1 to 3 columns (U14). Two columns render as in v0.3 (R24).
+      const columns = (node.content ?? []).slice(0, MAX_COLUMNS);
+      const width = COLUMN_WIDTHS[columns.length] ?? "100%";
+      const last = columns.length - 1;
       return (
         <Section style={{ margin: "0 0 8px" }}>
           <Row>
             {columns.map((column, index) => (
               <Column
-                // biome-ignore lint/suspicious/noArrayIndexKey: the two columns never reorder.
+                // biome-ignore lint/suspicious/noArrayIndexKey: the columns render once, in order.
                 key={index}
                 className="env-col"
-                width="50%"
+                width={width}
                 style={{
-                  width: "50%",
+                  width,
                   verticalAlign: "top",
                   paddingLeft: index === 0 ? 0 : "12px",
-                  paddingRight: index === 0 ? "12px" : 0,
+                  paddingRight: index === last ? 0 : "12px",
                 }}
               >
                 {(column.content ?? []).map((child, childIndex) => (

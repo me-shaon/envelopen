@@ -1,7 +1,5 @@
 import {
   type BlockNode,
-  type BlockType,
-  defaultBlock,
   type EmailDocument,
   starterDocument,
 } from "@envelopen/email-render/blocks/types";
@@ -19,36 +17,36 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import {
+  ArrowDownIcon,
   ArrowLeftIcon,
+  ArrowUpIcon,
   BoldIcon,
-  BookmarkPlusIcon,
   BracesIcon,
-  CodeIcon,
-  Columns2Icon,
   EyeIcon,
-  HeadingIcon,
-  ImageIcon,
   ItalicIcon,
   LinkIcon,
   type LucideIcon,
-  MinusIcon,
-  MousePointerClickIcon,
-  MoveVerticalIcon,
-  PanelBottomDashedIcon,
-  PanelBottomIcon,
-  PanelTopIcon,
+  MonitorIcon,
   PencilIcon,
-  PilcrowIcon,
   PlusIcon,
   Redo2Icon,
   SendIcon,
-  Share2Icon,
+  SmartphoneIcon,
   UnderlineIcon,
   Undo2Icon,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type DragEvent,
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { api, type Schemas, unwrap } from "@/api/client";
-import { mergeFieldsQuery, savedBlocksQuery, templateQuery } from "@/api/queries";
+import { mergeFieldsQuery, templateQuery } from "@/api/queries";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import {
@@ -69,17 +67,24 @@ import { useCurrentWorkspace } from "@/components/workspace-context";
 import { BrandContext, useLiveBrand } from "@/features/brand/shared";
 import { errorText } from "@/features/contacts/shared";
 import { cn } from "@/lib/utils";
-import { BlockSettings } from "./block-settings";
+import { BlockLibrary, type LibraryEntry, LibrarySheet } from "./block-library";
+import { BlockSettings, SectionSettings } from "./block-settings";
 import {
+  blockName,
+  blockPlace,
+  boundaryAt,
   currentBlock,
   documentFont,
   documentOf,
   insertBlocks,
+  LIBRARY_MIME,
   selectedAtom,
+  selectedSection,
   setDocumentFont,
 } from "./doc";
+import { BlockDragHandle } from "./drag-handle";
 import { editorExtensions } from "./extensions";
-import { EmailPreview, Segmented } from "./preview";
+import { EmailPreview, type PreviewMode, Segmented } from "./preview";
 import { SendTestDialog } from "./send-test-dialog";
 import { FormatPill } from "./templates-page";
 
@@ -92,21 +97,6 @@ import { FormatPill } from "./templates-page";
 
 type Template = Schemas["Template"];
 type MergeField = Schemas["MergeFieldList"]["items"][number];
-
-const BLOCKS: { type: BlockType; label: string; icon: LucideIcon }[] = [
-  { type: "heading", label: "Heading", icon: HeadingIcon },
-  { type: "paragraph", label: "Paragraph", icon: PilcrowIcon },
-  { type: "image", label: "Image", icon: ImageIcon },
-  { type: "button", label: "Button", icon: MousePointerClickIcon },
-  { type: "divider", label: "Divider", icon: MinusIcon },
-  { type: "spacer", label: "Spacer", icon: MoveVerticalIcon },
-  { type: "columns", label: "Two columns", icon: Columns2Icon },
-  { type: "social", label: "Social links", icon: Share2Icon },
-  { type: "footer", label: "Footer", icon: PanelBottomIcon },
-  { type: "html", label: "Raw HTML", icon: CodeIcon },
-  { type: "brandHeader", label: "Brand header", icon: PanelTopIcon },
-  { type: "brandFooter", label: "Brand footer", icon: PanelBottomDashedIcon },
-];
 
 /** The renderer is large (React Email and react-dom/server), so it loads on first use. */
 function loadRenderer() {
@@ -393,12 +383,15 @@ function ToolbarButton({
   icon: Icon,
   active,
   disabled,
+  shortcut,
   onClick,
 }: {
   label: string;
   icon: LucideIcon;
   active?: boolean;
   disabled?: boolean;
+  /** The keyboard shortcut, as `aria-keyshortcuts` writes it. */
+  shortcut?: { aria: string; shown: string };
   onClick: () => void;
 }) {
   return (
@@ -408,7 +401,8 @@ function ToolbarButton({
       size="icon-sm"
       aria-label={label}
       aria-pressed={active}
-      title={label}
+      aria-keyshortcuts={shortcut?.aria}
+      title={shortcut ? `${label} (${shortcut.shown})` : label}
       disabled={disabled}
       onClick={onClick}
       className={cn(active && "bg-accent")}
@@ -422,14 +416,18 @@ function Toolbar({
   editor,
   fields,
   onLink,
+  onLibrary,
 }: {
   editor: Editor;
   fields: MergeField[];
   onLink: () => void;
+  /** Opens the block library sheet on narrow screens. */
+  onLibrary: () => void;
 }) {
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
+      place: blockPlace(e),
       bold: e.isActive("bold"),
       italic: e.isActive("italic"),
       underline: e.isActive("underline"),
@@ -458,6 +456,16 @@ function Toolbar({
       aria-label="Formatting"
       className="sticky top-0 z-10 flex flex-wrap items-center gap-1 border-b border-hairline bg-card px-2 py-1.5"
     >
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="@min-[700px]/builder:hidden"
+        onClick={onLibrary}
+      >
+        <PlusIcon className="size-3.5" aria-hidden="true" />
+        Add block
+      </Button>
       <NativeSelect
         aria-label="Text style"
         className="w-[128px]"
@@ -509,6 +517,21 @@ function Toolbar({
         }
       />
       <span className="ml-auto flex items-center gap-1">
+        <ToolbarButton
+          label="Move up"
+          icon={ArrowUpIcon}
+          disabled={state.place.index <= 0}
+          shortcut={{ aria: "Alt+Shift+ArrowUp", shown: "Alt+Shift+Up" }}
+          onClick={() => editor.chain().focus().moveBlock("up").run()}
+        />
+        <ToolbarButton
+          label="Move down"
+          icon={ArrowDownIcon}
+          disabled={state.place.index >= state.place.count - 1}
+          shortcut={{ aria: "Alt+Shift+ArrowDown", shown: "Alt+Shift+Down" }}
+          onClick={() => editor.chain().focus().moveBlock("down").run()}
+        />
+        <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
         <ToolbarButton
           label="Undo"
           icon={Undo2Icon}
@@ -573,17 +596,6 @@ function LinkDialog({
   );
 }
 
-/** A new block. A brand footer starts with the networks that the brand kit has links for. */
-function newBlock(type: BlockType, brand: BrandSnapshot): BlockNode {
-  const block = defaultBlock(type);
-  if (block.type === "brandFooter") {
-    block.attrs.networks = (Object.keys(brand.social) as (keyof typeof brand.social)[]).filter(
-      (network) => brand.social[network],
-    );
-  }
-  return block;
-}
-
 /** The email's font: the default font or the brand font of the brand kit (U13). */
 function FontSetting({ editor, brand }: { editor: Editor; brand: BrandSnapshot }) {
   const font = useEditorState({ editor, selector: ({ editor: e }) => documentFont(e) });
@@ -607,87 +619,6 @@ function FontSetting({ editor, brand }: { editor: Editor; brand: BrandSnapshot }
         </option>
       </NativeSelect>
     </Field>
-  );
-}
-
-function BlockPanel({
-  editor,
-  brand,
-  onSaveBlock,
-}: {
-  editor: Editor;
-  brand: BrandSnapshot;
-  onSaveBlock: () => void;
-}) {
-  const { current } = useCurrentWorkspace();
-  const saved = useQuery(savedBlocksQuery(current.id));
-  const items = saved.data?.items ?? [];
-  return (
-    <div className="flex flex-col gap-6">
-      <FontSetting editor={editor} brand={brand} />
-      <section aria-labelledby="block-panel-title" className="flex flex-col gap-3">
-        <h2 id="block-panel-title" className="m-0 text-[14px] font-semibold tracking-[-0.01em]">
-          Blocks
-        </h2>
-        <div className="grid grid-cols-2 gap-1.5">
-          {BLOCKS.map((block) => {
-            const Icon = block.icon;
-            return (
-              <button
-                key={block.type}
-                type="button"
-                aria-label={`Add ${block.label.toLowerCase()}`}
-                onClick={() => insertBlocks(editor, [newBlock(block.type, brand)])}
-                className="flex min-h-9 items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-left text-[12.5px] transition-colors hover:bg-accent"
-              >
-                <Icon
-                  className="size-3.5 shrink-0 text-muted-foreground"
-                  strokeWidth={1.8}
-                  aria-hidden="true"
-                />
-                {block.label}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-      <section aria-labelledby="saved-panel-title" className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 id="saved-panel-title" className="m-0 text-[14px] font-semibold tracking-[-0.01em]">
-            Saved blocks
-          </h2>
-          <Button variant="ghost" size="sm" onClick={onSaveBlock}>
-            <BookmarkPlusIcon className="size-3.5" aria-hidden="true" />
-            Save as block
-          </Button>
-        </div>
-        {items.length === 0 ? (
-          <p className="m-0 text-[12.5px] text-muted-foreground">
-            Select a block and save it to reuse it in other templates.
-          </p>
-        ) : (
-          <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Saved blocks">
-            {items.map((block) => (
-              <li
-                key={block.id}
-                className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5"
-              >
-                <span className="min-w-0 flex-1 truncate text-[12.5px]">{block.name}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={`Insert ${block.name}`}
-                  onClick={() => insertBlocks(editor, JSON.parse(block.content) as BlockNode[])}
-                >
-                  <PlusIcon className="size-3.5" aria-hidden="true" />
-                  Insert
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
   );
 }
 
@@ -796,6 +727,60 @@ function usePreview(
   };
 }
 
+/** Whether a React drag event carries blocks from the block library. */
+function isLibraryDrag(event: DragEvent): boolean {
+  return Array.from(event.dataTransfer.types).includes(LIBRARY_MIME);
+}
+
+/**
+ * A short message for screen readers (U14). The same message twice in a row gets a
+ * trailing space, so the live region reads it again.
+ */
+function useAnnouncer() {
+  const [message, setMessage] = useState("");
+  const announce = useCallback(
+    (next: string) => setMessage((last) => (last === next ? `${next}\u00a0` : next)),
+    [],
+  );
+  return { message, announce };
+}
+
+/** The panel on the right: the selected block, its section, and the email settings. */
+function SettingsPanel({
+  editor,
+  brand,
+  fields,
+}: {
+  editor: Editor;
+  brand: BrandSnapshot;
+  fields: MergeField[];
+}) {
+  const selected = useEditorState({ editor, selector: ({ editor: e }) => selectedAtom(e) });
+  const section = useEditorState({ editor, selector: ({ editor: e }) => selectedSection(e) });
+  return (
+    <div className="flex flex-col gap-4">
+      {selected ? <BlockSettings editor={editor} block={selected} fields={fields} /> : null}
+      {section ? <SectionSettings editor={editor} section={section} /> : null}
+      {!selected && !section ? (
+        <p className="m-0 rounded-xl border border-dashed border-border px-4 py-3 text-[13px] text-muted-foreground">
+          Select a block on the canvas to change its settings. Text and headings use the toolbar.
+        </p>
+      ) : null}
+      <section aria-labelledby="email-settings-title" className="flex flex-col gap-3 px-1 pt-2">
+        <h2 id="email-settings-title" className="m-0 text-[14px] font-semibold tracking-[-0.01em]">
+          Email
+        </h2>
+        <FontSetting editor={editor} brand={brand} />
+      </section>
+    </div>
+  );
+}
+
+const CANVAS_WIDTHS: { id: "desktop" | "mobile"; label: string; icon: LucideIcon }[] = [
+  { id: "desktop", label: "Desktop", icon: MonitorIcon },
+  { id: "mobile", label: "Mobile", icon: SmartphoneIcon },
+];
+
 function BlockEditor({ template }: { template: Template | null }) {
   const { current } = useCurrentWorkspace();
   const fields = useQuery(mergeFieldsQuery(current.id)).data?.items;
@@ -808,15 +793,21 @@ function BlockEditor({ template }: { template: Template | null }) {
   // A new template starts as unsaved, but leaving it untouched loses nothing.
   const [edited, setEdited] = useState(false);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
-  const [dialog, setDialog] = useState<"link" | "block" | "test" | null>(null);
+  // One size for the canvas and the preview: desktop, mobile, or dark (preview only).
+  const [size, setSize] = useState<PreviewMode>("desktop");
+  const [dialog, setDialog] = useState<"link" | "block" | "test" | "library" | null>(null);
   const save = useSaveTemplate(template?.id ?? null);
+  const { message, announce } = useAnnouncer();
+  const announceRef = useRef(announce);
+  announceRef.current = announce;
 
   const editor = useEditor({
-    extensions: editorExtensions(),
+    extensions: editorExtensions({ announce: (text) => announceRef.current(text) }),
     content: template ? (JSON.parse(template.source) as EmailDocument) : starterDocument(),
     editorProps: {
       attributes: {
         "aria-label": "Email body",
+        "aria-describedby": "canvas-keys",
         class: "email-canvas-body",
       },
     },
@@ -824,10 +815,6 @@ function BlockEditor({ template }: { template: Template | null }) {
       setDirty(true);
       setEdited(true);
     },
-  });
-  const selected = useEditorState({
-    editor,
-    selector: ({ editor: e }) => (e ? selectedAtom(e) : null),
   });
   const docFont = useEditorState({
     editor,
@@ -868,7 +855,36 @@ function BlockEditor({ template }: { template: Template | null }) {
     return saved;
   }
 
+  function insertEntry(entry: LibraryEntry) {
+    insertBlocks(editor, entry.blocks());
+    announce(`${entry.label} added.`);
+    if (dialog === "library") setDialog(null);
+  }
+
+  /** A library drop on the canvas frame, outside the text: the nearest block boundary. */
+  function onCanvasDrop(event: DragEvent) {
+    if (event.nativeEvent.defaultPrevented || !isLibraryDrag(event)) return;
+    event.preventDefault();
+    try {
+      const blocks = JSON.parse(event.dataTransfer.getData(LIBRARY_MIME)) as BlockNode[];
+      insertBlocks(editor, blocks, boundaryAt(editor, event.clientY), { focus: true });
+      announce(`${blockName(blocks[0]?.type ?? "")} added.`);
+    } catch {
+      // Not a block list: nothing to insert.
+    }
+  }
+
   const status = save.isPending ? "Saving..." : dirty ? "Unsaved changes" : "Saved";
+  const canvasWidth = size === "mobile" ? "mobile" : "desktop";
+  const library = (draggable: boolean) => (
+    <BlockLibrary
+      editor={editor}
+      brand={brand}
+      draggable={draggable}
+      onInsert={insertEntry}
+      onSaveBlock={() => setDialog("block")}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -896,43 +912,93 @@ function BlockEditor({ template }: { template: Template | null }) {
       <FormError message={errorText(save.error)} />
       <SubjectFields draft={draft} onDraft={onDraft} fields={fields ?? []} />
       <div className="flex flex-col gap-4">
-        <Segmented
-          label="Editor mode"
-          value={mode}
-          onChange={setMode}
-          options={[
-            { id: "edit", label: "Edit", icon: PencilIcon },
-            { id: "preview", label: "Preview", icon: EyeIcon },
-          ]}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Segmented
+            label="Editor mode"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { id: "edit", label: "Edit", icon: PencilIcon },
+              { id: "preview", label: "Preview", icon: EyeIcon },
+            ]}
+          />
+          {mode === "edit" ? (
+            <Segmented
+              label="Canvas width"
+              value={canvasWidth}
+              onChange={setSize}
+              options={CANVAS_WIDTHS}
+            />
+          ) : null}
+        </div>
+        <p className="sr-only" role="status" data-testid="builder-announcer">
+          {message}
+        </p>
         {mode === "preview" ? (
-          <EmailPreview {...preview} />
+          <EmailPreview {...preview} mode={size} onModeChange={setSize} />
         ) : (
           <BrandContext.Provider value={brand}>
-            <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_288px]">
-              <div className="overflow-hidden rounded-xl border border-border bg-muted">
-                <Toolbar editor={editor} fields={fields ?? []} onLink={() => setDialog("link")} />
-                <div className="px-3 py-6 sm:px-6">
+            <div className="@container/builder">
+              <div className="grid items-start gap-5 @min-[700px]/builder:grid-cols-[minmax(0,1fr)_272px] @min-[1040px]/builder:grid-cols-[224px_minmax(0,1fr)_272px]">
+                <aside
+                  aria-label="Block library"
+                  className="hidden @min-[700px]/builder:col-start-2 @min-[700px]/builder:row-start-2 @min-[700px]/builder:block @min-[1040px]/builder:sticky @min-[1040px]/builder:top-6 @min-[1040px]/builder:col-start-1 @min-[1040px]/builder:row-start-1 @min-[1040px]/builder:max-h-[calc(100vh-48px)] @min-[1040px]/builder:overflow-y-auto"
+                >
+                  {library(true)}
+                </aside>
+                <div className="overflow-hidden rounded-xl border border-border bg-muted @min-[700px]/builder:col-start-1 @min-[700px]/builder:row-span-2 @min-[700px]/builder:row-start-1 @min-[1040px]/builder:col-start-2 @min-[1040px]/builder:row-span-1">
+                  <Toolbar
+                    editor={editor}
+                    fields={fields ?? []}
+                    onLink={() => setDialog("link")}
+                    onLibrary={() => setDialog("library")}
+                  />
+                  {/* biome-ignore lint/a11y/noStaticElementInteractions: the frame takes library drops beside the text. Clicks and keys go to the editor. */}
                   <div
-                    className="email-canvas mx-auto max-w-[600px] rounded-xl border border-border bg-card px-6 py-8 sm:px-10"
-                    style={
-                      docFont === "brand" ? { fontFamily: brandFontStack(brand.font) } : undefined
-                    }
+                    className="px-3 py-6 sm:px-6"
+                    data-testid="canvas"
+                    onDragOver={(event) => {
+                      if (isLibraryDrag(event)) event.preventDefault();
+                    }}
+                    onDrop={onCanvasDrop}
                   >
-                    <EditorContent editor={editor} />
+                    <div
+                      className={cn(
+                        "email-canvas @container relative mx-auto rounded-xl border border-border bg-card py-8 transition-[max-width] duration-(--duration-reveal) ease-(--ease-calm)",
+                        canvasWidth === "mobile"
+                          ? "max-w-[375px] px-6"
+                          : "max-w-[600px] px-6 sm:px-10",
+                      )}
+                      data-width={canvasWidth}
+                      style={
+                        docFont === "brand" ? { fontFamily: brandFontStack(brand.font) } : undefined
+                      }
+                    >
+                      <EditorContent editor={editor} />
+                      <BlockDragHandle editor={editor} />
+                    </div>
                   </div>
+                  <p
+                    id="canvas-keys"
+                    className="m-0 border-t border-hairline px-4 py-2 text-xs text-muted-foreground"
+                  >
+                    Drag a block by its handle to move it, or press Alt+Shift+Up and Alt+Shift+Down.
+                  </p>
                 </div>
+                <aside
+                  aria-label="Settings"
+                  className="@min-[700px]/builder:col-start-2 @min-[700px]/builder:row-start-1 @min-[1040px]/builder:sticky @min-[1040px]/builder:top-6 @min-[1040px]/builder:col-start-3"
+                >
+                  <SettingsPanel editor={editor} brand={brand} fields={fields ?? []} />
+                </aside>
               </div>
-              <aside
-                aria-label="Blocks and settings"
-                className="flex flex-col gap-6 lg:sticky lg:top-6"
-              >
-                {selected ? (
-                  <BlockSettings editor={editor} block={selected} fields={fields ?? []} />
-                ) : null}
-                <BlockPanel editor={editor} brand={brand} onSaveBlock={() => setDialog("block")} />
-              </aside>
             </div>
+            <LibrarySheet
+              open={dialog === "library"}
+              onOpenChange={(open) => setDialog(open ? "library" : null)}
+            >
+              {library(false)}
+            </LibrarySheet>
           </BrandContext.Provider>
         )}
       </div>

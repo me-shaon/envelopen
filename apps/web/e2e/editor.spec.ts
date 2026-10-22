@@ -1,7 +1,8 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type FrameLocator, type Page, test } from "@playwright/test";
+import { expect, type FrameLocator, type Locator, type Page, test } from "@playwright/test";
 import { EDITOR_MOCK_PORT, EDITOR_PORT } from "../playwright.config";
+import { TEMPLATE_FIXTURES } from "../src/features/editor/template-fixtures";
 import { watchCsp } from "./csp";
 
 // The template editor (plan U8), against its own fresh Worker. That Worker sends
@@ -9,6 +10,13 @@ import { watchCsp } from "./csp";
 // test send from the editor reaches a fake Resend. The tests run in order on one owner.
 
 const SETUP_TOKEN = process.env.E2E_SETUP_TOKEN ?? "";
+/** The v0.3 HTML and text of the R24 template fixtures (template-fixtures.test.ts). */
+const V03 = JSON.parse(
+  readFileSync(
+    new URL("../src/features/editor/template-fixtures.v03.json", import.meta.url),
+    "utf8",
+  ),
+) as Record<string, { html: string; text: string }>;
 const SCREENSHOTS = process.env.E2E_SCREENSHOT_DIR;
 const OWNER = { name: "Ada Owner", email: "owner@example.com", password: "correct horse battery" };
 const BASE = `http://localhost:${EDITOR_PORT}`;
@@ -65,6 +73,54 @@ async function apiGet(page: Page, path: string) {
   return (await res.json()) as Record<string, unknown>;
 }
 
+/** The block types of a saved template, in order. */
+async function savedOrder(page: Page, id: string) {
+  const saved = await apiGet(page, `/templates/${id}`);
+  return (JSON.parse(String(saved.source)) as { content: { type: string }[] }).content.map(
+    (block) => block.type,
+  );
+}
+
+/** The top-level blocks on the canvas, as their data-block or tag names. */
+async function canvasOrder(page: Page) {
+  return page.locator(".email-canvas .ProseMirror").evaluate((root) =>
+    Array.from(root.children).map((child) => {
+      const block = child.matches("[data-block]") ? child : child.querySelector("[data-block]");
+      return block?.getAttribute("data-block") ?? child.tagName.toLowerCase();
+    }),
+  );
+}
+
+/** The id of the template in the address bar. */
+function templateId(page: Page) {
+  return page.url().split("/").pop() ?? "";
+}
+
+async function saveTemplate(page: Page) {
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByTestId("save-status")).toHaveText("Saved");
+}
+
+/**
+ * Drags a top-level block by the drag handle onto the top edge of another block. The
+ * pointer first rests on the block, so the handle shows beside it.
+ */
+async function dragByHandle(page: Page, block: Locator, target: Locator) {
+  await block.hover({ position: { x: 24, y: 6 } });
+  const handle = page.getByTestId("drag-handle");
+  await expect(handle).toBeVisible();
+  // Explicit mouse steps: locator.dragTo scrolls to the target in the middle of the
+  // drag, and then Chromium does not start the native drag.
+  const from = await handle.boundingBox();
+  const to = await target.boundingBox();
+  if (!from || !to) throw new Error("The handle or the target is not on the screen.");
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2 + 10, { steps: 4 });
+  await page.mouse.move(to.x + 24, to.y + 2, { steps: 12 });
+  await page.mouse.up();
+}
+
 function preview(page: Page): FrameLocator {
   return page.frameLocator('iframe[title="Email preview"]');
 }
@@ -88,6 +144,8 @@ async function expectInertPreview(page: Page) {
 test.describe("editor", () => {
   test.describe.configure({ mode: "serial" });
   test.use({ baseURL: BASE });
+  /** The template that the builder tests share. */
+  let builderId = "";
 
   test.beforeAll(async ({ request }) => {
     const res = await request.post(`${BASE}/api/setup/owner`, {
@@ -299,5 +357,195 @@ test.describe("editor", () => {
     await expect(page.getByTestId("save-status")).toHaveText("Saved");
     await page.getByRole("link", { name: "Templates" }).first().click();
     await expect(page).toHaveURL(/\/templates$/);
+  });
+  test("drags Button from the library to the second place, and the saved HTML has it there", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto("/templates/new");
+    await page.getByLabel("Template name").fill("Builder");
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "p", "footer"]);
+
+    // An HTML5 drag from the library onto the top edge of the paragraph. Playwright
+    // drives Chromium's native drag, so dataTransfer carries the blocks as in a browser.
+    const paragraph = page.locator(".email-canvas .ProseMirror > p").first();
+    await page
+      .getByRole("button", { name: "Add button" })
+      .dragTo(paragraph, { targetPosition: { x: 24, y: 2 } });
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "p", "footer"]);
+    await expect(page.getByTestId("builder-announcer")).toHaveText("Button added.");
+    await expect(page.getByTestId("block-settings")).toContainText("Button");
+
+    await saveTemplate(page);
+    await expect(page).toHaveURL(/\/templates\/\d+$/);
+    builderId = templateId(page);
+    const id = builderId;
+    expect(await savedOrder(page, id)).toEqual(["heading", "button", "paragraph", "footer"]);
+    const html = String((await apiGet(page, `/templates/${id}`)).html);
+    const button = html.indexOf(">Read more<");
+    expect(button).toBeGreaterThan(html.indexOf("Hello"));
+    expect(button).toBeLessThan(html.indexOf("Write your message here."));
+  });
+
+  test("drags a section by its handle above the block before it, and the order stays after a reload", async ({
+    page,
+  }) => {
+    // Tall enough that the whole canvas shows, so the drag needs no scroll.
+    await page.setViewportSize({ width: 1440, height: 1400 });
+    await signIn(page);
+    const id = builderId;
+    await page.goto(`/templates/${id}`);
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "p", "footer"]);
+
+    // A ready section, inserted by click after the selected paragraph.
+    await page.locator(".email-canvas .ProseMirror > p").first().click();
+    await page.getByRole("button", { name: "Add text and image section" }).click();
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "p", "columns", "footer"]);
+
+    const section = page.locator('.email-canvas [data-block="columns"]');
+    await dragByHandle(page, section, page.locator(".email-canvas .ProseMirror > p").first());
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "columns", "p", "footer"]);
+    await expectNoSeriousViolations(page);
+    await screenshot(page, "builder");
+
+    await saveTemplate(page);
+    await page.reload();
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "columns", "p", "footer"]);
+    expect(await savedOrder(page, id)).toEqual([
+      "heading",
+      "button",
+      "columns",
+      "paragraph",
+      "footer",
+    ]);
+  });
+
+  test("changes a section from two columns to three and back to one, and keeps the content", async ({
+    page,
+  }) => {
+    await signIn(page);
+    const id = builderId;
+    await page.goto(`/templates/${id}`);
+    const section = page.locator('.email-canvas [data-block="columns"]');
+    await expect(section).toHaveAttribute("data-count", "2");
+
+    await section.getByText("Describe the topic in a few sentences.").click();
+    const settings = page.getByTestId("section-settings");
+    await expect(settings.getByRole("button", { name: "2 columns" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await settings.getByRole("button", { name: "3 columns" }).click();
+    await expect(section).toHaveAttribute("data-count", "3");
+    await expect(section.locator('[data-block="column"]')).toHaveCount(3);
+    await expect(section).toContainText("A short title");
+    await expect(section.locator('[data-block="image"]')).toHaveCount(1);
+    await expect(section.locator('[data-block="button"]')).toHaveCount(1);
+
+    // Back to one column: the content of the removed columns moves into it.
+    await settings.getByRole("button", { name: "1 column" }).click();
+    await expect(section).toHaveAttribute("data-count", "1");
+    await expect(section).toContainText("A short title");
+    await expect(section.locator('[data-block="image"]')).toHaveCount(1);
+    await settings.getByRole("button", { name: "3 columns" }).click();
+    await expect(section).toHaveAttribute("data-count", "3");
+
+    await saveTemplate(page);
+    const saved = await apiGet(page, `/templates/${id}`);
+    const doc = JSON.parse(String(saved.source)) as {
+      content: { type: string; content?: { content?: { type: string }[] }[] }[];
+    };
+    const columns = doc.content.find((block) => block.type === "columns");
+    expect(columns?.content).toHaveLength(3);
+    expect(columns?.content?.[0]?.content?.map((block) => block.type)).toEqual([
+      "heading",
+      "paragraph",
+      "button",
+      "image",
+    ]);
+    expect(String(saved.html).match(/class="env-col"/g)).toHaveLength(3);
+  });
+
+  test("moves a block up with the keyboard, announces it, and inserts from the library by keyboard", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto("/templates/new");
+    await page.getByLabel("Template name").fill("Keyboard");
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "p", "footer"]);
+
+    await page.locator(".email-canvas .ProseMirror > p").first().click();
+    // The editor reads the new selection, so Move up turns on.
+    await expect(page.getByRole("button", { name: "Move up" })).toBeEnabled();
+    await page.keyboard.press("Alt+Shift+ArrowUp");
+    await expect.poll(() => canvasOrder(page)).toEqual(["p", "h1", "footer"]);
+    const announcer = page.getByTestId("builder-announcer");
+    await expect(announcer).toHaveText("Text moved to position 1 of 3.");
+    // The same block stays selected, so the next key press moves it again.
+    await page.keyboard.press("Alt+Shift+ArrowDown");
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "p", "footer"]);
+    await expect(announcer).toHaveText("Text moved to position 2 of 3.");
+    await page.getByRole("button", { name: "Move down" }).click();
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "footer", "p"]);
+    await expect(page.getByRole("button", { name: "Move down" })).toBeDisabled();
+    // A move button returns the focus to the canvas, so it is not lost on the disabled button.
+    await expect(page.getByRole("textbox", { name: "Email body" })).toBeFocused();
+
+    // Every library entry is a button: focus it and press Enter to insert.
+    await page.getByRole("button", { name: "Add divider" }).focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "footer", "p", "divider"]);
+    await expect(announcer).toHaveText("Divider added.");
+
+    // The search narrows the list.
+    await page.getByLabel("Search blocks").fill("feature");
+    await expect(page.getByRole("button", { name: "Add feature list section" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add button" })).toBeHidden();
+  });
+
+  test("shows the library as a sheet on a phone, and a tap inserts", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page);
+    await page.goto("/templates/new");
+    await expect(page.getByRole("complementary", { name: "Block library" })).toBeHidden();
+    await page.getByRole("button", { name: "Add block" }).click();
+    const sheet = page.getByRole("dialog", { name: "Add a block" });
+    await sheet.getByRole("button", { name: "Add call to action section" }).click();
+    await expect(sheet).toBeHidden();
+    await expect(page.locator(".email-canvas")).toContainText("Ready to start?");
+    await expect(page.getByRole("button", { name: "Move up" })).toBeVisible();
+    await expectNoSeriousViolations(page);
+  });
+
+  test("opens every existing template unchanged and saves the same HTML before an edit (R24)", async ({
+    page,
+  }) => {
+    await signIn(page);
+    for (const fixture of TEMPLATE_FIXTURES) {
+      // The HTML and text of the v0.3 renderer, as v0.3 saved them. The unit test
+      // template-fixtures.test.ts checks them against the v0.3 hashes.
+      const rendered = V03[fixture.name];
+      if (!rendered) throw new Error(`No v0.3 HTML for ${fixture.name}.`);
+      const created = await apiPost(page, "/templates", {
+        name: `Fixture: ${fixture.name}`,
+        subject: "Fixture",
+        preheader: "Preheader",
+        format: "blocks",
+        source: JSON.stringify(fixture.doc),
+        html: rendered.html,
+        text: rendered.text,
+      });
+      await page.goto(`/templates/${created.id}`);
+      await expect(page.locator(".email-canvas .ProseMirror")).toBeVisible();
+      await expect(page.getByTestId("save-status")).toHaveText("Saved");
+      await saveTemplate(page);
+      const saved = await apiGet(page, `/templates/${created.id}`);
+      // The editor adds default attributes to the JSON, as in v0.3. The blocks stay.
+      const types = (value: unknown) =>
+        (JSON.parse(String(value)) as { content: { type: string }[] }).content.map((b) => b.type);
+      expect(types(saved.source), fixture.name).toEqual(types(created.source));
+      expect(saved.html, fixture.name).toBe(created.html);
+      expect(saved.text, fixture.name).toBe(created.text);
+    }
   });
 });

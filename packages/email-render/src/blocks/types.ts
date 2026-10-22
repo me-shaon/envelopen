@@ -1,6 +1,6 @@
 // The block document of the editor (R26). The editor stores Tiptap JSON, and these
 // types describe the subset that Envelopen uses: the origin block set (heading,
-// paragraph, image, button, divider, spacer, two columns, social links, footer, and raw
+// paragraph, image, button, divider, spacer, columns, social links, footer, and raw
 // HTML), the brand header and footer (U13), and the inline content of text blocks. The renderer in ./render-blocks.tsx turns
 // a document into React Email elements.
 //
@@ -68,10 +68,14 @@ export interface ColumnNode {
   content?: ColumnChild[];
 }
 
+/** A section: 1 to 3 columns side by side (U14). v0.3 sections have two columns. */
 export interface ColumnsNode {
   type: "columns";
   content?: ColumnNode[];
 }
+
+/** The most columns that a section holds. */
+export const MAX_COLUMNS = 3;
 
 export const SOCIAL_NETWORKS = [
   "website",

@@ -12,7 +12,14 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: { __ENVELOPEN_VERSION__: JSON.stringify(rootPackage.version) },
   resolve: {
-    alias: { "@": new URL("./src", import.meta.url).pathname },
+    alias: [
+      { find: "@", replacement: new URL("./src", import.meta.url).pathname },
+      // The drag handle's collaboration imports, without Yjs (see no-collaboration.ts).
+      {
+        find: /^@tiptap\/(y-tiptap|extension-collaboration)$/,
+        replacement: new URL("./src/features/editor/no-collaboration.ts", import.meta.url).pathname,
+      },
+    ],
   },
   build: {
     outDir: "dist",

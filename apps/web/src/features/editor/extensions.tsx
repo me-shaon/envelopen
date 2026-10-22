@@ -1,18 +1,29 @@
-import type { Align, SocialLink, SocialNetwork } from "@envelopen/email-render/blocks/types";
+import type {
+  Align,
+  BlockNode,
+  SocialLink,
+  SocialNetwork,
+} from "@envelopen/email-render/blocks/types";
 import {
   BRAND_COLOR_TOKENS,
   DEFAULT_BUTTON,
   DEFAULT_FOOTER_TEXT,
+  MAX_COLUMNS,
   SOCIAL_NETWORKS,
 } from "@envelopen/email-render/blocks/types";
 import { brandFontStack } from "@envelopen/email-render/brand";
-import { type Extensions, mergeAttributes, Node } from "@tiptap/core";
+import { Extension, type Extensions, mergeAttributes, Node } from "@tiptap/core";
+import { isNodeRangeSelection } from "@tiptap/extension-node-range";
 import { Placeholder } from "@tiptap/extensions";
+import { Fragment, Slice } from "@tiptap/pm/model";
+import { NodeSelection, Plugin, PluginKey } from "@tiptap/pm/state";
+import { dropPoint } from "@tiptap/pm/transform";
 import { NodeViewWrapper, type ReactNodeViewProps, ReactNodeViewRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { ComponentType } from "react";
 import { useBrand } from "@/features/brand/shared";
 import { cn } from "@/lib/utils";
+import { blockName, insertBlocks, LIBRARY_MIME, type MoveDirection, moveBlock } from "./doc";
 
 // Tiptap v3 nodes for the origin block set (R26) and the brand blocks (U13). Text blocks
 // (heading, paragraph) are the StarterKit nodes. Every other block is an atom: the canvas
@@ -320,24 +331,68 @@ export const EmailDocumentNode = Node.create({
   },
 });
 
+/**
+ * The grid of a section on the canvas. The columns stack when the canvas is narrow, as
+ * they do in the email on a phone (the mobile canvas width).
+ */
+const SECTION_GRID: Record<number, string> = {
+  1: "@md:grid-cols-1",
+  2: "@md:grid-cols-2",
+  3: "@md:grid-cols-3",
+};
+
+function sectionClass(count: number): string {
+  return cn(
+    "my-1 grid grid-cols-1 gap-3 rounded-lg border border-dashed border-border p-2",
+    SECTION_GRID[count],
+  );
+}
+
+/**
+ * A section: 1 to 3 columns (U14). v0.3 documents have two columns, and they load
+ * unchanged, because the content rule only allows more (R24).
+ */
 export const Columns = Node.create({
   name: "columns",
   group: "block",
-  content: "column column",
+  content: `column{1,${MAX_COLUMNS}}`,
   isolating: true,
   draggable: true,
   parseHTML() {
     return [{ tag: 'div[data-block="columns"]' }];
   },
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ node, HTMLAttributes }) {
     return [
       "div",
       mergeAttributes(HTMLAttributes, {
         "data-block": "columns",
-        class: "my-1 grid grid-cols-2 gap-3 rounded-lg border border-dashed border-border p-2",
+        "data-count": node.childCount,
+        class: sectionClass(node.childCount),
       }),
       0,
     ];
+  },
+  addNodeView() {
+    // ProseMirror keeps the outer element when only the columns change, so the view sets
+    // the column count on each update.
+    return ({ node }) => {
+      const dom = document.createElement("div");
+      dom.setAttribute("data-block", "columns");
+      const show = (count: number) => {
+        dom.setAttribute("data-count", String(count));
+        dom.className = sectionClass(count);
+      };
+      show(node.childCount);
+      return {
+        dom,
+        contentDOM: dom,
+        update: (next) => {
+          if (next.type !== node.type) return false;
+          show(next.childCount);
+          return true;
+        },
+      };
+    };
   },
 });
 
@@ -396,7 +451,137 @@ export const MergeTag = Node.create({
   },
 });
 
-export function editorExtensions(): Extensions {
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    blockMove: {
+      /** Moves the top-level block of the selection up or down by one place. */
+      moveBlock: (direction: MoveDirection) => ReturnType;
+    };
+  }
+}
+
+export interface BuilderOptions {
+  /** Called with a short message for the screen reader after a block moves or lands. */
+  announce: (message: string) => void;
+}
+
+/**
+ * Keyboard reorder (U14): Alt+Shift+Up and Alt+Shift+Down move the selected top-level
+ * block. After a drag with the handle, the moved block stays selected as a node, so the
+ * settings panel shows it.
+ */
+const BlockMove = Extension.create<BuilderOptions>({
+  name: "blockMove",
+  addOptions() {
+    return { announce: () => undefined };
+  },
+  addCommands() {
+    return {
+      moveBlock:
+        (direction) =>
+        ({ tr, dispatch }) => {
+          const moved = moveBlock(tr, direction);
+          if (!dispatch) return moved.status === "moved";
+          if (moved.status === "edge") {
+            this.options.announce(
+              `${blockName(moved.type)} is already ${direction === "up" ? "first" : "last"}.`,
+            );
+          }
+          if (moved.status !== "moved") return false;
+          tr.scrollIntoView();
+          this.options.announce(
+            `${blockName(moved.type)} moved to position ${moved.index + 1} of ${moved.count}.`,
+          );
+          return true;
+        },
+    };
+  },
+  addKeyboardShortcuts() {
+    return {
+      "Alt-Shift-ArrowUp": () => this.editor.commands.moveBlock("up"),
+      "Alt-Shift-ArrowDown": () => this.editor.commands.moveBlock("down"),
+    };
+  },
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("blockMoveSelection"),
+        // The drag handle selects the dropped blocks as a node range. A range of one
+        // selectable node becomes a node selection.
+        appendTransaction(_transactions, _old, state) {
+          const { selection, doc } = state;
+          if (!isNodeRangeSelection(selection)) return null;
+          const node = doc.nodeAt(selection.from);
+          if (!node || selection.from + node.nodeSize !== selection.to) return null;
+          if (!NodeSelection.isSelectable(node)) return null;
+          return state.tr.setSelection(NodeSelection.create(doc, selection.from));
+        },
+      }),
+    ];
+  },
+});
+
+/** Whether a drag carries blocks from the block library. */
+export function isLibraryDrag(event: DragEvent): boolean {
+  return Array.from(event.dataTransfer?.types ?? []).includes(LIBRARY_MIME);
+}
+
+/** The blocks of a library drag, or null when the data is not a block list. */
+function libraryBlocks(event: DragEvent): BlockNode[] | null {
+  try {
+    const value = JSON.parse(event.dataTransfer?.getData(LIBRARY_MIME) ?? "") as unknown;
+    return Array.isArray(value) && value.length > 0 ? (value as BlockNode[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Drops from the block library (KTD11). The library uses HTML5 drag. ProseMirror's drop
+ * cursor shows where the blocks land, and this handler inserts them at the nearest
+ * position that the schema allows: between blocks or in a column.
+ */
+const LibraryDrop = Extension.create<BuilderOptions>({
+  name: "libraryDrop",
+  addOptions() {
+    return { announce: () => undefined };
+  },
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    const options = this.options;
+    return [
+      new Plugin({
+        key: new PluginKey("libraryDrop"),
+        props: {
+          handleDrop(view, event) {
+            if (!isLibraryDrag(event)) return false;
+            // The drag is ours from here on, so ProseMirror never moves the selection.
+            const blocks = libraryBlocks(event);
+            if (!blocks) return true;
+            let slice: Slice;
+            try {
+              const nodes = blocks.map((block) => view.state.schema.nodeFromJSON(block));
+              slice = new Slice(Fragment.fromArray(nodes), 0, 0);
+            } catch {
+              return true;
+            }
+            const found = view.posAtCoords({ left: event.clientX, top: event.clientY });
+            const doc = view.state.doc;
+            const at = found
+              ? (dropPoint(doc, found.pos, slice) ?? doc.content.size)
+              : doc.content.size;
+            insertBlocks(editor, blocks, at, { focus: true });
+            options.announce(`${blockName(blocks[0]?.type ?? "")} added.`);
+            return true;
+          },
+        },
+      }),
+    ];
+  },
+});
+
+export function editorExtensions(options?: BuilderOptions): Extensions {
+  const builder: BuilderOptions = options ?? { announce: () => undefined };
   return [
     StarterKit.configure({
       document: false,
@@ -410,6 +595,8 @@ export function editorExtensions(): Extensions {
       codeBlock: false,
       horizontalRule: false,
       trailingNode: false,
+      // The drop indicator for drags with the handle and from the library.
+      dropcursor: { color: "var(--ring)", width: 2 },
       link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
     }),
     Placeholder.configure({ placeholder: "Write something, or add a block from the panel." }),
@@ -426,5 +613,7 @@ export function editorExtensions(): Extensions {
     Columns,
     Column,
     MergeTag,
+    BlockMove.configure(builder),
+    LibraryDrop.configure(builder),
   ];
 }

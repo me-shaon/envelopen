@@ -164,6 +164,23 @@ describe("renderEmail", () => {
     expect(applyBrand(text, { ...DEFAULT_BRAND, name: "Acme" }, "text")).toBe(text);
   });
 
+  it("renders a section with 1 or 3 columns (U14)", async () => {
+    const column = (text: string) => ({
+      type: "column" as const,
+      content: [{ type: "paragraph" as const, content: [{ type: "text" as const, text }] }],
+    });
+    const three = await renderEmail(
+      doc({ type: "columns", content: [column("A1"), column("B2"), column("C3")] }),
+    );
+    expect(three.html.match(/class="env-col"/g)).toHaveLength(3);
+    expect(three.html).toContain('width="33.33%"');
+    expect(three.html).toContain("padding-left:12px;padding-right:12px");
+    expect(three.text).toMatch(/A1[\s\S]*B2[\s\S]*C3/);
+    const one = await renderEmail(doc({ type: "columns", content: [column("Only")] }));
+    expect(one.html.match(/class="env-col"/g)).toHaveLength(1);
+    expect(one.html).toContain('width="100%"');
+  });
+
   it("renders the brand blocks, the brand font, and brand button colors as tokens", async () => {
     const { html, text } = await renderEmail({
       type: "doc",

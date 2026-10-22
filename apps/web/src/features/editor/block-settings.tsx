@@ -17,10 +17,12 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useBrand } from "@/features/brand/shared";
 import { cn } from "@/lib/utils";
+import { setSectionColumns } from "./doc";
 import { useColor } from "./extensions";
+import { Segmented } from "./preview";
 
-// Settings of the selected atom block. Each change updates the node's attributes, so
-// undo and redo work as for text.
+// Settings of the selected atom block and of the section around the selection (U14).
+// Each change is an editor transaction, so undo and redo work as for text.
 
 const TITLES: Record<string, string> = {
   image: "Image",
@@ -511,5 +513,68 @@ function BrandFooterSettings({
       </fieldset>
       {align}
     </div>
+  );
+}
+
+const COLUMN_CHOICES = [
+  { id: "1", label: "1", name: "1 column" },
+  { id: "2", label: "2", name: "2 columns" },
+  { id: "3", label: "3", name: "3 columns" },
+] as const;
+
+/**
+ * Settings of a section: the number of columns (1 to 3, R22). Fewer columns move the
+ * content of each removed column into the last column that stays.
+ */
+export function SectionSettings({
+  editor,
+  section,
+}: {
+  editor: Editor;
+  section: { pos: number; count: number };
+}) {
+  const remove = () => {
+    const node = editor.state.doc.nodeAt(section.pos);
+    if (!node) return;
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: section.pos, to: section.pos + node.nodeSize })
+      .run();
+  };
+  return (
+    <section
+      aria-labelledby="section-settings-title"
+      className="flex flex-col gap-4 rounded-xl border border-border p-4"
+      data-testid="section-settings"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2
+          id="section-settings-title"
+          className="m-0 text-[14px] font-semibold tracking-[-0.01em]"
+        >
+          Section
+        </h2>
+        <Button variant="destructive-ghost" size="icon-sm" onClick={remove}>
+          <Trash2Icon className="size-3.5" aria-hidden="true" />
+          <span className="sr-only">Delete the section</span>
+        </Button>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <p className="m-0 text-[13px] font-medium" aria-hidden="true">
+          Columns
+        </p>
+        <Segmented
+          label="Columns"
+          value={String(section.count) as "1" | "2" | "3"}
+          options={[...COLUMN_CHOICES]}
+          onChange={(count) => setSectionColumns(editor, section.pos, Number(count))}
+        />
+        <p className="m-0 text-xs text-muted-foreground">
+          With fewer columns, the content of a removed column moves into the last column. On a
+          phone, the columns show one below the other.
+        </p>
+      </div>
+    </section>
   );
 }

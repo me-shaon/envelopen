@@ -29,6 +29,8 @@ export const DEFAULT_RETRY_DELAY_MS = 60 * 1000;
 export const IDEMPOTENT_ATTEMPT_LIMIT = 5;
 /** The snapshot reads this many contacts per Workflow step (KTD22). */
 export const SNAPSHOT_PAGE_CONTACTS = 1000;
+/** One sending window of a connection with a daily cap (U19, KTD14). */
+export const SEND_DAY_MS = 24 * 60 * 60 * 1000;
 /** At most this many targeted or excluded lists and tags, so the queries stay under 100 parameters. */
 export const AUDIENCE_MAX_IDS = 10;
 
@@ -183,6 +185,27 @@ export const CampaignSchema = z
     recipientCount: z.number().int().nullable(),
     exclusions: ExclusionsSchema.nullable(),
     snapshotDone: z.boolean(),
+    sendWindowStart: z
+      .number()
+      .int()
+      .nullable()
+      .meta({
+        description:
+          "With a daily cap on the connection (R28): the start of sending day 1. Day N starts " +
+          "24 hours * (N - 1) later. Null without a cap.",
+      }),
+    sendDays: z
+      .number()
+      .int()
+      .nullable()
+      .meta({
+        description:
+          "With a daily cap: the number of sending days. It changes when the cap leaves a " +
+          "day short, or after a resume. Null without a cap.",
+      }),
+    sendEndsAt: z.number().int().nullable().meta({
+      description: "With a daily cap: the start of the last sending day. Null without a cap.",
+    }),
     createdAt: z.number().int(),
     updatedAt: z.number().int(),
   })
@@ -229,6 +252,12 @@ export function toCampaign(row: CampaignRow): Campaign {
       ? parseJson<ExclusionCounts>(row.exclusions, emptyExclusions())
       : null,
     snapshotDone: row.snapshot_done_at !== null,
+    sendWindowStart: row.send_window_start,
+    sendDays: row.send_days,
+    sendEndsAt:
+      row.send_window_start !== null && row.send_days !== null
+        ? row.send_window_start + Math.max(0, row.send_days - 1) * SEND_DAY_MS
+        : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

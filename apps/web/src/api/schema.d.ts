@@ -1236,6 +1236,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/connections/{id}/daily-cap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set the daily cap of a connection
+         * @description Sets the most messages that the connection sends in any 24 hours (R27), or null for no cap. Campaigns, welcome emails, and form confirmation emails share the cap. A change applies to the sends after it: a campaign that sends already keeps its planned days, and the counter holds each later send to the new cap.
+         */
+        post: operations["connections.set_daily_cap"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/connections/{id}/daily-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the daily cap usage of a connection
+         * @description Returns the messages of the last 24 hours against the daily cap (R27), and the form confirmation emails that wait for room under the cap.
+         */
+        get: operations["connections.daily_usage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/connections/{id}/events": {
         parameters: {
             query?: never;
@@ -2737,6 +2777,13 @@ export interface components {
             needsSecret: boolean;
             steps: string[];
         };
+        ConnectionDailyUsage: {
+            dailyCap: number | null;
+            /** @description Messages in the last 24 hours. Zero for a connection without a cap. */
+            usedLast24h: number;
+            /** @description Form confirmation emails that wait for room under the cap. */
+            waitingConfirmations: number;
+        };
         SendingDomainList: {
             items: components["schemas"]["SendingDomain"][];
         };
@@ -2910,6 +2957,12 @@ export interface components {
             recipientCount: number | null;
             exclusions: components["schemas"]["CampaignExclusions"];
             snapshotDone: boolean;
+            /** @description With a daily cap on the connection (R28): the start of sending day 1. Day N starts 24 hours * (N - 1) later. Null without a cap. */
+            sendWindowStart: number | null;
+            /** @description With a daily cap: the number of sending days. It changes when the cap leaves a day short, or after a resume. Null without a cap. */
+            sendDays: number | null;
+            /** @description With a daily cap: the start of the last sending day. Null without a cap. */
+            sendEndsAt: number | null;
             createdAt: number;
             updatedAt: number;
             /** @description Recipients sent so far. */
@@ -2982,6 +3035,12 @@ export interface components {
             recipientCount: number | null;
             exclusions: components["schemas"]["CampaignExclusions"];
             snapshotDone: boolean;
+            /** @description With a daily cap on the connection (R28): the start of sending day 1. Day N starts 24 hours * (N - 1) later. Null without a cap. */
+            sendWindowStart: number | null;
+            /** @description With a daily cap: the number of sending days. It changes when the cap leaves a day short, or after a resume. Null without a cap. */
+            sendDays: number | null;
+            /** @description With a daily cap: the start of the last sending day. Null without a cap. */
+            sendEndsAt: number | null;
             createdAt: number;
             updatedAt: number;
         };
@@ -3025,6 +3084,12 @@ export interface components {
             recipientCount: number | null;
             exclusions: components["schemas"]["CampaignExclusions"];
             snapshotDone: boolean;
+            /** @description With a daily cap on the connection (R28): the start of sending day 1. Day N starts 24 hours * (N - 1) later. Null without a cap. */
+            sendWindowStart: number | null;
+            /** @description With a daily cap: the number of sending days. It changes when the cap leaves a day short, or after a resume. Null without a cap. */
+            sendDays: number | null;
+            /** @description With a daily cap: the start of the last sending day. Null without a cap. */
+            sendEndsAt: number | null;
             createdAt: number;
             updatedAt: number;
             progress: components["schemas"]["CampaignProgress"];
@@ -3109,6 +3174,16 @@ export interface components {
                 provider: string;
                 providerName: string;
                 name: string;
+            } | null;
+            /** @description With a daily cap on the connection (R28): the sending days and the expected end. Null without a cap. */
+            sendPlan: {
+                dailyCap: number;
+                /** @description The messages of the connection in the last 24 hours. */
+                usedLast24h: number;
+                /** @description The number of 24-hour sending days. */
+                days: number;
+                /** @description The start of the last sending day. */
+                endsAt: number;
             } | null;
             /** @description Pass it to confirm. Null when a check failed. */
             token: string | null;
@@ -10938,6 +11013,183 @@ export interface operations {
             };
             /** @description The Idempotency-Key was used with a different path or body. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "connections.set_daily_cap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The most messages in 24 hours, or null for no cap. */
+                    dailyCap: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different path or body. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "connections.daily_usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionDailyUsage"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

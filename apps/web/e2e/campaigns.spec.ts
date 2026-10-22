@@ -479,4 +479,62 @@ test.describe("campaigns", () => {
       await expect(dialog.getByRole("combobox", { name: "Timezone" })).toHaveValue("Asia/Dhaka");
     });
   });
+
+  test("spreads a campaign over the sending days of a daily limit (U19, AE6)", async ({ page }) => {
+    await signIn(page);
+    // The owner sets a daily limit of 2 on the connection.
+    await page.goto("/connections");
+    const card = page.locator('[data-testid="connection-card"][data-provider="resend"]');
+    await card.getByRole("button", { name: /Daily limit/ }).click();
+    const capDialog = page.getByRole("dialog", { name: "Daily sending limit" });
+    await capDialog.getByLabel("Emails in 24 hours (optional)").fill("2");
+    await expectNoSeriousViolations(page);
+    await capDialog.getByRole("button", { name: "Save limit" }).click();
+    await expect(page.getByTestId("toast")).toContainText("sends at most 2 emails a day");
+    await expect(card).toContainText("Daily limit 2");
+    await expect(card.getByTestId("daily-usage")).toContainText("of 2 sent in the last 24 hours");
+
+    const list = await apiPost(page, "/lists", { name: "Capped readers" });
+    for (let index = 1; index <= 5; index++) {
+      await apiPost(page, "/contacts", {
+        email: `capped${index}@example.com`,
+        consentBasis: "existing_customer",
+        listIds: [list.id],
+      });
+    }
+    const template = await apiPost(page, "/templates", {
+      name: "Capped news",
+      subject: "News for {{ first_name }}",
+      format: "html",
+      source: TEMPLATE_HTML,
+    });
+    const draft = await apiPost(page, "/campaigns", {
+      name: "Capped send",
+      templateId: template.id,
+      fromName: "Course Academy",
+      fromEmail: "news@mail.example.com",
+      audience: { listIds: [list.id] },
+    });
+    await page.goto(`/campaigns/${draft.id}`);
+    await page.getByRole("button", { name: "Review and send" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Check and continue" }).click();
+    // 5 recipients at 2 a day: 3 sending days.
+    const plan = dialog.getByTestId("send-plan");
+    await expect(plan).toContainText(/Sends over 3 days, ends about/);
+    await expect(plan).toContainText("at most 2 emails in 24 hours");
+    await expectNoSeriousViolations(page);
+    await screenshot(page, "confirm-send-days");
+    await dialog.getByRole("button", { name: "Send to about 5 people" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText(/Sending day 1 of 3, ends about/)).toBeVisible();
+
+    // Stop the rest, and take the limit off for later runs.
+    await apiPost(page, `/campaigns/${draft.id}/cancel`, {});
+    const connections = await (await page.request.get(`${BASE}/api/connections`)).json();
+    const resend = (connections.items as { id: number; provider: string }[]).find(
+      (item) => item.provider === "resend",
+    );
+    await apiPost(page, `/connections/${resend?.id}/daily-cap`, { dailyCap: null });
+  });
 });

@@ -8,6 +8,7 @@ import {
   customFieldValues,
   DEFAULT_RETRY_DELAY_MS,
   decryptCredentials,
+  deferForCap,
   type FrozenSet,
   LEASE_MS,
   loadBatchContext,
@@ -41,7 +42,13 @@ import {
   type SendBatchResult,
   sendBatch,
 } from "@envelopen/providers";
-import { type Grant, type RateRule, rateLimiterFor, rateRule } from "../do/rate-limiter";
+import {
+  type CombinedGrant,
+  type DailyRequest,
+  type RateRule,
+  rateLimiterFor,
+  rateRule,
+} from "../do/rate-limiter";
 import { pendingUnsubscribedContacts, unsubscribeLedger } from "../do/unsubscribes";
 import { activeLimit, usageMeter, usageSink } from "../do/usage";
 import { createServices, tokenSigner } from "../services";
@@ -58,7 +65,12 @@ import { createServices, tokenSigner } from "../services";
 //    ledger holds unsubscribes, it skips those contacts as `unsubscribed`. A retry of an
 //    idempotent provider reuses the stored set: the provider may have it already, and a
 //    changed payload under the same key fails.
-// 4. Reserve rate tokens. A long wait retries the message later, with no write.
+// 4. Reserve rate tokens. A long wait retries the message later, with no write. With a
+//    daily cap on the connection (U19), the same Durable Object call reserves the
+//    messages from the rolling daily counter. When the counter has no room, the batch
+//    waits in `pending` until the counter frees enough, and a short window moves the
+//    later batches to later windows (deferForCap). A send that went nothing out gives
+//    the reservation back. A quota refusal fills the counter, so other sends wait too.
 // 5. Claim with a compare-and-set. A second delivery of the message loses here, so two
 //    messages for one batch make one provider call.
 // 6. Personalize and send through the adapter.
@@ -83,8 +95,17 @@ const ERROR_RETRY_SECONDS = 30;
 const REFUSALS: ReadonlySet<FailureReason> = new Set(["rate_limited", "quota", "credits", "auth"]);
 
 export interface RateLimiterClient {
-  acquire(units: number, rule: RateRule, maxWaitMs: number): Promise<Grant>;
+  acquire(
+    units: number,
+    rule: RateRule,
+    maxWaitMs: number,
+    daily?: DailyRequest,
+  ): Promise<CombinedGrant>;
   backoff(retryAfterMs: number): Promise<void>;
+  /** Gives back a daily reservation that sent nothing. */
+  releaseDaily(units: number, at: number): Promise<void>;
+  /** The provider's quota is spent: the daily counter counts the cap as used. */
+  fillDaily(cap: number): Promise<void>;
 }
 
 export interface ConsumerDeps {
@@ -286,19 +307,42 @@ async function handlePointer(
     adapter.capabilities.rateUnit === "recipient"
       ? frozen.recipients.length
       : Math.ceil(frozen.recipients.length / adapter.capabilities.batchSize);
+  const cap = connection.daily_cap;
+  const limiter = deps.rateLimiter(connection.id);
+  let reservedAt: number | null = null;
   if (units > 0) {
-    const grant = await deps
-      .rateLimiter(connection.id)
-      .acquire(units, rateFor(adapter, refs), MAX_RATE_WAIT_MS);
+    const daily =
+      cap !== null && frozen.recipients.length > 0
+        ? { units: frozen.recipients.length, cap }
+        : undefined;
+    const grant = await limiter.acquire(units, rateFor(adapter, refs), MAX_RATE_WAIT_MS, daily);
     if (!grant.granted) {
+      if ("daily" in grant) {
+        if (grant.daily.freeAt === null) {
+          await pauseCampaign(
+            deps,
+            pointer,
+            "manual",
+            `The daily cap of ${cap} is smaller than one batch of ${frozen.recipients.length}. Raise the cap on the connection page, then resume.`,
+          );
+          return ack("cap_too_small");
+        }
+        await deferForCap(deps.db, pointer, grant.daily.freeAt, deps.now());
+        return ack("daily_cap");
+      }
       return {
         action: "retry",
         delaySeconds: Math.ceil(grant.retryAfterMs / 1000),
         result: "rate_wait",
       };
     }
+    reservedAt = grant.daily?.at ?? null;
     if (grant.waitMs > 0) await deps.sleep(grant.waitMs);
   }
+  /** Gives back the part of the daily reservation that the provider did not send. */
+  const release = async (count: number) => {
+    if (reservedAt !== null && count > 0) await limiter.releaseDaily(count, reservedAt);
+  };
 
   const now = deps.now();
   const claim = await claimBatch(
@@ -313,7 +357,10 @@ async function handlePointer(
     },
     now,
   );
-  if (!claim) return ack("duplicate");
+  if (!claim) {
+    await release(frozen.recipients.length);
+    return ack("duplicate");
+  }
   const set = claim.frozen;
 
   if (set.recipients.length === 0) {
@@ -380,6 +427,7 @@ async function handlePointer(
   } catch (error) {
     // A message that breaks the contract never reached the provider.
     if (!(error instanceof MessageError)) throw error;
+    await release(set.recipients.length);
     await writeBatchResults(
       deps.db,
       pointer,
@@ -404,6 +452,7 @@ async function handlePointer(
     links: prepared.links,
   };
   let unknown = 0;
+  let notSent = 0;
   let refused: FailureReason | null = null;
   let refusal = "";
   for (const item of result.results) {
@@ -412,6 +461,7 @@ async function handlePointer(
       results.sent.push({ id, providerMessageId: item.providerMessageId ?? null });
     else if (item.outcome === "unknown") unknown++;
     else if (item.reason && REFUSALS.has(item.reason)) {
+      notSent++;
       refused ??= item.reason;
       refusal ||= item.message ?? "";
     } else results.failed.push({ id, error: item.message ?? item.reason ?? "Not sent." });
@@ -451,9 +501,15 @@ async function handlePointer(
       },
       deps.now(),
     );
-    if (refused === "rate_limited") await deps.rateLimiter(connection.id).backoff(retryAfter);
-    else if (refused === "quota") await pauseCampaign(deps, pointer, "provider_quota", message);
-    else if (refused === "credits") await pauseCampaign(deps, pointer, "provider_credits", message);
+    await release(notSent);
+    if (refused === "rate_limited") await limiter.backoff(retryAfter);
+    else if (refused === "quota") {
+      // An SMTP 550 or 552 quota reply (U19), or a provider quota error. The resume plans
+      // the rest again from the room that the counter has then.
+      if (cap !== null) await limiter.fillDaily(cap);
+      await pauseCampaign(deps, pointer, "provider_quota", message);
+    } else if (refused === "credits")
+      await pauseCampaign(deps, pointer, "provider_credits", message);
     else
       await pauseCampaign(
         deps,
@@ -518,8 +574,11 @@ export async function consumerDeps(env: Env, db: DbConnection): Promise<Consumer
     rateLimiter: (connectionId) => {
       const stub = rateLimiterFor(env, connectionId);
       return {
-        acquire: (units, rule, maxWaitMs) => stub.acquire(units, rule, maxWaitMs),
+        acquire: (units, rule, maxWaitMs, daily) =>
+          stub.acquire(units, rule, maxWaitMs, Date.now(), daily),
         backoff: (ms) => stub.backoff(ms),
+        releaseDaily: (units, at) => stub.releaseDaily(units, at),
+        fillDaily: (cap) => stub.fillDaily(cap),
       };
     },
     sleep: (ms) => scheduler.wait(ms),

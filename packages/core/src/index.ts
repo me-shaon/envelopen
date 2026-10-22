@@ -30,6 +30,7 @@ export {
   brandUploadLogo,
 } from "./brand/operations";
 export * from "./campaigns";
+export type { DailyCounter, DailyGrant } from "./connections/daily-cap";
 export {
   adapterContext,
   adapterOf,
@@ -125,6 +126,7 @@ export {
   type SignupDeps,
   type SignupOutcome,
   type SignupState,
+  sendDeferredConfirmations,
   signupLimitKeys,
   signupOfToken,
   submitSignup,

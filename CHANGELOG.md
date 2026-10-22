@@ -20,6 +20,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 - A policy warning for the Gmail and Google Workspace presets. The owner accepts it before the first campaign.
 - Brevo webhooks for bounces, complaints, blocked messages, and unsubscribes, with a rotatable bearer token.
 - Guides for SMTP and Brevo.
+- Daily caps per connection: a campaign larger than the cap sends over several 24-hour days, and the confirm step shows the sending days and the expected end date.
 
 ## [0.4.0] - 2026-10-22
 

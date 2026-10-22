@@ -5,6 +5,7 @@ import {
   type FormPageError,
   type FormPageForm,
 } from "@envelopen/email-render/form-page";
+import { sendingConnection } from "../connections/policy-gate";
 import { sendSystemEmail } from "../connections/send";
 import { normalizeEmail } from "../contacts/email";
 import type { FieldDef, FieldInput } from "../contacts/fields";
@@ -34,7 +35,14 @@ import {
 //   together), a cap per form per hour, and a cap per workspace per day.
 //
 // Otherwise the signup row gets a new token (32 random bytes, stored as its SHA-256), and
-// the email goes out through the workspace's connection as system email. A pending
+// the email goes out through the workspace's connection as system email.
+//
+// With a daily cap on the connection (U19), the email reserves one message from the
+// rolling counter that campaigns and welcome emails share. When the cap has no room, the
+// email waits in a small outbox: the signup keeps the link origin in `deferred_origin`,
+// and the cron sends it with a new token when the counter has room
+// (`sendDeferredConfirmations`). The subscriber sees the same "check your inbox" page,
+// and the connection page shows the owner how many emails wait. Nothing is dropped. A pending
 // signup is never a list member, so campaigns cannot reach it (AE2).
 
 /** One counter with a fixed window, as the AuthRateLimiter Durable Object keeps it. */
@@ -314,10 +322,48 @@ export function confirmationEmail(formName: string, link: string) {
   return { subject, html, text };
 }
 
-export type SendResult = "sent" | "send_failed";
+export type SendResult = "sent" | "send_failed" | "deferred";
+
+/** A reservation from the daily counter. `release` gives it back when nothing went out. */
+interface Reservation {
+  release(): Promise<void>;
+}
+
+const NO_RESERVATION: Reservation = { release: async () => {} };
+
+/**
+ * Reserves one message from the daily counter of the workspace's connection. Null when
+ * the cap has no room. A connection without a cap needs no reservation.
+ */
+async function reserveConfirmation(
+  db: DbConnection,
+  services: Partial<Services>,
+  workspaceId: number,
+): Promise<Reservation | null> {
+  const counter = services.dailyCounter;
+  if (!counter) return NO_RESERVATION;
+  const connection = await sendingConnection(db, workspaceId);
+  if (!connection || connection.daily_cap === null) return NO_RESERVATION;
+  const grant = await counter.reserve(connection.id, 1, connection.daily_cap);
+  if (!grant.granted) return null;
+  return { release: () => counter.release(connection.id, 1, grant.at) };
+}
 
 async function sendConfirmation(
-  deps: SignupDeps,
+  deps: Pick<SignupDeps, "db" | "services">,
+  form: Row<"forms">,
+  workspaceName: string,
+  to: string,
+  link: string,
+  reservation: Reservation,
+): Promise<SendResult> {
+  const result = await sendConfirmationEmail(deps, form, workspaceName, to, link);
+  if (result !== "sent") await reservation.release().catch(() => {});
+  return result;
+}
+
+async function sendConfirmationEmail(
+  deps: Pick<SignupDeps, "db" | "services">,
   form: Row<"forms">,
   workspaceName: string,
   to: string,
@@ -388,6 +434,7 @@ export async function submitSignup(
     resend_count: 0,
     sent_at: null,
     confirmed_at: null,
+    deferred_origin: null,
     created_at: now,
   };
   await db.db
@@ -395,12 +442,18 @@ export async function submitSignup(
     .values({ workspace_id: row.workspace_id, form_id: row.id, email_hash: emailHash, ...values })
     .onConflict((conflict) => conflict.columns(["form_id", "email_hash"]).doUpdateSet(values))
     .execute();
+  const reservation = await reserveConfirmation(db, deps.services, row.workspace_id);
+  if (!reservation) {
+    await deferConfirmation(db, row.workspace_id, tokenHash, input.origin);
+    return { emailed: true, result: "deferred" };
+  }
   const result = await sendConfirmation(
     deps,
     row,
     form.workspaceName,
     input.email,
     `${input.origin}${confirmPath(token)}`,
+    reservation,
   );
   if (result === "sent") {
     await db.db
@@ -486,12 +539,18 @@ export async function resendSignup(
     .where("token_hash", "=", signup.token_hash)
     .executeTakeFirst();
   if (Number(updated.numUpdatedRows) === 0) return { kind: "invalid" };
+  const reservation = await reserveConfirmation(db, deps.services, signup.workspace_id);
+  if (!reservation) {
+    await deferConfirmation(db, signup.workspace_id, nextHash, origin);
+    return { kind: "done", emailed: true, result: "deferred" };
+  }
   const result = await sendConfirmation(
     deps,
     form.row,
     form.workspaceName,
     signup.email,
     `${origin}${confirmPath(next)}`,
+    reservation,
   );
   if (result === "sent") {
     await db.db
@@ -502,4 +561,115 @@ export async function resendSignup(
       .execute();
   }
   return { kind: "done", emailed: true, result };
+}
+
+// The outbox of confirmation emails at the daily cap (U19) ------------------------------------
+
+/** Puts the confirmation email of the signup in the outbox until the cap has room. */
+async function deferConfirmation(
+  db: DbConnection,
+  workspaceId: number,
+  tokenHash: string,
+  origin: string,
+): Promise<void> {
+  await db.db
+    .updateTable("signups")
+    .set({ deferred_origin: origin, sent_at: null })
+    .where("workspace_id", "=", workspaceId)
+    .where("token_hash", "=", tokenHash)
+    .execute();
+}
+
+/** How long a confirmation email can wait in the outbox. Older signups get none. */
+export const DEFERRED_CONFIRMATION_MAX_AGE_MS = 6 * 24 * 60 * 60 * 1000;
+
+/**
+ * Sends the confirmation emails that wait for the daily cap, oldest first (U19). The
+ * cron runs it each minute. Each email reserves from the counter. A workspace whose cap
+ * has no room yet keeps its emails for a later run. Each email gets a new token and a new
+ * expiry, so the link works for the full time after it arrives. Returns the emails sent.
+ */
+export async function sendDeferredConfirmations(
+  deps: Pick<SignupDeps, "db" | "services" | "now">,
+  limit = 20,
+): Promise<number> {
+  const { db, now } = deps;
+  // A deployment-wide job, as the signup purge.
+  const rows = await unscoped(db.db)
+    .selectFrom("signups")
+    .selectAll()
+    .where("deferred_origin", "is not", null)
+    .where("confirmed_at", "is", null)
+    .orderBy("created_at", "asc")
+    .limit(limit)
+    .execute();
+  const full = new Set<number>();
+  let sent = 0;
+  for (const signup of rows) {
+    const workspaceId = signup.workspace_id;
+    if (full.has(workspaceId)) continue;
+    const clear = () =>
+      db.db
+        .updateTable("signups")
+        .set({ deferred_origin: null })
+        .where("workspace_id", "=", workspaceId)
+        .where("id", "=", signup.id)
+        .execute();
+    const form = await db.db
+      .selectFrom("forms")
+      .selectAll()
+      .where("workspace_id", "=", workspaceId)
+      .where("id", "=", signup.form_id)
+      .executeTakeFirst();
+    if (
+      form?.enabled !== 1 ||
+      signup.created_at < now - DEFERRED_CONFIRMATION_MAX_AGE_MS ||
+      (await isSuppressed(db, workspaceId, signup.email_hash))
+    ) {
+      await clear();
+      continue;
+    }
+    const reservation = await reserveConfirmation(db, deps.services, workspaceId);
+    if (!reservation) {
+      full.add(workspaceId);
+      continue;
+    }
+    const token = newSignupToken();
+    const tokenHash = await hashSignupToken(token);
+    const origin = signup.deferred_origin ?? "";
+    const updated = await db.db
+      .updateTable("signups")
+      .set({ token_hash: tokenHash, expires_at: now + SIGNUP_TOKEN_TTL_MS, deferred_origin: null })
+      .where("workspace_id", "=", workspaceId)
+      .where("id", "=", signup.id)
+      .where("token_hash", "=", signup.token_hash)
+      .executeTakeFirst();
+    if (Number(updated.numUpdatedRows) === 0) {
+      await reservation.release();
+      continue;
+    }
+    const workspace = await db.db
+      .selectFrom("workspaces")
+      .select("name")
+      .where("id", "=", workspaceId)
+      .executeTakeFirst();
+    const result = await sendConfirmation(
+      deps,
+      form,
+      workspace?.name ?? "",
+      signup.email,
+      `${origin}${confirmPath(token)}`,
+      reservation,
+    );
+    if (result === "sent") {
+      sent++;
+      await db.db
+        .updateTable("signups")
+        .set({ sent_at: now })
+        .where("workspace_id", "=", workspaceId)
+        .where("id", "=", signup.id)
+        .execute();
+    }
+  }
+  return sent;
 }

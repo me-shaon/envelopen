@@ -451,6 +451,59 @@ describe("welcome series runs (F2, KTD8)", () => {
     expect(mock.calls).toHaveLength(1);
   });
 
+  it("waits for the daily cap that campaigns share, then sends (U19)", async () => {
+    const { db, mock, services, seeded, stepDeps, addContact } = await setup(1);
+    await db.db
+      .updateTable("provider_connections")
+      .set({ daily_cap: 2 })
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("id", "=", seeded.connectionId)
+      .execute();
+    const { contact } = await addContact("ana@example.org");
+    const job = jobOf(services, contact.id);
+    // A campaign batch used the whole cap an hour ago.
+    services.dailyClock.now = T0 - 60 * 60 * 1000;
+    await services.dailyCounter.reserve(seeded.connectionId, 2, 2);
+    services.dailyClock.now = T0;
+    const deps = { ...stepDeps, dailyCounter: services.dailyCounter };
+    expect(await runWelcomeStep(deps, job, 1)).toEqual({
+      kind: "defer",
+      until: T0 - 60 * 60 * 1000 + 24 * 60 * 60 * 1000,
+      reason: "daily_cap",
+    });
+    expect(mock.calls).toHaveLength(0);
+    expect(await sendRows(db, seeded.workspaceId, contact.id)).toEqual([]);
+    // After the campaign's sends age out, the step sends and takes one message.
+    services.dailyClock.now = T0 + 24 * 60 * 60 * 1000;
+    expect(await runWelcomeStep(deps, job, 1)).toMatchObject({ kind: "sent" });
+    expect(mock.calls).toHaveLength(1);
+    expect(await services.dailyCounter.used(seeded.connectionId)).toBe(1);
+  });
+
+  it("gives the daily reservation back when the provider refuses the welcome email (U19)", async () => {
+    const { db, mock, services, seeded, stepDeps, addContact } = await setup(1);
+    await db.db
+      .updateTable("provider_connections")
+      .set({ daily_cap: 5 })
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("id", "=", seeded.connectionId)
+      .execute();
+    const { contact } = await addContact("ana@example.org");
+    services.dailyClock.now = T0;
+    mock.respond = () =>
+      new Response(JSON.stringify({ name: "rate_limit_exceeded", message: "Slow down" }), {
+        status: 429,
+      });
+    await expect(
+      runWelcomeStep(
+        { ...stepDeps, dailyCounter: services.dailyCounter },
+        jobOf(services, contact.id),
+        1,
+      ),
+    ).rejects.toThrow(WelcomeRetryError);
+    expect(await services.dailyCounter.used(seeded.connectionId)).toBe(0);
+  });
+
   it("stops at the next check when the owner turns the series off, and an edit applies to the steps not run", async () => {
     const { db, mock, services, seeded, run, series, stepDeps, addContact } = await setup(3);
     const { contact } = await addContact("ana@example.org");

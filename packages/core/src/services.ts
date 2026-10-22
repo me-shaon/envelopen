@@ -1,4 +1,5 @@
 import type { SocketConnect } from "@envelopen/providers";
+import type { DailyCounter } from "./connections/daily-cap";
 import type { CredentialCipher } from "./crypto/credentials";
 import type { WelcomeRunner } from "./welcome/start";
 
@@ -150,6 +151,8 @@ export interface Services {
   turnstileConfigured: boolean;
   /** Starts and stops welcome series instances (U10). The Worker wraps WELCOME_WORKFLOW. */
   welcome: WelcomeRunner;
+  /** The rolling daily counter of capped connections (U19). The Worker wraps RATE_LIMITER. */
+  dailyCounter: DailyCounter;
 }
 
 /** Returns the service, or throws when the surface did not provide it. */

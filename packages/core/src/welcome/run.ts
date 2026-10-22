@@ -10,6 +10,7 @@ import {
 import { type FailureReason, MessageError, sendBatch } from "@envelopen/providers";
 import { liveBrand } from "../brand/model";
 import { customFieldValues } from "../campaigns/batch";
+import type { DailyCounter } from "../connections/daily-cap";
 import { adapterContext, adapterOf, decryptCredentials, refsOf } from "../connections/model";
 import { checkCampaignPolicy, sendingConnection } from "../connections/policy-gate";
 import type { Services } from "../services";
@@ -32,9 +33,12 @@ import { parseSteps, WELCOME_TOKEN_CAMPAIGN, type WelcomeJob, welcomeRecipientId
 // 4. Read the contact again: the series is on, the contact is subscribed to the list and
 //    did not unsubscribe, the address is not suppressed, and no unsubscribe waits in the
 //    UnsubscribeLedger. Otherwise a `skipped` row records the stop.
-// 5. Insert the row as `pending`, personalize with merge tags and both unsubscribe
+// 5. With a daily cap on the connection (U19), reserve one message from the rolling
+//    counter. When the cap has no room, the step waits until the counter frees one.
+//    A refusal that sent nothing gives the reservation back.
+// 6. Insert the row as `pending`, personalize with merge tags and both unsubscribe
 //    headers, and send through the workspace connection.
-// 6. `sent` with the provider message id. A provider refusal (rate limit, quota,
+// 7. `sent` with the provider message id. A provider refusal (rate limit, quota,
 //    credits, credentials, or a server error) marks the row `failed` and throws, so the
 //    Workflow retries with backoff. After the last retry, the row stays `failed` and the
 //    series goes on with the next step. A message that the provider rejects as invalid
@@ -58,6 +62,8 @@ export interface WelcomeStepDeps {
    * on Workers Free. The Workflow asks the UsageMeter `reserve` check.
    */
   budget(workspaceId: number): Promise<BudgetDecision>;
+  /** The rolling daily counter of capped connections (U19). Without it, no cap applies. */
+  dailyCounter?: Pick<DailyCounter, "reserve" | "release">;
   now(): number;
 }
 
@@ -67,7 +73,7 @@ export type StepOutcome =
   | { kind: "sent"; sendId: number; uncertain: boolean }
   | { kind: "failed"; sendId: number | null; error: string }
   | { kind: "stopped"; reason: StopReason }
-  | { kind: "defer"; until: number; reason: "platform_limit" | "budget" }
+  | { kind: "defer"; until: number; reason: "platform_limit" | "budget" | "daily_cap" }
   | { kind: "end" };
 
 /** A refusal that a retry of the step can fix. The Workflow retries the step with backoff. */
@@ -384,8 +390,26 @@ async function stepWork(
     throw new WelcomeRetryError(error);
   }
 
+  // The daily cap (U19): one message from the counter that campaigns share.
+  let reservedAt: number | null = null;
+  if (connection.daily_cap !== null && deps.dailyCounter) {
+    const grant = await deps.dailyCounter.reserve(connection.id, 1, connection.daily_cap);
+    if (!grant.granted) {
+      return {
+        kind: "defer",
+        until: grant.freeAt ?? deps.now() + 24 * 60 * 60 * 1000,
+        reason: "daily_cap",
+      };
+    }
+    reservedAt = grant.at;
+  }
+  const release = async () => {
+    if (reservedAt !== null) await deps.dailyCounter?.release(connection.id, 1, reservedAt);
+  };
+
   const sendId = await claimStep(db, job, position, deps.now());
   if (sendId === null) {
+    await release();
     const again = await sendRow(db, job, position);
     return (
       (again && outcomeOfRow(again)) ?? { kind: "sent", sendId: again?.id ?? 0, uncertain: true }
@@ -445,6 +469,7 @@ async function stepWork(
   } catch (error) {
     // A message that breaks the contract never reached the provider.
     if (!(error instanceof MessageError)) throw error;
+    await release();
     await markFailed(db, job, sendId, error.message, deps.now());
     return { kind: "failed", sendId, error: error.message };
   }
@@ -470,6 +495,9 @@ async function stepWork(
   const error =
     item.message ?? result.failure?.message ?? item.reason ?? "The provider refused the email.";
   await markFailed(db, job, sendId, error, deps.now());
-  if (item.reason && RETRY_REASONS.has(item.reason)) throw new WelcomeRetryError(error);
+  if (item.reason && RETRY_REASONS.has(item.reason)) {
+    await release();
+    throw new WelcomeRetryError(error);
+  }
   return { kind: "failed", sendId, error };
 }

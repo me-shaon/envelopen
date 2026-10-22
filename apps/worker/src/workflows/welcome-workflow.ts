@@ -12,7 +12,7 @@ import {
 import { createDb, type DbConnection, isD1DailyLimitError, nextUtcMidnight } from "@envelopen/db";
 import { pendingUnsubscribedContacts, unsubscribeLedger } from "../do/unsubscribes";
 import { activeLimit, usageMeter, usageSink } from "../do/usage";
-import { createServices, tokenSigner } from "../services";
+import { createServices, dailyCounter, tokenSigner } from "../services";
 
 // The welcome series Workflow (U10, KTD8). One instance sends one series to one contact.
 // The instance id is `welcome-<contactId>-<seriesId>`, and the payload holds only these
@@ -33,6 +33,10 @@ import { createServices, tokenSigner } from "../services";
 // D1 writes on Workers Free (the owner's Workers plan setting), so campaigns and
 // unsubscribes keep the rest. On Paid, the check is off. The run reports its writes as
 // automation, so the usage view shows the share of welcome steps.
+//
+// With a daily cap on the connection (U19), the send step reserves one message from the
+// rolling counter of the connection, which campaigns share. When the cap has no room,
+// the step sleeps until the counter frees one, then runs again.
 
 /** Provider refusals get 4 retries: about 1, 2, 4, and 8 minutes later. */
 export const SEND_STEP = {
@@ -47,6 +51,12 @@ const READ_STEP = {
 const RESET_MARGIN_MS = 5 * 60 * 1000;
 /** The most pauses for the daily limit before one step gives up. */
 const MAX_PAUSES = 30;
+/**
+ * The most waits for the daily cap of the connection before one step gives up. A busy
+ * campaign can take the room that frees, so a step can wait more than once. A run has
+ * at most 1,024 steps, and each wait is two.
+ */
+const MAX_CAP_WAITS = 60;
 
 type Planned = StepPlan | { kind: "limit"; until: number };
 
@@ -87,6 +97,7 @@ export class WelcomeWorkflow extends WorkflowEntrypoint<Env, WelcomeJob> {
         pendingUnsubscribedContacts(unsubscribeLedger(this.env), db, workspaceId, contactIds),
       // KTD9: the reserved budget for automation. The plan is the owner's setting.
       budget: async () => meter.reserve(await readWorkersPlan(db)),
+      dailyCounter: dailyCounter(this.env),
       now: () => Date.now(),
     };
   }
@@ -128,8 +139,11 @@ export class WelcomeWorkflow extends WorkflowEntrypoint<Env, WelcomeJob> {
       }
 
       let outcome: StepOutcome | null = null;
+      let capWaits = 0;
       for (let pause = 0; pause <= MAX_PAUSES; pause++) {
-        const label = pause === 0 ? `send ${position}` : `send ${position} (after pause ${pause})`;
+        const attempt = pause + capWaits;
+        const label =
+          attempt === 0 ? `send ${position}` : `send ${position} (after pause ${attempt})`;
         try {
           outcome = (await step.do(label, SEND_STEP, () =>
             this.withDb(async (db) => {
@@ -147,6 +161,14 @@ export class WelcomeWorkflow extends WorkflowEntrypoint<Env, WelcomeJob> {
           break;
         }
         if (outcome.kind !== "defer") break;
+        if (outcome.reason === "daily_cap") {
+          if (capWaits >= MAX_CAP_WAITS) break;
+          capWaits++;
+          // A cap wait does not count as a pause for the daily limit.
+          pause--;
+          await step.sleepUntil(`wait for the daily cap: ${label}`, outcome.until);
+          continue;
+        }
         await step.sleepUntil(`wait for the reset: ${label}`, outcome.until + RESET_MARGIN_MS);
       }
       if (outcome?.kind === "stopped") return `stopped: ${outcome.reason}`;

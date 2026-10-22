@@ -1,5 +1,5 @@
 import type { DbConnection, RowUpdate } from "@envelopen/db";
-import { getAdapter } from "@envelopen/providers";
+import { batchSizeFor, getAdapter } from "@envelopen/providers";
 import { sql } from "kysely";
 import { z } from "zod";
 import { assertNoRestoreHold } from "../backup/restore-ack";
@@ -11,6 +11,7 @@ import { OperationError } from "../errors";
 import { decodeCursor, encodeCursor, pageInputShape, pageOf } from "../pagination";
 import { defineOperation, type OperationContext } from "../registry/operation";
 import { requireService } from "../services";
+import { readWorkersPlan } from "../settings/operations";
 import { getTemplateRow } from "../templates/operations";
 import {
   contactValues,
@@ -19,6 +20,7 @@ import {
   verifiedTrackingDomain,
 } from "../templates/preview";
 import { estimateAudience } from "./audience";
+import { estimateSendPlan, replanRemaining, type SendPlan } from "./caps";
 import { ChecklistItemSchema, runChecklist } from "./checklist";
 import { confirmError, consumeConfirmToken, issueConfirmToken } from "./confirm-token";
 import { dispatchAll, dispatchBatches } from "./dispatch";
@@ -474,6 +476,18 @@ export const campaignsDelete = defineOperation({
 
 const ModeSchema = z.enum(["send_now", "schedule"]);
 
+const SendPlanSchema = z
+  .object({
+    dailyCap: z.number().int(),
+    usedLast24h: z
+      .number()
+      .int()
+      .meta({ description: "The messages of the connection in the last 24 hours." }),
+    days: z.number().int().meta({ description: "The number of 24-hour sending days." }),
+    endsAt: z.number().int().meta({ description: "The start of the last sending day." }),
+  })
+  .meta({ id: "CampaignSendPlan" });
+
 const PrepareSchema = z
   .object({
     campaignId: z.number().int(),
@@ -498,6 +512,11 @@ const PrepareSchema = z
         name: z.string(),
       })
       .nullable(),
+    sendPlan: SendPlanSchema.nullable().meta({
+      description:
+        "With a daily cap on the connection (R28): the sending days and the expected end. " +
+        "Null without a cap.",
+    }),
     token: z
       .string()
       .nullable()
@@ -505,6 +524,34 @@ const PrepareSchema = z
     expiresAt: z.number().int().nullable(),
   })
   .meta({ id: "CampaignPrepare" });
+
+/**
+ * The sending days of a campaign through the connection, from the estimated audience.
+ * Null when the connection has no daily cap.
+ */
+async function sendPlanOf(
+  ctx: Pick<OperationContext, "db" | "services" | "principal">,
+  connectionId: number | null,
+  recipients: number,
+  startsAt: number,
+): Promise<SendPlan | null> {
+  if (connectionId === null) return null;
+  const row = await ctx.db.db
+    .selectFrom("provider_connections")
+    .select(["id", "provider", "daily_cap"])
+    .where("workspace_id", "=", ctx.principal.workspaceId)
+    .where("id", "=", connectionId)
+    .executeTakeFirst();
+  const adapter = row ? getAdapter(row.provider) : undefined;
+  if (!row || !adapter || row.daily_cap === null) return null;
+  return estimateSendPlan(
+    ctx.services.dailyCounter,
+    row,
+    recipients,
+    batchSizeFor(adapter, await readWorkersPlan(ctx.db)),
+    startsAt,
+  );
+}
 
 export const campaignsPrepare = defineOperation({
   id: "campaigns.prepare",
@@ -581,6 +628,12 @@ export const campaignsPrepare = defineOperation({
         };
       }
     }
+    const sendPlan = await sendPlanOf(
+      ctx,
+      checklist.policy.connectionId,
+      estimate.recipients,
+      scheduledAt ?? now,
+    );
     const issued = checklist.blocked
       ? null
       : await issueConfirmToken(
@@ -608,6 +661,7 @@ export const campaignsPrepare = defineOperation({
       checklist: checklist.items,
       estimate: { ...estimate, isEstimate: true as const },
       provider,
+      sendPlan,
       token: issued?.token ?? null,
       expiresAt: issued?.expiresAt ?? null,
     };
@@ -675,7 +729,19 @@ export const campaignsConfirm = defineOperation({
       );
     }
     const sendNow = token.mode === "send_now";
+    // With a daily cap, the estimate of the sending days (R28, AE6). The snapshot fixes
+    // the windows when it starts.
+    const startsAt = sendNow ? now : (token.scheduled_at ?? now);
+    const plan = await sendPlanOf(
+      ctx,
+      policy.connectionId,
+      token.estimated_recipients ?? 0,
+      startsAt,
+    );
     const set: RowUpdate<"campaigns"> = {
+      send_window_start: plan ? startsAt : null,
+      send_first_capacity: null,
+      send_days: plan?.days ?? null,
       connection_id: policy.connectionId,
       link_origin: origin,
       brand_snapshot: JSON.stringify(brand),
@@ -847,6 +913,15 @@ export const campaignsResume = lifecycleOperation({
       "sending",
       { pause_reason: null, pause_detail: null, resume_at: null },
       "resume",
+    );
+    // With a daily cap, the rest goes in windows from now, with the room that the
+    // counter has now (U19). The end date follows the remaining recipients.
+    await replanRemaining(
+      ctx.db,
+      ctx.services.dailyCounter,
+      ctx.principal.workspaceId,
+      campaign.id,
+      ctx.now,
     );
     // The consumer dropped the queued messages while paused, so they all go again.
     await dispatchAll(

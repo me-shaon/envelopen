@@ -26,6 +26,8 @@ export interface SeedOptions {
   name?: string;
   /** The postal address of the brand kit (U13). Null leaves the workspace without a kit. */
   postalAddress?: string | null;
+  /** The daily cap of the connection (U19). Defaults to no cap. */
+  dailyCap?: number | null;
 }
 
 export const TEST_POSTAL_ADDRESS = "1 Course Street, Springfield";
@@ -99,6 +101,7 @@ export async function seedCampaignWorkspace(
       policy_warning_accepted_at:
         provider === "tosend" || provider === "cloudflare" ? Date.now() : null,
       policy_warning_accepted_by: null,
+      daily_cap: options.dailyCap ?? null,
     })
     .returning("id")
     .executeTakeFirstOrThrow();

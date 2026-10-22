@@ -31,7 +31,9 @@ import type {
 // - 530, 534, 535, 538, and a missing STARTTLS or AUTH mechanism: `auth`, nothing sent.
 // - 421, a read timeout, a disconnect, or an unexpected reply: `unknown` for the message
 //   in flight and every message after it. The message in flight may have gone out.
-// - Quota wording ("quota", "daily ... limit", "limit exceeded") on a 4xx or 5xx: `quota`.
+// - Quota wording ("quota", "daily ... limit", "limit exceeded") on a 4xx or 5xx, and a
+//   550 or 552 with the enhanced code 5.4.5 (Gmail's daily sending quota): `quota`. The
+//   campaign pauses as at any provider quota (U19).
 //   Rate wording ("rate", "too many", "throttl", "slow down") on a 5xx, and every other
 //   451 or 452: `rate_limited`. Both stop the batch, and the rest is `not_sent`.
 // - A 4.2.2 or 5.2.2 (the recipient's mailbox is full), and any other 4xx or 5xx on
@@ -361,6 +363,8 @@ function describe(reply: Reply): string {
 const QUOTA_WORDING = /quota|daily .*limit|sending limit|limit exceeded|exceeded .*limit/i;
 const RATE_WORDING = /rate|too many|throttl|slow down/i;
 const MAILBOX_FULL = /\b[45]\.2\.2\b/;
+/** The enhanced code of a spent daily sending quota, on a 550 or a 552. */
+const QUOTA_CODE = /\b5\.4\.5\b/;
 const AUTH_CODES = new Set([530, 534, 535, 538]);
 
 /** Turns a reply that is not the expected one into a batch stop or a message refusal. */
@@ -374,7 +378,8 @@ function classify(reply: Reply, stage: Stage): BatchStop | MessageRefused {
     stage === "mail" || stage === "rcpt" || stage === "data" || stage === "data_end";
   if (code >= 400 && code < 600) {
     if (perMessage && MAILBOX_FULL.test(text)) return new MessageRefused("rejected", message);
-    if (QUOTA_WORDING.test(text)) return new BatchStop("not_sent", "quota", message);
+    if (QUOTA_WORDING.test(text) || ((code === 550 || code === 552) && QUOTA_CODE.test(text)))
+      return new BatchStop("not_sent", "quota", message);
     if (code >= 500 && RATE_WORDING.test(text))
       return new BatchStop("not_sent", "rate_limited", message);
     if (code === 451 || code === 452) return new BatchStop("not_sent", "rate_limited", message);

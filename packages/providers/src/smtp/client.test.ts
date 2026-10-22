@@ -227,6 +227,18 @@ describe("SMTP client", () => {
     expect(server.messages).toHaveLength(2);
   });
 
+  it("maps a 552 with the quota code 5.4.5 to quota (U19)", async () => {
+    const { result } = run(campaignBatch(2), {
+      reply: (command) =>
+        command.verb === "RCPT" && command.accepted === 1
+          ? "552 5.4.5 Try again tomorrow"
+          : undefined,
+    });
+    const { results, failure } = await result;
+    expect(results.map((item) => item.outcome)).toEqual(["sent", "not_sent"]);
+    expect(failure).toMatchObject({ outcome: "not_sent", reason: "quota" });
+  });
+
   it("maps a 451 to rate_limited", async () => {
     const { result } = run(campaignBatch(2), {
       reply: (command) =>

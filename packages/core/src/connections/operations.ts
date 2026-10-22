@@ -621,6 +621,88 @@ export const connectionsAcceptPolicy = defineOperation({
   }),
 });
 
+export const connectionsSetDailyCap = defineOperation({
+  id: "connections.set_daily_cap",
+  summary: "Set the daily cap of a connection",
+  description:
+    "Sets the most messages that the connection sends in any 24 hours (R27), or null for " +
+    "no cap. Campaigns, welcome emails, and form confirmation emails share the cap. A " +
+    "change applies to the sends after it: a campaign that sends already keeps its " +
+    "planned days, and the counter holds each later send to the new cap.",
+  method: "post",
+  path: "/connections/{id}/daily-cap",
+  scope: "workspace:admin",
+  risk: "write",
+  mcp: NEVER_MCP,
+  input: idInput.extend({
+    dailyCap: z.number().int().min(1).max(10_000_000).nullable().meta({
+      description: "The most messages in 24 hours, or null for no cap.",
+    }),
+  }),
+  output: ConnectionSchema,
+  async handler(input, { principal, db, now }) {
+    const row = await loadConnection(db, principal.workspaceId, input.id);
+    await db.db
+      .updateTable("provider_connections")
+      .set({ daily_cap: input.dailyCap, updated_at: now })
+      .where("workspace_id", "=", principal.workspaceId)
+      .where("id", "=", row.id)
+      .execute();
+    const selected = await selectedConnectionId(db, principal.workspaceId);
+    return toConnection(await loadConnection(db, principal.workspaceId, row.id), selected);
+  },
+  auditTarget: (input, output) => ({
+    targetType: "provider_connection",
+    targetId: output.id,
+    metadata: { dailyCap: input.dailyCap },
+  }),
+});
+
+export const connectionsDailyUsage = defineOperation({
+  id: "connections.daily_usage",
+  summary: "Get the daily cap usage of a connection",
+  description:
+    "Returns the messages of the last 24 hours against the daily cap (R27), and the form " +
+    "confirmation emails that wait for room under the cap.",
+  method: "get",
+  path: "/connections/{id}/daily-usage",
+  scope: "workspace:admin",
+  risk: "read",
+  mcp: NEVER_MCP,
+  input: idInput,
+  output: z
+    .object({
+      dailyCap: z.number().int().nullable(),
+      usedLast24h: z.number().int().meta({
+        description: "Messages in the last 24 hours. Zero for a connection without a cap.",
+      }),
+      waitingConfirmations: z.number().int().meta({
+        description: "Form confirmation emails that wait for room under the cap.",
+      }),
+    })
+    .meta({ id: "ConnectionDailyUsage" }),
+  async handler(input, { principal, db, services }) {
+    const row = await loadConnection(db, principal.workspaceId, input.id);
+    const [used, waiting] = await Promise.all([
+      row.daily_cap === null || !services.dailyCounter
+        ? 0
+        : services.dailyCounter.used(row.id).catch(() => 0),
+      db.db
+        .selectFrom("signups")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("workspace_id", "=", principal.workspaceId)
+        .where("deferred_origin", "is not", null)
+        .where("confirmed_at", "is", null)
+        .executeTakeFirst(),
+    ]);
+    return {
+      dailyCap: row.daily_cap,
+      usedLast24h: used,
+      waitingConfirmations: Number(waiting?.count ?? 0),
+    };
+  },
+});
+
 export const connectionsSetupEvents = defineOperation({
   id: "connections.setup_events",
   summary: "Retry the automatic webhook setup",

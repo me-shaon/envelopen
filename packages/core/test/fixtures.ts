@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { createDb, type DbConnection } from "@envelopen/db";
 import type { SocketConnect } from "@envelopen/providers";
 import { generateApiKey } from "../src/api-keys";
+import type { DailyCounter } from "../src/connections/daily-cap";
 import { createCredentialCipher } from "../src/crypto/credentials";
 import { createFileLinkSigner } from "../src/import/file-links";
 import type { ApiKeyScope } from "../src/scopes";
@@ -126,6 +127,47 @@ export interface TestServices extends Services {
   welcomeStarts: WelcomeJob[];
   /** Welcome instances that a stop asked to terminate, in order. */
   welcomeStops: WelcomeJob[];
+  /** The sends that the daily counter holds, by connection. `dailyClock` sets its time. */
+  dailySends: Map<number, { at: number; units: number }[]>;
+  dailyClock: { now: number | null };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A daily counter in memory, with the same answers as the RateLimiter object. */
+function memoryDailyCounter(
+  sends: Map<number, { at: number; units: number }[]>,
+  clock: { now: number | null },
+): DailyCounter {
+  const now = () => clock.now ?? Date.now();
+  const live = (id: number) => (sends.get(id) ?? []).filter((item) => item.at + DAY_MS > now());
+  const used = (id: number) => live(id).reduce((sum, item) => sum + item.units, 0);
+  return {
+    used: async (id) => used(id),
+    async reserve(id, units, cap) {
+      if (units > cap) return { granted: false, freeAt: null };
+      let total = used(id);
+      if (total + units <= cap) {
+        sends.set(id, [...live(id), { at: now(), units }]);
+        return { granted: true, at: now() };
+      }
+      for (const item of [...live(id)].sort((a, b) => a.at - b.at)) {
+        total -= item.units;
+        if (total + units <= cap) return { granted: false, freeAt: item.at + DAY_MS };
+      }
+      return { granted: false, freeAt: now() };
+    },
+    async release(id, units, at) {
+      const list = live(id);
+      const index = list.findIndex((item) => item.at === at);
+      const item = list[index];
+      if (item) {
+        item.units -= units;
+        if (item.units <= 0) list.splice(index, 1);
+      }
+      sends.set(id, list);
+    },
+  };
 }
 
 /** Services as the Worker builds them, with a job recorder in place of the Workflow. */
@@ -141,7 +183,12 @@ export async function testServices(
   const welcomeStarts: WelcomeJob[] = [];
   const welcomeStops: WelcomeJob[] = [];
   const welcomeIds = new Set<string>();
+  const dailySends = new Map<number, { at: number; units: number }[]>();
+  const dailyClock: { now: number | null } = { now: null };
   const services: TestServices = {
+    dailySends,
+    dailyClock,
+    dailyCounter: memoryDailyCounter(dailySends, dailyClock),
     bucket: env.BUCKET,
     hashEmail: await createEmailHasher(TEST_SIGNING_KEY),
     signFileLink: (file) => signer.sign(file),

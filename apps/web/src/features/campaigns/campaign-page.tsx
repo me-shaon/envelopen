@@ -22,10 +22,12 @@ import {
   CAMPAIGN_TYPES,
   CampaignStatusPill,
   EXCLUSION_LABELS,
+  formatDay,
   formatScheduled,
   formatUtc,
   formatWhen,
   PAUSE_REASONS,
+  SEND_DAY_MS,
 } from "./shared";
 
 // One campaign. A draft shows the form, the audience estimate, and "Review and send".
@@ -516,6 +518,7 @@ function CampaignView({
         Envelopen takes the recipient list and starts sending at that time. Unschedule to edit the
         campaign.
       </Banner>
+      <SendDaysBanner campaign={campaign} />
       <Banner
         show={status === "needs_decision"}
         tone="danger"
@@ -547,6 +550,27 @@ function CampaignView({
         onConfirm={() => action.mutate("cancel")}
       />
     </div>
+  );
+}
+
+/** The sending days of a connection with a daily cap (U19): "Sending day N of M". */
+function SendDaysBanner({ campaign }: { campaign: Detail }) {
+  const { sendDays, sendWindowStart, sendEndsAt, status } = campaign;
+  const active = status === "sending" || status === "paused";
+  if (!active || sendDays === null || sendWindowStart === null || sendEndsAt === null) return null;
+  const day = Math.min(
+    sendDays,
+    Math.max(1, Math.floor((Date.now() - sendWindowStart) / SEND_DAY_MS) + 1),
+  );
+  return (
+    <Banner
+      show
+      tone="lavender"
+      title={`Sending day ${day} of ${sendDays}, ends about ${formatDay(sendEndsAt)}`}
+    >
+      The connection has a daily cap, so this campaign sends over several days of 24 hours. Welcome
+      and confirmation emails use the same cap. When a day is short, the rest moves to the next day.
+    </Banner>
   );
 }
 

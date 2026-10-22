@@ -18,6 +18,7 @@ import { ListSkeleton, LoadingRegion, Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, formatDateTime, PageTop } from "@/features/contacts/shared";
+import { capSourceOf, DailyCapDialog, DailyUsage } from "./daily-cap";
 import { ConnectDialog, PolicyDialog, PolicyPill, WebhookDialog } from "./dialogs";
 import {
   CONNECTION_STATUS,
@@ -36,11 +37,13 @@ function ConnectionCard({
   connection,
   onWebhook,
   onAccept,
+  onCap,
   onRemove,
 }: {
   connection: Connection;
   onWebhook: (connection: Connection) => void;
   onAccept: (connection: Connection) => void;
+  onCap: (connection: Connection) => void;
   onRemove: (connection: Connection) => void;
 }) {
   const queryClient = useQueryClient();
@@ -113,6 +116,9 @@ function ConnectionCard({
             <RefreshCwIcon className="size-3" aria-hidden="true" />
             Check
           </Button>
+          <Button variant="outline" size="sm" onClick={() => onCap(connection)}>
+            Daily limit<span className="sr-only"> of {connection.name}</span>
+          </Button>
           <Button variant="destructive-ghost" size="sm" onClick={() => onRemove(connection)}>
             Remove<span className="sr-only"> {connection.name}</span>
           </Button>
@@ -127,6 +133,7 @@ function ConnectionCard({
           {connection.statusDetail}
         </Note>
       ) : null}
+      <DailyUsage connection={connection} />
       {connection.warnings.map((warning) => (
         <Note key={warning} tone="salmon" testId="connection-warning">
           {warning}
@@ -227,6 +234,7 @@ export function ConnectionsPage() {
   const [webhookFor, setWebhookFor] = useState<number | null>(null);
   const [accepting, setAccepting] = useState<Connection | null>(null);
   const [removing, setRemoving] = useState<Connection | null>(null);
+  const [capping, setCapping] = useState<Connection | null>(null);
   const remove = useMutation({
     mutationFn: (connection: Connection) =>
       unwrap(api.DELETE("/connections/{id}", { params: { path: { id: connection.id } } })),
@@ -271,6 +279,7 @@ export function ConnectionsPage() {
                   connection={connection}
                   onWebhook={(item) => setWebhookFor(item.id)}
                   onAccept={setAccepting}
+                  onCap={setCapping}
                   onRemove={(item) => {
                     remove.reset();
                     setRemoving(item);
@@ -342,6 +351,11 @@ export function ConnectionsPage() {
       <WebhookDialog
         connectionId={webhookFor}
         onOpenChange={(open) => !open && setWebhookFor(null)}
+      />
+      <DailyCapDialog
+        connection={capping}
+        capSource={capping ? capSourceOf(capping, providers.data?.providers) : null}
+        onOpenChange={(open) => !open && setCapping(null)}
       />
       <PolicyDialog connection={accepting} onOpenChange={(open) => !open && setAccepting(null)} />
       <ConfirmDialog

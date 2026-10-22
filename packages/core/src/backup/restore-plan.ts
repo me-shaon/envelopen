@@ -213,6 +213,8 @@ const identity: Upgrade = (_table, row) => row;
  * - 0022 adds the brand tables and `campaigns.brand_snapshot`. An older campaign has no
  *   snapshot, and an older backup has no brand kit and no logos.
  * - 0023 adds `provider_connections.daily_cap`. An older connection has no cap.
+ * - 0024 adds the sending windows of campaigns and batches, and `signups.deferred_origin`.
+ *   An older campaign has no windows, and no older confirmation email waits.
  */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
@@ -226,6 +228,14 @@ export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   21: identity,
   22: (table, row) => (table === "campaigns" ? { brand_snapshot: null, ...row } : row),
   23: (table, row) => (table === "provider_connections" ? { daily_cap: null, ...row } : row),
+  24: (table, row) => {
+    if (table === "campaigns") {
+      return { send_window_start: null, send_first_capacity: null, send_days: null, ...row };
+    }
+    if (table === "campaign_batches") return { send_window: null, ...row };
+    if (table === "signups") return { deferred_origin: null, ...row };
+    return row;
+  },
 };
 
 /** Returns why a backup of `schemaVersion` cannot be restored here, or null. */

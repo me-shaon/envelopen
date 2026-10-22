@@ -7,6 +7,7 @@ import { estimateAudience } from "../campaigns/audience";
 import { campaignAudience, loadCampaign } from "../campaigns/model";
 import { campaignsConfirm, campaignsPrepare } from "../campaigns/operations";
 import { beginSnapshot, snapshotPage } from "../campaigns/snapshot";
+import { connectionsDailyUsage } from "../connections/operations";
 import { fieldsCreate } from "../contacts/fields";
 import { isOperationError } from "../errors";
 import { runOperation } from "../executor";
@@ -20,6 +21,7 @@ import {
   type PublicForm,
   resendSignup,
   type SignupDeps,
+  sendDeferredConfirmations,
   signupOfToken,
   submitSignup,
   validateSubmission,
@@ -567,5 +569,49 @@ describe("cleanup", () => {
     expect(await signupCount(db, seeded.workspaceId, "old@example.org")).toBe(1);
     await purgeExpiredSignups(db, T0 + 7 * 24 * HOUR + 1);
     expect(await signupCount(db, seeded.workspaceId, "old@example.org")).toBe(0);
+  });
+});
+
+describe("confirmation emails at the daily cap (U19)", () => {
+  it("waits in the outbox while the cap has no room, then goes out with a working link", async () => {
+    const { db, mock, services, seeded, run, deps, publicForm } = await setup();
+    await db.db
+      .updateTable("provider_connections")
+      .set({ daily_cap: 3 })
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("id", "=", seeded.connectionId)
+      .execute();
+    services.dailyClock.now = T0;
+    await services.dailyCounter.reserve(seeded.connectionId, 3, 3);
+
+    const outcome = await submit(deps(), await publicForm(), "reader@example.org");
+    expect(outcome).toEqual({ emailed: true, result: "deferred" });
+    expect(mock.calls).toHaveLength(0);
+    const usage = await run<{ waitingConfirmations: number; usedLast24h: number }>(
+      connectionsDailyUsage,
+      { id: seeded.connectionId },
+    );
+    expect(usage).toMatchObject({ waitingConfirmations: 1, usedLast24h: 3 });
+
+    // The cron finds no room yet, and keeps the email.
+    expect(await sendDeferredConfirmations({ db, services, now: T0 + HOUR })).toBe(0);
+    expect(mock.calls).toHaveLength(0);
+
+    // After 24 hours the counter has room: the email goes out with a new token.
+    const later = T0 + 25 * HOUR;
+    services.dailyClock.now = later;
+    expect(await sendDeferredConfirmations({ db, services, now: later })).toBe(1);
+    const tokens = tokensIn(mock);
+    expect(tokens).toHaveLength(1);
+    const state = await signupOfToken(db, tokens[0] as string, later + HOUR);
+    expect(state.kind).toBe("ready");
+    expect(await services.dailyCounter.used(seeded.connectionId)).toBe(1);
+    expect(
+      await run<{ waitingConfirmations: number }>(connectionsDailyUsage, {
+        id: seeded.connectionId,
+      }),
+    ).toMatchObject({ waitingConfirmations: 0 });
+    // A second run sends nothing again.
+    expect(await sendDeferredConfirmations({ db, services, now: later })).toBe(0);
   });
 });

@@ -646,6 +646,8 @@ describe("Workers Free limits", () => {
       rateLimiter: () => ({
         acquire: (units, rule, maxWaitMs) => stub.acquire(units, rule, maxWaitMs, T0),
         backoff: (ms) => stub.backoff(ms, T0),
+        releaseDaily: (units, at) => stub.releaseDaily(units, at, T0),
+        fillDaily: (cap) => stub.fillDaily(cap, T0),
       }),
     });
     expect((await processPointer(deps, pointers[0])).result).toBe("sent");

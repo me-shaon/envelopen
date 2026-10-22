@@ -23,6 +23,7 @@ import {
 import { createDb } from "@envelopen/db";
 import { createTokenSigner, type TokenSigner } from "@envelopen/email-render";
 import { isUsableKey } from "./auth/better-auth";
+import { dailyCounter } from "./do/daily-counter";
 import { usageReader } from "./do/usage";
 import { turnstileKeys } from "./forms/turnstile";
 import { socketConnect } from "./sockets";
@@ -305,6 +306,8 @@ export function welcomeRunner(env: Pick<Env, "WELCOME_WORKFLOW">): WelcomeRunner
   };
 }
 
+export { dailyCounter };
+
 /** KV keys of the settings cache start with this prefix. */
 const SETTINGS_PREFIX = "settings:";
 /** How long an edge location keeps a read in its local cache. */
@@ -346,6 +349,7 @@ export function createServices(
     | "TURNSTILE_SITE_KEY"
     | "TURNSTILE_SECRET"
     | "WELCOME_WORKFLOW"
+    | "RATE_LIMITER"
   >,
   request?: Request,
 ): Partial<Services> {
@@ -363,6 +367,7 @@ export function createServices(
     usage: usageReader(env),
     turnstileConfigured: turnstileKeys(env) !== null,
     welcome: welcomeRunner(env),
+    dailyCounter: dailyCounter(env),
   };
   const cache = settingsCache(env);
   if (cache) services.settingsCache = cache;

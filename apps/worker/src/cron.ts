@@ -21,6 +21,7 @@ import {
   restoreInProgress,
   resumeAfterPlatformLimit,
   type SweepDeps,
+  sendDeferredConfirmations,
   startBackup,
   startDueCampaigns,
   unappliedProviderEvents,
@@ -55,7 +56,8 @@ import { backupStarter, campaignStarter, createServices, sendQueue } from "./ser
 //    EventBuffer again, and once an hour raw events past the workspace's retention
 //    period are deleted (R51). Rollups stay. In the same run, backup key derivations
 //    that stopped are failed and their sealed secrets are cleared (U4), and signups
-//    7 days after their creation, with an expired link, are deleted (U8).
+//    7 days after their creation, with an expired link, are deleted (U8). Then the
+//    confirmation emails that waited for a daily cap go out, if the cap has room (U19).
 // 6. Once a day, the stored member counts of lists and tags are recounted
 //    (lists/counts.ts). Triggers keep them, so the recount normally writes nothing.
 // 7. Once a day, backups past their retention period are removed, and the encrypted
@@ -329,6 +331,12 @@ export async function runCron(
       console.error("Cron job reseal connections failed", error),
     );
     if (!report.limited) await runEventCron(db, eventSink(env), now);
+    // Confirmation emails that waited for a daily cap go out when the cap has room (U19).
+    if (!report.limited) {
+      await sendDeferredConfirmations({ db, services: createServices(env), now }).catch((error) =>
+        console.error("Cron job deferred confirmation emails failed", error),
+      );
+    }
     if (!report.limited && isRecountTime(now)) {
       await repairAllCounts(db).catch((error) =>
         console.error("Cron job recount of member counts failed", error),

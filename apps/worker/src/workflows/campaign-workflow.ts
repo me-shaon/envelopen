@@ -13,7 +13,7 @@ import {
 } from "@envelopen/core";
 import { createDb, type DbConnection, isD1DailyLimitError, nextUtcMidnight } from "@envelopen/db";
 import { usageMeter, usageSink } from "../do/usage";
-import { sendQueue } from "../services";
+import { dailyCounter, sendQueue } from "../services";
 
 // The campaign snapshot Workflow (U9, KTD22). One instance takes the recipient
 // snapshot of one campaign start, page by page, and dispatches the batches of each
@@ -74,7 +74,9 @@ export class CampaignWorkflow extends WorkflowEntrypoint<Env, CampaignJob> {
   async run(event: WorkflowEvent<CampaignJob>, step: WorkflowStep): Promise<string> {
     const job = event.payload;
     const queue = sendQueue(this.env);
-    const start = (await this.step(step, "begin", (db) => beginSnapshot(db, job))) as SnapshotStart;
+    const start = (await this.step(step, "begin", (db) =>
+      beginSnapshot(db, job, dailyCounter(this.env), Date.now()),
+    )) as SnapshotStart;
     if (start.state === "stop") return start.reason;
 
     let afterId = 0;

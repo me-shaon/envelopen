@@ -18,7 +18,14 @@ import { createDraft, seedCampaignWorkspace } from "@envelopen/core/testing/camp
 import { createProviderMock, type ProviderMock } from "@envelopen/core/testing/provider-mock";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { createTokenSigner, type TokenSigner } from "@envelopen/email-render";
-import type { Grant } from "../src/do/rate-limiter";
+import {
+  type CombinedGrant,
+  type DailyBuckets,
+  dailyFreeAt,
+  dailyUsed,
+  releaseDaily,
+  reserveDaily,
+} from "../src/do/rate-limiter";
 import { type LedgerClient, ledgerMeterName, unsubscribeLedger } from "../src/do/unsubscribes";
 import { USAGE_METER_NAME } from "../src/do/usage";
 import type { ConsumerDeps, RateLimiterClient } from "../src/queue/send-consumer";
@@ -115,8 +122,9 @@ export async function snapshot(
   job: { workspaceId: number; campaignId: number; startedAt: number },
   queue: SendQueue,
   pageSize?: number,
+  counter?: { used(connectionId: number): Promise<number> },
 ) {
-  const start = await beginSnapshot(db, job);
+  const start = await beginSnapshot(db, job, counter, T0);
   if (start.state === "stop") throw new Error(start.reason);
   let afterId = 0;
   let excluded = emptyExclusions();
@@ -150,6 +158,43 @@ export interface TestDeps extends ConsumerDeps {
   backoffs: number[];
   /** Calls to the Durable Objects, for the subrequest budget. */
   objectCalls: { count: number };
+  /** The rolling daily counter of the connection, on the test clock (U19). */
+  daily: DailyCounterFake;
+}
+
+/** An in-memory daily counter with the same math as the RateLimiter object. */
+export interface DailyCounterFake {
+  buckets: DailyBuckets;
+  used(): number;
+  reserve(
+    units: number,
+    cap: number,
+  ): { granted: true; at: number } | { granted: false; freeAt: number | null };
+  release(units: number, at: number): void;
+  fill(cap: number): void;
+}
+
+export function dailyCounterFake(clock: { now: number }): DailyCounterFake {
+  const fake: DailyCounterFake = {
+    buckets: {},
+    used: () => dailyUsed(fake.buckets, clock.now),
+    reserve(units, cap) {
+      const result = reserveDaily(fake.buckets, units, cap, clock.now);
+      fake.buckets = result.buckets;
+      return result.grant;
+    },
+    release(units, at) {
+      fake.buckets = releaseDaily(fake.buckets, units, at, clock.now);
+    },
+    fill(cap) {
+      const missing = cap - fake.used();
+      if (missing > 0) {
+        const key = String(Math.floor(clock.now / (5 * 60 * 1000)));
+        fake.buckets[key] = (fake.buckets[key] ?? 0) + missing;
+      }
+    },
+  };
+  return fake;
 }
 
 /** Consumer dependencies with a provider mock, a fake clock, and in-memory objects. */
@@ -165,14 +210,27 @@ export async function testDeps(
   const limit: { value: PlatformLimit | null } = { value: null };
   const objectCalls = { count: 0 };
   const ledger = { pending: false, contacts: new Set<number>() };
+  const daily = dailyCounterFake(clock);
   const limiter: RateLimiterClient = {
-    async acquire(): Promise<Grant> {
+    async acquire(_units, _rule, _maxWaitMs, request): Promise<CombinedGrant> {
       objectCalls.count++;
-      return { granted: true, waitMs: 0 };
+      if (!request) return { granted: true, waitMs: 0 };
+      const freeAt = dailyFreeAt(daily.buckets, request.units, request.cap, clock.now);
+      if (freeAt !== clock.now) return { granted: false, daily: { granted: false, freeAt } };
+      const grant = daily.reserve(request.units, request.cap);
+      return { granted: true, waitMs: 0, ...(grant.granted ? { daily: grant } : {}) };
     },
     async backoff(ms) {
       objectCalls.count++;
       backoffs.push(ms);
+    },
+    async releaseDaily(units, at) {
+      objectCalls.count++;
+      daily.release(units, at);
+    },
+    async fillDaily(cap) {
+      objectCalls.count++;
+      daily.fill(cap);
     },
   };
   return {
@@ -208,6 +266,7 @@ export async function testDeps(
     ledger,
     backoffs,
     objectCalls,
+    daily,
     ...overrides,
   };
 }

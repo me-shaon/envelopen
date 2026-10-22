@@ -490,6 +490,12 @@ export interface CampaignsTable {
   scheduled_local: Defaulted<string | null>;
   /** JSON of the brand values at confirm (0022_brand_kit.sql). Null before confirm. */
   brand_snapshot: Defaulted<string | null>;
+  /** The start of sending window 0 of a capped connection (0024_send_windows.sql). */
+  send_window_start: Defaulted<number | null>;
+  /** The messages that window 0 can take: the cap minus the sends of the last 24 hours. */
+  send_first_capacity: Defaulted<number | null>;
+  /** The number of 24-hour windows that send, or null without a daily cap. */
+  send_days: Defaulted<number | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -520,6 +526,8 @@ export interface CampaignBatchesTable {
   failed_count: Defaulted<number>;
   skipped_count: Defaulted<number>;
   uncertain_at: Defaulted<number | null>;
+  /** The 24-hour window of a capped connection that the batch sends in, or null. */
+  send_window: Defaulted<number | null>;
   created_at: Generated<number>;
   updated_at: Defaulted<number>;
 }
@@ -747,6 +755,8 @@ export interface SignupsTable {
   /** When the last confirmation email went out, or null when none did. */
   sent_at: Defaulted<number | null>;
   confirmed_at: Defaulted<number | null>;
+  /** The link origin while the confirmation email waits for the daily cap (0024), or null. */
+  deferred_origin: Defaulted<string | null>;
   created_at: Generated<number>;
 }
 

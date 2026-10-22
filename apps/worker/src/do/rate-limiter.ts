@@ -11,6 +11,14 @@ import { DurableObject } from "cloudflare:workers";
 // holds. A reservation that would wait longer than the caller allows is not taken, and
 // the caller retries the message later. A 429 with `Retry-After` stops the bucket
 // until that time.
+//
+// The same object keeps the rolling daily counter of a connection with a `daily_cap`
+// (U19, KTD14): the messages of the last 24 hours, in 5-minute buckets. Campaign
+// batches, welcome steps, and confirmation emails reserve from it before they send. A
+// bucket counts while any part of it is less than 24 hours old, so the counter never
+// counts low, and no 24-hour period sends more than the cap. A reservation that the cap
+// does not allow returns the first time at which it fits. A send that the provider
+// refused gives its reservation back.
 
 export interface RateRule {
   /** Tokens per second. */
@@ -55,17 +63,162 @@ export function reserve(
   return { bucket: { ...refilled, tokens: after }, grant: { granted: true, waitMs } };
 }
 
+// The rolling daily counter ----------------------------------------------------------------
+
+export const DAY_MS = 24 * 60 * 60 * 1000;
+/** The size of one bucket of the daily counter. */
+export const DAILY_BUCKET_MS = 5 * 60 * 1000;
+
+/** Messages by bucket number (`floor(time / DAILY_BUCKET_MS)`). */
+export type DailyBuckets = Record<string, number>;
+
+/**
+ * The answer of a daily reservation. `at` names the bucket, for a later release.
+ * `freeAt` is null when the request is larger than the whole cap.
+ */
+export type DailyGrant = { granted: true; at: number } | { granted: false; freeAt: number | null };
+
+/** True while the bucket counts: some part of it is less than 24 hours old. */
+function counts(bucket: number, now: number): boolean {
+  return (bucket + 1) * DAILY_BUCKET_MS + DAY_MS > now;
+}
+
+/** The buckets that still count. */
+export function pruneDaily(buckets: DailyBuckets | undefined, now: number): DailyBuckets {
+  const kept: DailyBuckets = {};
+  for (const [key, count] of Object.entries(buckets ?? {})) {
+    if (count > 0 && counts(Number(key), now)) kept[key] = count;
+  }
+  return kept;
+}
+
+/** The messages of the last 24 hours. */
+export function dailyUsed(buckets: DailyBuckets | undefined, now: number): number {
+  let used = 0;
+  for (const count of Object.values(pruneDaily(buckets, now))) used += count;
+  return used;
+}
+
+/** The first time at which `units` more messages fit in the cap, or null if never. */
+export function dailyFreeAt(
+  buckets: DailyBuckets | undefined,
+  units: number,
+  cap: number,
+  now: number,
+): number | null {
+  if (units > cap) return null;
+  const kept = pruneDaily(buckets, now);
+  let used = dailyUsed(kept, now);
+  if (used + units <= cap) return now;
+  for (const key of Object.keys(kept)
+    .map(Number)
+    .sort((a, b) => a - b)) {
+    used -= kept[String(key)] ?? 0;
+    if (used + units <= cap) return (key + 1) * DAILY_BUCKET_MS + DAY_MS;
+  }
+  return now;
+}
+
+/** The daily reservation math, without storage, so tests can check it directly. */
+export function reserveDaily(
+  buckets: DailyBuckets | undefined,
+  units: number,
+  cap: number,
+  now: number,
+): { buckets: DailyBuckets; grant: DailyGrant } {
+  const kept = pruneDaily(buckets, now);
+  const freeAt = dailyFreeAt(kept, units, cap, now);
+  if (freeAt !== now) return { buckets: kept, grant: { granted: false, freeAt } };
+  const key = String(Math.floor(now / DAILY_BUCKET_MS));
+  kept[key] = (kept[key] ?? 0) + units;
+  return { buckets: kept, grant: { granted: true, at: now } };
+}
+
+/** Gives back `units` of a reservation made at `at`. */
+export function releaseDaily(
+  buckets: DailyBuckets | undefined,
+  units: number,
+  at: number,
+  now: number,
+): DailyBuckets {
+  const kept = pruneDaily(buckets, now);
+  const key = String(Math.floor(at / DAILY_BUCKET_MS));
+  const left = (kept[key] ?? 0) - Math.max(0, units);
+  if (left > 0) kept[key] = left;
+  else delete kept[key];
+  return kept;
+}
+
+/** A daily reservation that the token bucket call makes in the same turn. */
+export interface DailyRequest {
+  units: number;
+  cap: number;
+}
+
+/** The token bucket answer, and the daily answer when the call asked for one. */
+export type CombinedGrant =
+  | (Extract<Grant, { granted: true }> & { daily?: Extract<DailyGrant, { granted: true }> })
+  | Extract<Grant, { granted: false }>
+  | { granted: false; daily: Extract<DailyGrant, { granted: false }> };
+
 export class RateLimiter extends DurableObject<Env> {
+  /**
+   * Reserves rate tokens. With `daily`, it also reserves from the daily counter: the
+   * daily check comes first, and a refusal of either takes nothing from the other.
+   */
   async acquire(
     units: number,
     rule: RateRule,
     maxWaitMs: number,
     now = Date.now(),
-  ): Promise<Grant> {
+    daily?: DailyRequest,
+  ): Promise<CombinedGrant> {
+    let counted: DailyBuckets | undefined;
+    if (daily) {
+      const stored = await this.ctx.storage.get<DailyBuckets>("daily");
+      const freeAt = dailyFreeAt(stored, daily.units, daily.cap, now);
+      if (freeAt !== now) return { granted: false, daily: { granted: false, freeAt } };
+      counted = stored;
+    }
     const stored = await this.ctx.storage.get<Bucket>("bucket");
     const { bucket, grant } = reserve(stored, units, rule, maxWaitMs, now);
     await this.ctx.storage.put("bucket", bucket);
+    if (!grant.granted || !daily) return grant;
+    const reserved = reserveDaily(counted, daily.units, daily.cap, now);
+    await this.ctx.storage.put("daily", reserved.buckets);
+    return { ...grant, daily: { granted: true, at: now } };
+  }
+
+  /** Reserves `units` messages from the daily counter. */
+  async reserveDaily(units: number, cap: number, now = Date.now()): Promise<DailyGrant> {
+    const stored = await this.ctx.storage.get<DailyBuckets>("daily");
+    const { buckets, grant } = reserveDaily(stored, units, cap, now);
+    if (grant.granted) await this.ctx.storage.put("daily", buckets);
     return grant;
+  }
+
+  /** Gives back a daily reservation of `units` made at `at`: the provider sent nothing. */
+  async releaseDaily(units: number, at: number, now = Date.now()): Promise<void> {
+    const stored = await this.ctx.storage.get<DailyBuckets>("daily");
+    await this.ctx.storage.put("daily", releaseDaily(stored, units, at, now));
+  }
+
+  /**
+   * The provider said that its daily quota is spent: the counter counts the cap as used
+   * from now, so other sends wait until the provider's quota has room again.
+   */
+  async fillDaily(cap: number, now = Date.now()): Promise<void> {
+    const stored = pruneDaily(await this.ctx.storage.get<DailyBuckets>("daily"), now);
+    const missing = cap - dailyUsed(stored, now);
+    if (missing <= 0) return;
+    const key = String(Math.floor(now / DAILY_BUCKET_MS));
+    stored[key] = (stored[key] ?? 0) + missing;
+    await this.ctx.storage.put("daily", stored);
+  }
+
+  /** The messages of the last 24 hours. */
+  async dailyUsage(now = Date.now()): Promise<number> {
+    return dailyUsed(await this.ctx.storage.get<DailyBuckets>("daily"), now);
   }
 
   /** The provider answered 429: no tokens until `retryAfterMs` has passed. */

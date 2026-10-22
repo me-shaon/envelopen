@@ -77,6 +77,16 @@ export function formatScheduled(
   }
 }
 
+const dayOnly = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
+
+/** The date of a time, without the time of day. */
+export function formatDay(ms: number): string {
+  return dayOnly.format(new Date(ms));
+}
+
+/** One sending day of a connection with a daily cap (U19). */
+export const SEND_DAY_MS = 24 * 60 * 60 * 1000;
+
 export function formatUtc(ms: number): string {
   return `${utcTime.format(new Date(ms))} UTC`;
 }

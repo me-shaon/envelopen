@@ -18,6 +18,18 @@ export {
   utcDay,
   writeBatchResults,
 } from "./batch";
+export {
+  assignNewBatches,
+  beginSendWindows,
+  cappedBatchSize,
+  deferForCap,
+  estimateSendPlan,
+  packWindows,
+  planSendDays,
+  replanRemaining,
+  type SendPlan,
+  windowOf,
+} from "./caps";
 export { type Checklist, type ChecklistItem, runChecklist } from "./checklist";
 export {
   type ConfirmFailure,

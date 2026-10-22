@@ -21,7 +21,7 @@ import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText, Figure } from "@/features/contacts/shared";
 import { ambiguityNote, instantToWallTime, wallTimeToInstant } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
-import { EXCLUSION_LABELS, formatScheduled } from "./shared";
+import { EXCLUSION_LABELS, formatDay, formatScheduled } from "./shared";
 import { rememberedTimeZone, rememberTimeZone, TimeZonePicker } from "./timezone-picker";
 
 // The send confirmation (R33, R68). Step one picks the mode. Prepare then runs the
@@ -364,6 +364,31 @@ function PickMode({
   );
 }
 
+/** The sending days of a connection with a daily cap (R28, AE6). */
+function SendPlanNote({ plan }: { plan: NonNullable<Prepared["sendPlan"]> }) {
+  const cap = plan.dailyCap.toLocaleString("en-US");
+  return (
+    <div
+      className="flex items-start gap-3 rounded-xl bg-tone-lavender px-4 py-3 text-tone-lavender-foreground"
+      data-testid="send-plan"
+    >
+      <ClockIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <div className="flex flex-col gap-0.5 text-[13px]">
+        <span className="font-semibold">
+          {plan.days === 1
+            ? "Sends in 1 day"
+            : `Sends over ${plan.days} days, ends about ${formatDay(plan.endsAt)}`}
+        </span>
+        <span>
+          The connection sends at most {cap} emails in 24 hours. It sent{" "}
+          {plan.usedLast24h.toLocaleString("en-US")} in the last 24 hours. Welcome and confirmation
+          emails use the same limit, so the end date can move.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function Review({ prepared, onNavigate }: { prepared: Prepared; onNavigate: () => void }) {
   const excluded = Object.entries(prepared.estimate.excluded).filter(([, count]) => count > 0) as [
     keyof typeof EXCLUSION_LABELS,
@@ -397,6 +422,7 @@ function Review({ prepared, onNavigate }: { prepared: Prepared; onNavigate: () =
         The count is an estimate. Envelopen takes the final list when the send starts, and checks
         each contact again just before its email goes out.
       </p>
+      {prepared.sendPlan ? <SendPlanNote plan={prepared.sendPlan} /> : null}
       {excluded.length > 0 ? (
         <div className="flex flex-col gap-1.5">
           <span className="text-[13px] font-medium">Left out</span>

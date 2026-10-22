@@ -1,6 +1,7 @@
 import type { DbConnection } from "@envelopen/db";
 import { batchSizeFor, getAdapter } from "@envelopen/providers";
 import { sql } from "kysely";
+import type { DailyCounter } from "../connections/daily-cap";
 import type { CampaignJob, SendQueue } from "../services";
 import { readWorkersPlan } from "../settings/operations";
 import {
@@ -9,6 +10,7 @@ import {
   insertPageRecipientsQuery,
   pageExclusionsQuery,
 } from "./audience";
+import { assignNewBatches, beginSendWindows, cappedBatchSize } from "./caps";
 import { dispatchAll } from "./dispatch";
 import { type FinalizeResult, tryFinalizeCampaign } from "./finalize";
 import {
@@ -30,6 +32,10 @@ import { transitionCampaign } from "./state-machine";
 //    batches of the adapter's size, and records each recipient's batch. Then it
 //    dispatches the new batches, so sending starts while the snapshot goes on.
 // 3. `finishSnapshot` stores the totals and lets the campaign finish.
+//
+// With a daily cap on the connection (U19), `beginSnapshot` fixes window 0, and each
+// page puts its new batches in 24-hour windows before it dispatches (caps.ts). A batch
+// of a later window waits in `pending` until its window starts.
 //
 // The work is set-based, so the Worker spends almost no CPU per page, and every page is
 // safe to repeat: the unique (campaign, contact) key skips recipients that exist, and
@@ -79,7 +85,12 @@ function snapshotStops(status: string | undefined): string | null {
   return null;
 }
 
-export async function beginSnapshot(db: DbConnection, job: CampaignJob): Promise<SnapshotStart> {
+export async function beginSnapshot(
+  db: DbConnection,
+  job: CampaignJob,
+  counter?: Pick<DailyCounter, "used">,
+  now = Date.now(),
+): Promise<SnapshotStart> {
   const state = await campaignState(db, job);
   const stop = snapshotStops(state?.status);
   if (stop || !state) return { state: "stop", reason: stop ?? "Missing campaign." };
@@ -113,11 +124,13 @@ WHERE workspace_id = ${job.workspaceId} AND id = ${job.campaignId} AND snapshot_
     db.db,
   );
   const fixed = await campaignState(db, job);
+  const cap = await beginSendWindows(db, counter, job.workspaceId, job.campaignId, now);
   return {
     state: "run",
     cut: fixed?.snapshot_max_contact_id ?? 0,
-    // SMTP sends smaller batches on Workers Free (Trial 1 of U17). The plan is the owner's setting.
-    batchSize: batchSizeFor(adapter, await readWorkersPlan(db)),
+    // SMTP sends smaller batches on Workers Free (Trial 1 of U17). The plan is the owner's
+    // setting. No batch is larger than the daily cap.
+    batchSize: cappedBatchSize(batchSizeFor(adapter, await readWorkersPlan(db)), cap),
   };
 }
 
@@ -194,6 +207,7 @@ WHERE campaign_recipients.workspace_id = ${workspaceId} AND campaign_recipients.
   ]);
   const excluded = exclusionCountsOf(results[0]?.results ?? []);
   const recipients = results[1]?.meta.changes ?? 0;
+  await assignNewBatches(db, workspaceId, campaignId, now);
 
   // Sending starts while the snapshot goes on. A paused campaign dispatches at resume.
   const dispatched = await dispatchAll(db, queue, workspaceId, campaignId, now);

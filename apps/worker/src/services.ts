@@ -25,6 +25,7 @@ import { createTokenSigner, type TokenSigner } from "@envelopen/email-render";
 import { isUsableKey } from "./auth/better-auth";
 import { usageReader } from "./do/usage";
 import { turnstileKeys } from "./forms/turnstile";
+import { socketConnect } from "./sockets";
 
 // Builds the platform services that operations need from the Worker's bindings (see
 // packages/core/src/services.ts). The keyed hasher, the link signer, and the
@@ -340,6 +341,7 @@ export function createServices(
     | "SIGNING_KEYS_RETIRED"
     | "ENCRYPTION_KEY"
     | "OUTBOUND_MOCK_ORIGIN"
+    | "OUTBOUND_MOCK_SMTP"
     | "KV"
     | "TURNSTILE_SITE_KEY"
     | "TURNSTILE_SECRET"
@@ -353,6 +355,7 @@ export function createServices(
       await env.IMPORT_WORKFLOW.create({ id: importInstanceId(job), params: job });
     },
     outboundFetch: outboundFetch(env),
+    connectSocket: socketConnect(env),
     startCampaignJob: campaignStarter(env),
     startBackupJob: backupStarter(env),
     startKeyDerivation: keyDerivationStarter(env),

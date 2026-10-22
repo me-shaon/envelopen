@@ -258,7 +258,9 @@ export async function resealLegacyConnections(
 
 /** The adapter context of a connection. */
 export function adapterContext(services: Partial<Services>, refs: ProviderRefs): AdapterContext {
-  return { fetch: requireService(services, "outboundFetch"), refs };
+  const ctx: AdapterContext = { fetch: requireService(services, "outboundFetch"), refs };
+  if (services.connectSocket) ctx.connect = services.connectSocket;
+  return ctx;
 }
 
 /** The webhook URL without the secret: `<origin>/hooks/<provider>/<workspace>/<connection>`. */

@@ -1,3 +1,4 @@
+import type { SocketConnect } from "@envelopen/providers";
 import type { CredentialCipher } from "./crypto/credentials";
 import type { WelcomeRunner } from "./welcome/start";
 
@@ -129,6 +130,8 @@ export interface Services {
   credentials: CredentialCipher;
   /** Outbound HTTP to providers and to DNS over HTTPS. Tests pass a mock. */
   outboundFetch: typeof fetch;
+  /** Outbound TCP for SMTP adapters (KTD12). Tests pass the mock SMTP server. */
+  connectSocket: SocketConnect;
   /** The public origin of this deployment, for webhook URLs. For example `https://mail.example.com`. */
   appOrigin: string;
   /** Starts the campaign snapshot Workflow (U9). */

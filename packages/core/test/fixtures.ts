@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { createDb, type DbConnection } from "@envelopen/db";
+import type { SocketConnect } from "@envelopen/providers";
 import { generateApiKey } from "../src/api-keys";
 import { createCredentialCipher } from "../src/crypto/credentials";
 import { createFileLinkSigner } from "../src/import/file-links";
@@ -91,6 +92,11 @@ const noNetwork: typeof fetch = async (input) => {
   );
 };
 
+/** Outbound TCP for tests that do not expect any. A call fails the test. */
+const noSockets: SocketConnect = (target) => {
+  throw new Error(`Unexpected outbound socket in a test: ${target.hostname}:${target.port}`);
+};
+
 /** A settings cache in memory, in place of KV. `entries` shows what it holds. */
 export function memorySettingsCache(): SettingsCache & { entries: Map<string, string> } {
   const entries = new Map<string, string>();
@@ -142,6 +148,7 @@ export async function testServices(options: { fetch?: typeof fetch } = {}): Prom
     },
     credentials: await createCredentialCipher([{ version: 1, secret: TEST_ENCRYPTION_KEY }]),
     outboundFetch: options.fetch ?? noNetwork,
+    connectSocket: noSockets,
     appOrigin: TEST_ORIGIN,
     jobs,
     campaignJobs,

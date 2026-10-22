@@ -157,10 +157,47 @@ export interface SendBatchResult {
   failure?: BatchFailure;
 }
 
+/**
+ * How a socket starts: `off` is plain TCP, `on` is TLS from the first byte (implicit
+ * TLS, port 465), and `starttls` is plain TCP that `startTls()` upgrades later.
+ */
+export type SecureTransport = "off" | "on" | "starttls";
+
+export interface SocketTarget {
+  hostname: string;
+  port: number;
+  secureTransport: SecureTransport;
+}
+
+/**
+ * A TCP socket: the subset of a `cloudflare:sockets` socket that adapters use. The
+ * platform validates TLS certificates, and adapters cannot turn that off.
+ */
+export interface ProviderSocket {
+  readonly readable: ReadableStream<Uint8Array>;
+  readonly writable: WritableStream<Uint8Array>;
+  /** Settles when the socket closes. */
+  readonly closed: Promise<void>;
+  /**
+   * Upgrades a `starttls` socket to TLS and returns the new socket. Release the
+   * reader and the writer of this socket first, and use only the new one after it.
+   */
+  startTls(): ProviderSocket;
+  close(): Promise<void>;
+}
+
+/** Opens a socket, like `connect()` of `cloudflare:sockets` with `allowHalfOpen: false`. */
+export type SocketConnect = (target: SocketTarget) => ProviderSocket;
+
 /** What every adapter call gets besides the credentials. */
 export interface AdapterContext {
   /** Outbound HTTP. Tests pass a mock that replays recorded fixtures. */
   fetch: typeof fetch;
+  /**
+   * Outbound TCP, for adapters that do not use HTTP (SMTP, KTD12). Tests pass the mock
+   * server in `conformance/mock-smtp.ts`. HTTP adapters ignore it.
+   */
+  connect?: SocketConnect;
   /** The refs that `connect` and `setupEvents` returned for this connection. */
   refs: ProviderRefs;
   /** Per request. Defaults to 15 seconds. */

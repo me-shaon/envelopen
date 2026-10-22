@@ -282,6 +282,36 @@ Expected result: the send checklist blocks the confirm until the brand kit has a
 7. Check the send again. Check that **Postal address** passes and that the confirm works.
 8. After the confirm, change the postal address in **Brand**. Check that the sent email shows the address from the time of confirm.
 
+## 22. SMTP batch CPU on a deployed Free Worker (v0.5)
+
+Expected result: a batch of 50 SMTP messages has p99 CPU time below about 8 ms. If it does not, lower the SMTP batch size for Free.
+
+The local part of this trial ran in the Workers runtime and in Node against mock servers. A warm 50-message batch used about 1 ms of client CPU. The first batch in a new isolate used about 8.6 ms, mostly JIT compilation. Real TLS, a real server, and the queue consumer's own work are not in those numbers.
+
+1. Use the Free deployment. Connect an SMTP server that you control and that delivers only to your own addresses, for example a test account at your SMTP provider.
+2. Import 50 of your own test addresses. Use plus addresses, for example `you+1@gmail.com`.
+3. Run `npx wrangler tail --format json` in a second terminal.
+4. Send a campaign to the 50 addresses through the SMTP connection.
+5. Read `cpuTime` of the queue invocation that sent the batch, and look for "Exceeded CPU time limit".
+6. Repeat steps 4 and 5 two more times, with a pause of 10 minutes between them, so at least one batch runs in a new isolate.
+7. Record the highest `cpuTime`. If it is above about 8 ms, set the SMTP batch size for Free to 20, and send again.
+8. Record whether SMTP campaigns need Workers Paid. Update the Risks table of the plan with the result.
+
+## 23. Brevo keeps the unsubscribe headers (v0.5)
+
+Expected result: `List-Unsubscribe` and `List-Unsubscribe-Post` arrive unchanged through the Brevo relay.
+
+Send only to an address that you own. No automated test sends real email.
+
+1. In Brevo, create an SMTP key. Verify your sending domain in Brevo.
+2. Connect Brevo in Envelopen with the Brevo preset (`smtp-relay.brevo.com`, port 587).
+3. Send a test campaign to a list that holds only your Gmail address.
+4. In Gmail on the web, open the email, open the menu next to **Reply**, and select **Show original**.
+5. Check that `List-Unsubscribe` holds the Envelopen `https` URL with `/u/` and a token.
+6. Check that `List-Unsubscribe-Post` is `List-Unsubscribe=One-Click`.
+7. Check if Brevo added its own `List-Unsubscribe` value, or replaced the Envelopen value.
+8. Record the result. If Brevo replaced the headers, the Brevo preset relies on Brevo's own unsubscribe header and the Brevo webhook (KTD13).
+
 ## Release process
 
 A release is a `vX.Y.Z` tag on `main`. The release workflow (`.github/workflows/release.yml`) checks the tag, runs the checks, and creates the GitHub release. The update workflow in each copy then finds the release.
@@ -319,5 +349,7 @@ The plan leaves these questions for a deployed check. Record the answers here:
 - Whether the Deploy button provisions the dead-letter queue on a Free account (check 1), and the Queues operation count for a 5,000-recipient campaign.
 - The time and the CPU of the passphrase derivation on Free (check 14).
 - Whether Turnstile in an iframe needs the hostname of the embedding website in the widget (check 15).
+- Whether a 50-message SMTP batch fits 10 ms CPU on Free, and the SMTP batch size for Free (check 22).
+- Whether the Brevo relay keeps both unsubscribe headers (check 23).
 
 Last checked: 2026-10-22

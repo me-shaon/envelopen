@@ -26,6 +26,12 @@ interface EnvelopenSecrets {
    */
   OUTBOUND_MOCK_ORIGIN?: string;
   /**
+   * Local development and end-to-end tests only: `host:port` of the local SMTP mock
+   * (apps/web/e2e/smtp-mock.mjs). Every SMTP connection goes there, with simulated TLS.
+   * Accepted only for localhost or 127.0.0.1. Never set it on a deployed Worker.
+   */
+  OUTBOUND_MOCK_SMTP?: string;
+  /**
    * End-to-end tests only: a shorter EventBuffer flush delay in milliseconds, so stats
    * show tracking events without the 30-second wait. Ignored outside 100 to 30,000.
    */

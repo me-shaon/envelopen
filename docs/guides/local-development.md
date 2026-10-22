@@ -136,6 +136,15 @@ To work without a real provider, use the provider mock from the end-to-end tests
 
 The Worker accepts `OUTBOUND_MOCK_ORIGIN` only with a `localhost` or `127.0.0.1` address. Remove the line when you want to use a real provider.
 
+For SMTP, use the SMTP mock. It accepts every message and sends nothing.
+
+1. Start the mock in another terminal: `node apps/web/e2e/smtp-mock.mjs 2525 2526`.
+2. Add this line to `.dev.vars`: `OUTBOUND_MOCK_SMTP=127.0.0.1:2525`.
+3. Restart `pnpm dev`. Every SMTP connection now goes to the mock.
+4. Open `http://127.0.0.1:2526/messages` to see the messages that the Worker sent.
+
+The mock simulates TLS: it speaks plain TCP, and it accepts STARTTLS without a handshake. Certificate checks need a real server. The password `wrong` gets an authentication failure. The Worker accepts `OUTBOUND_MOCK_SMTP` only with a `localhost` or `127.0.0.1` address.
+
 ## Reset the local data
 
 The local data is in `.wrangler/state`. To start again with an empty database:

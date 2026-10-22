@@ -1,17 +1,19 @@
 // Starts a fresh local Worker for the end-to-end tests: a new D1 state directory, the
 // migrations, and `wrangler dev` with the test secrets from the environment.
 //
-//   node e2e/serve.mjs <port> <state-name> <pbkdf2-iterations> [outbound-mock-origin]
+//   node e2e/serve.mjs <port> <state-name> <pbkdf2-iterations> [outbound-mock-origin] [smtp-mock]
 //
 // With an outbound mock origin, the Worker sends provider and DNS requests to that
-// local server (OUTBOUND_MOCK_ORIGIN), so no test reaches a real provider.
+// local server (OUTBOUND_MOCK_ORIGIN), so no test reaches a real provider. With an SMTP
+// mock (`127.0.0.1:<port>`, e2e/smtp-mock.mjs), SMTP connections go there
+// (OUTBOUND_MOCK_SMTP), so no test reaches a real mail server.
 // Playwright runs it (playwright.config.ts). The web app must be built first, because
 // the Worker serves apps/web/dist.
 import { spawn, spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const [port, stateName, iterations, mockOrigin] = process.argv.slice(2);
+const [port, stateName, iterations, mockOrigin, smtpMock] = process.argv.slice(2);
 if (!port || !stateName || !iterations) {
   console.error("Usage: node e2e/serve.mjs <port> <state-name> <pbkdf2-iterations>");
   process.exit(1);
@@ -70,6 +72,7 @@ const dev = spawn(
     // Tracking events reach D1 a second after they arrive, not 30 seconds.
     "EVENT_FLUSH_DELAY_MS:1000",
     ...(mockOrigin ? [`OUTBOUND_MOCK_ORIGIN:${mockOrigin}`] : []),
+    ...(smtpMock ? [`OUTBOUND_MOCK_SMTP:${smtpMock}`] : []),
   ],
   { cwd: root, env, stdio: "inherit" },
 );

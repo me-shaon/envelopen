@@ -12,6 +12,10 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+### Added
+
+- An internal SMTP client and socket capability for provider adapters, with a local SMTP mock for development.
+
 ## [0.4.0] - 2026-10-22
 
 ### Added

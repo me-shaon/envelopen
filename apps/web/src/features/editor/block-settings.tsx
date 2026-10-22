@@ -1,9 +1,12 @@
 import {
   BRAND_COLOR_TOKENS,
+  PANEL_PADDINGS,
+  PANEL_TINT,
   SOCIAL_NETWORKS,
   type SocialLink,
   type SocialNetwork,
 } from "@envelopen/email-render/blocks/types";
+import { brandTokenValue } from "@envelopen/email-render/brand";
 import { Link } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/core";
 import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
@@ -17,7 +20,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useBrand } from "@/features/brand/shared";
 import { cn } from "@/lib/utils";
-import { setSectionColumns } from "./doc";
+import { type SelectedPanel, setPanelAttrs, setSectionColumns } from "./doc";
 import { useColor } from "./extensions";
 import { Segmented } from "./preview";
 
@@ -176,6 +179,7 @@ export function BlockSettings({
             label="Text"
             value={attrs.color}
             fallback="#ffffff"
+            text
             onChange={(color) => set({ color })}
           />
           <AlignSelect id={id("align")} value={attrs.align} onChange={(align) => set({ align })} />
@@ -401,18 +405,39 @@ function ColorSetting({
   value,
   fallback,
   onChange,
+  text = false,
+  tint = false,
 }: {
   id: string;
   label: string;
   value: unknown;
   fallback: string;
   onChange: (value: string) => void;
+  /** A text color: it also offers the readable text colors for the brand colors (U15). */
+  text?: boolean;
+  /** A panel background: it also offers the light tint (U15). */
+  tint?: boolean;
 }) {
   const shown = useColor(value, fallback);
   const brand = useBrand();
   const choices = [
     { token: BRAND_COLOR_TOKENS.primary, name: "Brand primary", color: brand.colorPrimary },
     { token: BRAND_COLOR_TOKENS.accent, name: "Brand accent", color: brand.colorAccent },
+    ...(text
+      ? [
+          {
+            token: BRAND_COLOR_TOKENS.onPrimary,
+            name: "Readable on primary",
+            color: brandTokenValue(brand, "brand.color_on_primary"),
+          },
+          {
+            token: BRAND_COLOR_TOKENS.onAccent,
+            name: "Readable on accent",
+            color: brandTokenValue(brand, "brand.color_on_accent"),
+          },
+        ]
+      : []),
+    ...(tint ? [{ token: PANEL_TINT, name: "Light tint", color: PANEL_TINT }] : []),
   ];
   const custom = !choices.some((choice) => choice.token === value);
   return (
@@ -575,6 +600,73 @@ export function SectionSettings({
           phone, the columns show one below the other.
         </p>
       </div>
+    </section>
+  );
+}
+
+const PADDING_CHOICES = [
+  { id: "20", label: "Small" },
+  { id: "28", label: "Medium" },
+  { id: "40", label: "Large" },
+] as const;
+
+/** The settings of the selected panel (U15): background, padding, and alignment. */
+export function PanelSettings({ editor, panel }: { editor: Editor; panel: SelectedPanel }) {
+  const set = (attrs: Record<string, unknown>) => setPanelAttrs(editor, panel.pos, attrs);
+  const remove = () => {
+    const node = editor.state.doc.nodeAt(panel.pos);
+    if (!node) return;
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: panel.pos, to: panel.pos + node.nodeSize })
+      .run();
+  };
+  const padding = (PANEL_PADDINGS as readonly number[]).includes(Number(panel.attrs.padding))
+    ? String(panel.attrs.padding)
+    : "28";
+  return (
+    <section
+      aria-labelledby="panel-settings-title"
+      className="flex flex-col gap-4 rounded-xl border border-border p-4"
+      data-testid="panel-settings"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="panel-settings-title" className="m-0 text-[14px] font-semibold tracking-[-0.01em]">
+          Panel
+        </h2>
+        <Button variant="destructive-ghost" size="icon-sm" onClick={remove}>
+          <Trash2Icon className="size-3.5" aria-hidden="true" />
+          <span className="sr-only">Delete the panel</span>
+        </Button>
+      </div>
+      <ColorSetting
+        id={`panel-${panel.pos}-background`}
+        label="Background"
+        value={panel.attrs.background}
+        fallback={PANEL_TINT}
+        tint
+        onChange={(background) => set({ background })}
+      />
+      <p className="m-0 text-xs text-muted-foreground">
+        The text color follows the background, so the text stays easy to read.
+      </p>
+      <div className="flex flex-col gap-1.5">
+        <p className="m-0 text-[13px] font-medium" aria-hidden="true">
+          Padding
+        </p>
+        <Segmented
+          label="Padding"
+          value={padding as "20" | "28" | "40"}
+          options={[...PADDING_CHOICES]}
+          onChange={(value) => set({ padding: Number(value) })}
+        />
+      </div>
+      <AlignSelect
+        id={`panel-${panel.pos}-align`}
+        value={panel.attrs.align}
+        onChange={(align) => set({ align })}
+      />
     </section>
   );
 }

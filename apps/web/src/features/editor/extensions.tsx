@@ -8,17 +8,25 @@ import {
   BRAND_COLOR_TOKENS,
   DEFAULT_BUTTON,
   DEFAULT_FOOTER_TEXT,
+  isBrandColorToken,
   MAX_COLUMNS,
+  PANEL_PADDINGS,
+  panelInk,
   SOCIAL_NETWORKS,
 } from "@envelopen/email-render/blocks/types";
-import { brandFontStack } from "@envelopen/email-render/brand";
+import { brandFontStack, brandTagOf, brandTokenValue } from "@envelopen/email-render/brand";
 import { Extension, type Extensions, mergeAttributes, Node } from "@tiptap/core";
 import { isNodeRangeSelection } from "@tiptap/extension-node-range";
 import { Placeholder } from "@tiptap/extensions";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, PluginKey } from "@tiptap/pm/state";
 import { dropPoint } from "@tiptap/pm/transform";
-import { NodeViewWrapper, type ReactNodeViewProps, ReactNodeViewRenderer } from "@tiptap/react";
+import {
+  NodeViewContent,
+  NodeViewWrapper,
+  type ReactNodeViewProps,
+  ReactNodeViewRenderer,
+} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { ComponentType } from "react";
 import { useBrand } from "@/features/brand/shared";
@@ -33,6 +41,9 @@ import { blockName, insertBlocks, LIBRARY_MIME, type MoveDirection, moveBlock } 
 
 /** Blocks that a column can hold. Columns do not nest. */
 const COLUMN_CONTENT = "(paragraph|heading|image|button|divider|spacer|html)+";
+
+/** Blocks that a panel can hold (U15): text, buttons, and sections. Panels do not nest. */
+const PANEL_CONTENT = "(paragraph|heading|image|button|divider|spacer|columns)+";
 
 /** A list attribute, kept as JSON in a data attribute when the editor copies HTML. */
 function jsonAttribute<T>(key: string, fallback: T) {
@@ -131,8 +142,9 @@ function ImageView({ attrs }: { attrs: Record<string, unknown> }) {
 /** A color setting as the canvas shows it: a brand token becomes the live brand color. */
 export function useColor(value: unknown, fallback: string): string {
   const brand = useBrand();
-  if (value === BRAND_COLOR_TOKENS.primary) return brand.colorPrimary;
-  if (value === BRAND_COLOR_TOKENS.accent) return brand.colorAccent;
+  // Brand colors and the text colors for them (brand.color_on_primary, U15).
+  const tag = isBrandColorToken(value) ? brandTagOf(value) : null;
+  if (tag) return brandTokenValue(brand, tag);
   return str(value) || fallback;
 }
 
@@ -220,7 +232,10 @@ function BrandHeaderView({ attrs }: { attrs: Record<string, unknown> }) {
       {attrs.showName === false ? null : (
         <p
           className="m-0 mt-2 text-[20px] leading-[1.3] font-semibold"
-          style={{ color: brand.colorPrimary, fontFamily: brandFontStack(brand.font) }}
+          style={{
+            color: brandTokenValue(brand, "brand.color_primary_text"),
+            fontFamily: brandFontStack(brand.font),
+          }}
         >
           {brand.name || "Brand name"}
         </p>
@@ -245,7 +260,10 @@ function BrandFooterView({ attrs }: { attrs: Record<string, unknown> }) {
       {shown.length > 0 ? (
         <p className="m-0 mb-3 flex flex-wrap justify-[inherit] gap-x-3 text-[14px]">
           {shown.map((network) => (
-            <span key={network} style={{ color: brand.colorPrimary }}>
+            <span
+              key={network}
+              style={{ color: brandTokenValue(brand, "brand.color_primary_text") }}
+            >
               {NETWORK_LABELS[network]}
             </span>
           ))}
@@ -409,6 +427,60 @@ export const Column = Node.create({
       mergeAttributes(HTMLAttributes, { "data-block": "column", class: "min-w-0 px-1" }),
       0,
     ];
+  },
+});
+
+function PanelView({ node, selected }: ReactNodeViewProps) {
+  const background = useColor(node.attrs.background, BRAND_COLOR_TOKENS.primary);
+  const ink = useColor(panelInk(node.attrs.background), "#1a1917");
+  const padding = (PANEL_PADDINGS as readonly number[]).includes(Number(node.attrs.padding))
+    ? Number(node.attrs.padding)
+    : 28;
+  return (
+    <NodeViewWrapper
+      data-block="panel"
+      aria-label="Panel block"
+      className={cn(
+        "my-1 rounded-xl outline-offset-2 transition-[outline-color]",
+        alignClass(node.attrs.align),
+        selected ? "outline-2 outline-ring" : "outline-1 outline-transparent hover:outline-border",
+      )}
+      style={{
+        background,
+        color: ink,
+        padding: `${padding}px ${padding}px ${Math.max(padding - 16, 4)}px`,
+      }}
+    >
+      <NodeViewContent />
+    </NodeViewWrapper>
+  );
+}
+
+/**
+ * A panel (U15): a box with a background color that holds text blocks, buttons, and
+ * sections. A new node type, so existing documents load unchanged (R24).
+ */
+export const Panel = Node.create({
+  name: "panel",
+  group: "block",
+  content: PANEL_CONTENT,
+  isolating: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      background: { default: BRAND_COLOR_TOKENS.primary },
+      padding: { default: 28 },
+      align: { default: "left" satisfies Align },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-block="panel"]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes, { "data-block": "panel" }), 0];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(PanelView);
   },
 });
 
@@ -612,6 +684,7 @@ export function editorExtensions(options?: BuilderOptions): Extensions {
     BrandFooterBlock,
     Columns,
     Column,
+    Panel,
     MergeTag,
     BlockMove.configure(builder),
     LibraryDrop.configure(builder),

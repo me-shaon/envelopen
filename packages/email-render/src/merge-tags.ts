@@ -22,6 +22,9 @@ export const BRAND_TAGS = [
   "brand.logo_url",
   "brand.color_primary",
   "brand.color_accent",
+  "brand.color_on_primary",
+  "brand.color_on_accent",
+  "brand.color_primary_text",
   "brand.font",
   "brand.footer",
   "brand.address",
@@ -59,7 +62,7 @@ export interface CompiledTemplate {
 }
 
 const TAG_PATTERN =
-  /\{\{\s*(brand\.(?:name|logo_url|color_primary|color_accent|font|footer|address|social\.(?:website|x|linkedin|instagram|facebook|youtube|github))|[A-Za-z][A-Za-z0-9_]*|@[a-z]+(?::\d+)?)\s*(?:\|\s*default:\s*(?:"([^"]*)"|&quot;((?:(?!&quot;)[^<>])*)&quot;|'([^']*)'|&#x27;((?:(?!&#x27;)[^<>])*)&#x27;)\s*)?\}\}/g;
+  /\{\{\s*(brand\.(?:name|logo_url|color_primary|color_accent|color_on_primary|color_on_accent|color_primary_text|font|footer|address|social\.(?:website|x|linkedin|instagram|facebook|youtube|github))|[A-Za-z][A-Za-z0-9_]*|@[a-z]+(?::\d+)?)\s*(?:\|\s*default:\s*(?:"([^"]*)"|&quot;((?:(?!&quot;)[^<>])*)&quot;|'([^']*)'|&#x27;((?:(?!&#x27;)[^<>])*)&#x27;)\s*)?\}\}/g;
 
 const ESCAPES: Record<string, string> = {
   "&": "&amp;",

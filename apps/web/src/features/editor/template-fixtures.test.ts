@@ -32,8 +32,10 @@ const EXPECTED: Record<string, [html: string, text: string]> = {
     "5766d0b0a1f6339660f4898fce260b687c865ecd9c3a2aff9211c2eca5a19ab8",
     "b075dba87b8dd281ede2ee742ebfb1fcb83ac2ef5be26a29c458b8d291271801",
   ],
+  // U13 blocks (unreleased). U15 writes the brand name and social links in
+  // `brand.color_primary_text`, so a light primary color stays readable.
   "brand blocks and brand font": [
-    "0620e9af0347349efd0bf093cbff70e68576eaf2f71d9fdf1440441fe2ab3fea",
+    "289763b58adb71fe9e3e80103b7b3cccadd97d7508651c92670f51021debd5ad",
     "b63739adbc114ea66f3f44b398aa36530f1d640e499f65b6d8aeb94f767301c5",
   ],
 };

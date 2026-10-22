@@ -42,7 +42,7 @@ function brandButton(label: string, align: "left" | "center"): ButtonNode {
       href: "https://",
       align,
       background: BRAND_COLOR_TOKENS.primary,
-      color: "#ffffff",
+      color: BRAND_COLOR_TOKENS.onPrimary,
     },
   };
 }

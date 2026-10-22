@@ -26,6 +26,14 @@ export {
   normalizeHexColor,
   parseBrandSnapshot,
 } from "./brand";
+export {
+  contrastRatio,
+  DARK_TEXT,
+  LIGHT_TEXT,
+  MIN_TEXT_CONTRAST,
+  readableTextColor,
+  relativeLuminance,
+} from "./contrast";
 export { DARK_MEDIA, EMAIL_CSS, forceDarkMode } from "./layout";
 export { extractLinks, isTrackableHref, rewriteLinks } from "./links";
 export { markdownToFragment, markdownToHtml } from "./markdown";

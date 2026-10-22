@@ -5,7 +5,7 @@ import { watchCsp } from "./csp";
 
 // Welcome series (plan U10, F2), against a fresh Worker. The steps send through the local
 // provider mock (OUTBOUND_MOCK_ORIGIN), so nothing leaves the machine. The editor test
-// builds a series with the starter email. The run test starts the series for a contact
+// builds a series with the welcome template. The run test starts the series for a contact
 // through the API and checks one email per step in the mock.
 
 const SETUP_TOKEN = process.env.E2E_SETUP_TOKEN ?? "";
@@ -75,7 +75,7 @@ test.describe("welcome series", () => {
     expect(res.status()).toBe(201);
   });
 
-  test("the owner builds a series with the starter email, waits between emails, and turns it on", async ({
+  test("the owner builds a series with the welcome template, waits between emails, and turns it on", async ({
     page,
   }) => {
     const checkCsp = watchCsp(page);
@@ -122,8 +122,8 @@ test.describe("welcome series", () => {
       '1 contact of this list is also on "Alumni"',
     );
 
-    // The empty state offers the starter welcome email for email 1.
-    await page.getByRole("button", { name: "Use the starter email" }).click();
+    // The empty state offers the gallery's welcome template for email 1 (U15).
+    await page.getByRole("button", { name: "Use the welcome template" }).click();
     const steps = page.getByTestId("welcome-step");
     await expect(steps.nth(0).getByLabel("Template")).toHaveValue(/\d+/);
     await expect(steps.nth(0).getByLabel("Subject")).toHaveValue(/Welcome/);
@@ -211,7 +211,7 @@ test.describe("welcome series", () => {
       })
       .toEqual(["Welcome, Nia", "Your first lesson"]);
     const [first] = await sentTo(page, "new.student@example.org");
-    expect(first?.html).toContain("Hi Nia,");
+    expect((first?.html ?? "").replace(/<[^>]+>/g, "")).toContain("Hi Nia,");
     expect(first?.headers?.["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
     const unsubscribe = /<([^>]+)>/.exec(first?.headers?.["List-Unsubscribe"] ?? "")?.[1] ?? "";
     expect(unsubscribe).toMatch(/\/u\//);

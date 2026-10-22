@@ -1,4 +1,5 @@
 import { SOCIAL_NETWORKS, type SocialNetwork } from "./blocks/types";
+import { contrastRatio, DARK_TEXT, MIN_TEXT_CONTRAST, readableTextColor } from "./contrast";
 import {
   BRAND_TAGS,
   type BrandTag,
@@ -159,6 +160,14 @@ export function brandTokenValues(brand: BrandSnapshot): Record<BrandTag, string>
     "brand.logo_url": clean.logoUrl ?? "",
     "brand.color_primary": clean.colorPrimary,
     "brand.color_accent": clean.colorAccent,
+    // Text on a brand color (U15): white or a dark color, whichever reaches 4.5:1.
+    "brand.color_on_primary": readableTextColor(clean.colorPrimary),
+    "brand.color_on_accent": readableTextColor(clean.colorAccent),
+    // The primary color as text on white: itself when it reaches 4.5:1, else dark text.
+    "brand.color_primary_text":
+      contrastRatio(clean.colorPrimary, "#ffffff") >= MIN_TEXT_CONTRAST
+        ? clean.colorPrimary
+        : DARK_TEXT,
     "brand.font": brandFontStack(clean.font),
     "brand.footer": clean.footer,
     "brand.address": clean.address,

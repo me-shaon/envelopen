@@ -121,6 +121,13 @@ async function dragByHandle(page: Page, block: Locator, target: Locator) {
   await page.mouse.up();
 }
 
+/** "New template" opens the gallery (U15). "Blank" starts from the starter blocks. */
+async function newBlankTemplate(page: Page) {
+  await page.getByRole("button", { name: "New template" }).click();
+  await page.getByTestId("template-gallery").getByRole("button", { name: "Blank" }).click();
+  await expect(page.getByLabel("Template name")).toBeVisible();
+}
+
 function preview(page: Page): FrameLocator {
   return page.frameLocator('iframe[title="Email preview"]');
 }
@@ -167,7 +174,7 @@ test.describe("editor", () => {
     await signIn(page);
     await page.getByRole("link", { name: "Templates" }).click();
     await expect(page.getByText("No templates yet")).toBeVisible();
-    await page.getByRole("button", { name: "New template" }).click();
+    await newBlankTemplate(page);
 
     await page.getByLabel("Template name").fill("Welcome email");
     await page.getByLabel("Subject").fill("Welcome, {{ first_name }}");
@@ -228,7 +235,7 @@ test.describe("editor", () => {
     await signIn(page);
     await page.goto("/templates");
     await expect(page.getByTestId("saved-block-row")).toContainText("Course button");
-    await page.getByRole("button", { name: "New template" }).click();
+    await newBlankTemplate(page);
     await page.getByLabel("Template name").fill("Week two");
     await page.getByRole("button", { name: "Insert Course button" }).click();
     await expect(page.locator('[data-block="button"]')).toContainText("Start the course");
@@ -547,5 +554,70 @@ test.describe("editor", () => {
       expect(saved.html, fixture.name).toBe(created.html);
       expect(saved.text, fixture.name).toBe(created.text);
     }
+  });
+
+  test("picks Newsletter in the gallery, and the editor opens it with the brand applied (U15)", async ({
+    page,
+  }) => {
+    await signIn(page);
+    const brand = await page.request.put(`${BASE}/api/brand`, {
+      data: {
+        name: "Harbor Studio",
+        colorPrimary: "#1f4e5f",
+        colorAccent: "#e3f0ec",
+        font: "georgia",
+        footer: "You get this email because you joined Harbor Studio.",
+        address: "12 Quay Street, Bristol",
+        social: {},
+      },
+      headers: { Origin: BASE },
+    });
+    expect(brand.ok(), await brand.text()).toBe(true);
+
+    await page.goto("/templates");
+    await page.getByRole("button", { name: "New template" }).click();
+    const gallery = page.getByTestId("template-gallery");
+    await expect(gallery.getByRole("heading", { name: "Start a template" })).toBeVisible();
+    // Live previews with the workspace brand.
+    const newsletter = gallery.locator('iframe[title="Newsletter preview"]');
+    await expect(newsletter).toBeVisible();
+    await expect(
+      page.frameLocator('iframe[title="Newsletter preview"]').getByText("Harbor Studio").first(),
+    ).toBeVisible();
+    await expectNoSeriousViolations(page);
+    // The category filter and the search narrow the cards.
+    await gallery.getByRole("button", { name: "Events" }).click();
+    await expect(gallery.getByTestId("gallery-card")).toHaveCount(1);
+    await gallery.getByRole("button", { name: "All" }).click();
+    await gallery.getByLabel("Search templates").fill("letter");
+    await expect(gallery.getByRole("button", { name: "Newsletter", exact: true })).toBeVisible();
+    await expect(gallery.getByRole("button", { name: "Sale", exact: true })).toHaveCount(0);
+    // The card is a button: the keyboard picks it.
+    await gallery.getByRole("button", { name: "Newsletter", exact: true }).focus();
+    await page.keyboard.press("Enter");
+
+    await expect(page).toHaveURL(/\/templates\/new\?start=newsletter$/);
+    await expect(page.getByLabel("Template name")).toHaveValue("Newsletter");
+    await expect(page.getByLabel("Subject")).toHaveValue(/The October letter/);
+    const header = page.locator('[data-block="brandHeader"]');
+    await expect(header).toContainText("Harbor Studio");
+    await expect(header.getByText("Harbor Studio")).toHaveCSS("color", "rgb(31, 78, 95)");
+    await expect(page.locator(".email-canvas")).toContainText("Three things we learned in October");
+
+    await saveTemplate(page);
+    await expect(page).toHaveURL(/\/templates\/\d+$/);
+    const saved = await apiGet(page, `/templates/${templateId(page)}`);
+    expect(saved.name).toBe("Newsletter");
+    expect(saved.html).toContain("Three things we learned in October");
+    expect(saved.html).toContain(
+      "background:{{ brand.color_primary }};color:{{ brand.color_on_primary }}",
+    );
+
+    await page.getByRole("button", { name: "Preview" }).click();
+    await expect(preview(page).getByText("Harbor Studio").first()).toBeVisible();
+    await expect(preview(page).getByRole("link", { name: "Read the full letter" })).toHaveCSS(
+      "color",
+      "rgb(255, 255, 255)",
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { type CSSProperties, Fragment, type ReactNode } from "react";
+import { type CSSProperties, createContext, Fragment, type ReactNode, useContext } from "react";
 import {
   Body,
   Button,
@@ -20,12 +20,15 @@ import {
   type BlockNode,
   BRAND_COLOR_TOKENS,
   BRAND_FONT_TOKEN,
+  BRAND_PRIMARY_TEXT,
   type ColumnChild,
   DEFAULT_BUTTON,
   type EmailDocument,
   type InlineNode,
   isBrandColorToken,
   MAX_COLUMNS,
+  PANEL_PADDINGS,
+  panelInk,
   SOCIAL_NETWORKS,
   type SocialLink,
   type SocialNetwork,
@@ -35,7 +38,7 @@ import {
 // and in the Node tests, never in the Worker. Missing attributes fall back to defaults,
 // so an old document still renders.
 
-const text: CSSProperties = {
+const baseText: CSSProperties = {
   margin: "0 0 16px",
   fontSize: "16px",
   lineHeight: "1.6",
@@ -57,6 +60,24 @@ const SOCIAL_LABELS: Record<SocialLink["network"], string> = {
   github: "GitHub",
 };
 
+/**
+ * The text color inside a panel (U15), or null outside one. Text, headings, and links in
+ * a panel take it, so they keep their contrast on the panel's background.
+ */
+const PanelInk = createContext<string | null>(null);
+
+/**
+ * Dark-mode CSS for panels. The frame's dark mode makes text light; in a panel, text
+ * keeps the panel's color. Only an email with a panel gets it, so other emails keep
+ * their bytes (R24).
+ */
+const PANEL_CSS =
+  "@media (prefers-color-scheme: dark){.env-text .env-panel p,.env-text .env-panel h1,.env-text .env-panel h2,.env-text .env-panel h3,.env-text .env-panel .env-link{color:inherit !important}}";
+
+function hasPanel(doc: EmailDocument): boolean {
+  return (doc.content ?? []).some((node) => node.type === "panel");
+}
+
 function align(value: unknown): Align {
   return value === "center" || value === "right" ? value : "left";
 }
@@ -77,6 +98,7 @@ function str(value: unknown): string {
 }
 
 function Inline({ nodes }: { nodes: InlineNode[] | undefined }): ReactNode {
+  const ink = useContext(PanelInk);
   return (nodes ?? []).map((node, index) => {
     const key = `${index}`;
     if (node.type === "hardBreak") return <br key={key} />;
@@ -94,7 +116,7 @@ function Inline({ nodes }: { nodes: InlineNode[] | undefined }): ReactNode {
           <Link
             className="env-link"
             href={str(mark.attrs?.href)}
-            style={{ color: EMAIL_COLORS.link }}
+            style={ink ? { color: ink, textDecoration: "underline" } : { color: EMAIL_COLORS.link }}
           >
             {out}
           </Link>
@@ -106,6 +128,9 @@ function Inline({ nodes }: { nodes: InlineNode[] | undefined }): ReactNode {
 }
 
 function Block({ node }: { node: BlockNode | ColumnChild }): ReactNode {
+  const ink = useContext(PanelInk);
+  // In a panel, text takes the panel's color. Outside, the styles stay as before (R24).
+  const text = ink ? { ...baseText, color: ink } : baseText;
   switch (node.type) {
     case "heading": {
       const level = node.attrs?.level === 1 || node.attrs?.level === 3 ? node.attrs.level : 2;
@@ -304,7 +329,7 @@ function Block({ node }: { node: BlockNode | ColumnChild }): ReactNode {
                 fontSize: "20px",
                 lineHeight: "1.3",
                 fontWeight: 600,
-                color: BRAND_COLOR_TOKENS.primary,
+                color: BRAND_PRIMARY_TEXT,
                 fontFamily: BRAND_FONT_TOKEN,
               }}
             >
@@ -346,7 +371,7 @@ function Block({ node }: { node: BlockNode | ColumnChild }): ReactNode {
                     style={{
                       display: "inline-block",
                       margin: "0 6px",
-                      color: BRAND_COLOR_TOKENS.primary,
+                      color: BRAND_PRIMARY_TEXT,
                       fontSize: "14px",
                     }}
                   >
@@ -380,6 +405,51 @@ function Block({ node }: { node: BlockNode | ColumnChild }): ReactNode {
         </Section>
       );
     }
+    case "panel": {
+      const background = color(node.attrs?.background, BRAND_COLOR_TOKENS.primary);
+      const inner = panelInk(background);
+      const padding = (PANEL_PADDINGS as readonly number[]).includes(Number(node.attrs?.padding))
+        ? Number(node.attrs?.padding)
+        : 28;
+      const side = align(node.attrs?.align);
+      // A one-cell table: `bgcolor` for Outlook, the inline background for the rest.
+      const cell = { bgcolor: background } as Record<string, string>;
+      return (
+        <table
+          role="presentation"
+          width="100%"
+          cellPadding={0}
+          cellSpacing={0}
+          border={0}
+          style={{ margin: "0 0 24px", borderCollapse: "separate" }}
+        >
+          <tbody>
+            <tr>
+              <td
+                className="env-panel"
+                align={side}
+                {...cell}
+                style={{
+                  // The last block's bottom margin (16 px) is part of the bottom padding.
+                  padding: `${padding}px ${padding}px ${Math.max(padding - 16, 4)}px`,
+                  borderRadius: "12px",
+                  background,
+                  color: inner,
+                  textAlign: side,
+                }}
+              >
+                <PanelInk.Provider value={inner}>
+                  {(node.content ?? []).map((child, index) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: static output, rendered once.
+                    <Block key={index} node={child} />
+                  ))}
+                </PanelInk.Provider>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      );
+    }
     case "html":
       // The Worker sanitizes the whole email when the template is saved (KTD27).
       // biome-ignore lint/security/noDangerouslySetInnerHtml: raw HTML is this block's purpose.
@@ -405,6 +475,7 @@ export function EmailTemplate({
   doc: EmailDocument;
   preheader?: string | null | undefined;
 }) {
+  const css = hasPanel(doc) ? EMAIL_CSS + PANEL_CSS : EMAIL_CSS;
   return (
     <Html lang="en">
       <Head>
@@ -412,7 +483,7 @@ export function EmailTemplate({
         <meta name="color-scheme" content="light dark" />
         <meta name="supported-color-schemes" content="light dark" />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: fixed CSS from layout.ts. */}
-        <style dangerouslySetInnerHTML={{ __html: EMAIL_CSS }} />
+        <style dangerouslySetInnerHTML={{ __html: css }} />
       </Head>
       {preheader ? <Preview>{preheader}</Preview> : null}
       {/* React Email moves Body styles to an inner cell, out of reach of the dark-mode

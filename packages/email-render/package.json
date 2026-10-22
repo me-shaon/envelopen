@@ -9,6 +9,8 @@
     "./render": "./src/render.ts",
     "./blocks": "./src/blocks/index.ts",
     "./blocks/types": "./src/blocks/types.ts",
+    "./contrast": "./src/contrast.ts",
+    "./gallery": "./src/gallery/index.ts",
     "./layout": "./src/layout.ts",
     "./merge-tags": "./src/merge-tags.ts",
     "./bench": "./src/bench-fixtures.ts",

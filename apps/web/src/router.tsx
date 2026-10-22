@@ -198,6 +198,11 @@ const templatesRoute = createRoute({
 const templateRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/templates/$templateId",
+  // A new template can start from a gallery template (U15): /templates/new?start=<id>.
+  validateSearch: (search: Record<string, unknown>): { start?: string } =>
+    typeof search.start === "string" && /^[a-z-]{1,40}$/.test(search.start)
+      ? { start: search.start }
+      : {},
   component: lazyRouteComponent(() => import("./features/editor/editor-page"), "EditorRoute"),
 });
 const formsRoute = createRoute({

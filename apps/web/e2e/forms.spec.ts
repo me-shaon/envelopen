@@ -319,7 +319,7 @@ test.describe("signup forms", () => {
     const card = page.getByTestId("field-card").filter({ hasText: "Frequency" });
     await card.getByLabel("On the preference page").selectOption("editable");
     await expect(
-      page.getByText('The preference page setting of "Frequency" is saved.'),
+      page.getByTestId("toast").getByText('The preference page setting of "Frequency" is saved.'),
     ).toBeVisible();
     await expectNoSeriousViolations(page);
 

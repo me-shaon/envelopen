@@ -125,6 +125,8 @@ test.describe("first campaign", () => {
     // Create a template from blocks, with a link to click.
     await page.getByRole("link", { name: "Templates" }).first().click();
     await page.getByRole("button", { name: "New template" }).click();
+    // The gallery opens (U15). Blank starts from the starter blocks.
+    await page.getByTestId("template-gallery").getByRole("button", { name: "Blank" }).click();
     await page.getByLabel("Template name").fill("Course launch");
     await page.getByLabel("Subject").fill("A new course for {{ first_name }}");
     await page.getByRole("button", { name: "Add button" }).click();

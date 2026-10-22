@@ -24,6 +24,7 @@ const BLOCK_NAMES: Record<string, string> = {
   html: "Raw HTML",
   brandHeader: "Brand header",
   brandFooter: "Brand footer",
+  panel: "Panel",
 };
 
 /** The name of a block type for messages, such as "Button" or "Section". */
@@ -98,7 +99,7 @@ export function insertBlocks(
       const node = tr.doc.resolve(end).nodeBefore;
       if (!node) return true;
       const start = end - node.nodeSize;
-      if (node.isAtom || node.type.name === "columns") {
+      if (node.isAtom || node.type.name === "columns" || node.type.name === "panel") {
         tr.setSelection(NodeSelection.create(tr.doc, start));
       } else if (node.isTextblock) {
         tr.setSelection(TextSelection.create(tr.doc, end - 1));
@@ -220,6 +221,40 @@ export function setSectionColumns(editor: Editor, pos: number, count: number): v
     .command(({ tr, state }) => {
       tr.replaceWith(pos, pos + section.nodeSize, state.schema.nodeFromJSON(next));
       tr.setSelection(NodeSelection.create(tr.doc, pos));
+      return true;
+    })
+    .run();
+}
+
+export interface SelectedPanel {
+  pos: number;
+  attrs: { background: unknown; padding: unknown; align: unknown };
+}
+
+/** The panel (U15) that holds the selection, or that is selected, with its position. */
+export function selectedPanel(editor: Editor): SelectedPanel | null {
+  const { selection } = editor.state;
+  if (selection instanceof NodeSelection && selection.node.type.name === "panel") {
+    return { pos: selection.from, attrs: selection.node.attrs as SelectedPanel["attrs"] };
+  }
+  const { $from } = selection;
+  for (let depth = $from.depth; depth > 0; depth--) {
+    const node = $from.node(depth);
+    if (node.type.name === "panel") {
+      return { pos: $from.before(depth), attrs: node.attrs as SelectedPanel["attrs"] };
+    }
+  }
+  return null;
+}
+
+/** Changes attributes of the panel at `pos`. The selection stays where it is. */
+export function setPanelAttrs(editor: Editor, pos: number, attrs: Record<string, unknown>): void {
+  const panel = editor.state.doc.nodeAt(pos);
+  if (panel?.type.name !== "panel") return;
+  editor
+    .chain()
+    .command(({ tr }) => {
+      tr.setNodeMarkup(pos, undefined, { ...panel.attrs, ...attrs });
       return true;
     })
     .run();

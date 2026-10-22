@@ -103,7 +103,7 @@ function sampleDocument(networks: SocialNetwork[]): EmailDocument {
           href: "https://example.com",
           align: "left",
           background: BRAND_COLOR_TOKENS.primary,
-          color: "#ffffff",
+          color: BRAND_COLOR_TOKENS.onPrimary,
         },
       },
       { type: "brandFooter", attrs: { align: "center", networks } },

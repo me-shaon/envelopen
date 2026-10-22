@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { BlocksIcon, FileTextIcon, PlusIcon } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { api, type Schemas, unwrap } from "@/api/client";
 import { savedBlocksQuery, templatesQuery } from "@/api/queries";
 import { EmptyState } from "@/components/empty-state";
@@ -18,7 +18,13 @@ import { formatDate } from "@/lib/format";
 import { presenceClass, usePresence } from "@/lib/motion";
 
 // Templates and saved blocks of the workspace (R28). The editor opens at
-// /templates/$templateId, and /templates/new starts a template from the starter blocks.
+// /templates/$templateId. "New template" opens the gallery (U15): /templates/new starts
+// from the starter blocks, and /templates/new?start=<id> from a gallery template.
+
+// The gallery and its documents load when the owner first opens it.
+const GalleryDialog = lazy(() =>
+  import("./gallery-dialog").then((module) => ({ default: module.GalleryDialog })),
+);
 
 type Format = Schemas["TemplateFormat"];
 type TemplateItem = Schemas["TemplateSummary"];
@@ -50,6 +56,7 @@ export function TemplatesPage() {
     name: string;
     kind: "template" | "block";
   } | null>(null);
+  const [gallery, setGallery] = useState<"closed" | "open" | "loaded">("closed");
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["ws", current.id] });
 
   const duplicate = useMutation({
@@ -93,11 +100,7 @@ export function TemplatesPage() {
         title="Templates"
         description="Reusable email designs, with merge tags and saved blocks."
         actions={
-          <Button
-            onClick={() =>
-              void navigate({ to: "/templates/$templateId", params: { templateId: "new" } })
-            }
-          >
+          <Button onClick={() => setGallery("open")}>
             <PlusIcon className="size-3.5" aria-hidden="true" />
             New template
           </Button>
@@ -111,15 +114,13 @@ export function TemplatesPage() {
           icon={FileTextIcon}
           title="No templates yet"
           action={
-            <Button asChild variant="outline" size="sm">
-              <Link to="/templates/$templateId" params={{ templateId: "new" }}>
-                Write your first template
-              </Link>
+            <Button variant="outline" size="sm" onClick={() => setGallery("open")}>
+              Write your first template
             </Button>
           }
         >
-          Build an email from blocks: headings, text, images, buttons, columns, and a footer with
-          the unsubscribe link. Agents can also create templates from HTML or Markdown.
+          Start from a designed template that uses your brand kit, or build an email from blocks.
+          Agents can also create templates from HTML or Markdown.
         </EmptyState>
       ) : (
         <Table aria-label="Templates">
@@ -233,6 +234,22 @@ export function TemplatesPage() {
           </Table>
         )}
       </section>
+
+      {gallery === "closed" ? null : (
+        <Suspense fallback={null}>
+          <GalleryDialog
+            open={gallery === "open"}
+            onOpenChange={(open) => setGallery(open ? "open" : "loaded")}
+            onChoose={(template) =>
+              void navigate({
+                to: "/templates/$templateId",
+                params: { templateId: "new" },
+                search: template ? { start: template.id } : {},
+              })
+            }
+          />
+        </Suspense>
+      )}
 
       <ConfirmDialog
         open={deleting !== null}

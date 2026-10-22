@@ -597,6 +597,11 @@
     text-decoration: underline;
   }
 
+  /* A panel (U15): text and links take the panel's readable text color. */
+  .email-canvas .ProseMirror [data-block="panel"] a {
+    color: inherit;
+  }
+
   .email-canvas .ProseMirror p.is-empty::before {
     content: attr(data-placeholder);
     float: left;

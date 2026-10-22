@@ -131,18 +131,33 @@ function bodyOf(draft: Draft) {
   };
 }
 
-const STARTER_TEMPLATE = {
-  name: "Welcome email",
-  subject: 'Welcome, {{ first_name | default: "friend" }}',
-  format: "markdown" as const,
-  source:
-    'Hi {{ first_name | default: "there" }},\n\n' +
-    "Thank you for joining. We are glad to have you here.\n\n" +
-    "Over the next days, we will send you a few short emails to help you get started. " +
-    "Reply to this email if you have a question. A person reads every reply.\n\n" +
-    "See you soon.\n\n" +
-    "[Unsubscribe]({{ unsubscribe_url }})",
-};
+/**
+ * The welcome template of the gallery (U15), rendered and saved as a block template for
+ * email 1. It uses the brand kit. The gallery and the renderer load on first use.
+ */
+async function createWelcomeTemplate() {
+  const [{ galleryTemplate }, { renderEmail }] = await Promise.all([
+    import("@envelopen/email-render/gallery"),
+    import("@envelopen/email-render/render"),
+  ]);
+  const welcome = galleryTemplate("welcome");
+  if (!welcome) throw new Error("The welcome template is missing.");
+  const doc = welcome.document();
+  const rendered = await renderEmail(doc, { preheader: welcome.preheader });
+  return unwrap(
+    api.POST("/templates", {
+      body: {
+        name: welcome.name,
+        subject: welcome.subject,
+        preheader: welcome.preheader,
+        format: "blocks",
+        source: JSON.stringify(doc),
+        html: rendered.html,
+        text: rendered.text,
+      },
+    }),
+  );
+}
 
 function EnableSwitch({
   series,
@@ -492,7 +507,7 @@ function Editor({ series, listId }: { series: WelcomeSeries | null; listId: numb
     },
   });
   const starter = useMutation({
-    mutationFn: () => unwrap(api.POST("/templates", { body: STARTER_TEMPLATE })),
+    mutationFn: createWelcomeTemplate,
     onSuccess: async (template) => {
       await queryClient.invalidateQueries({ queryKey: ["ws", current.id, "templates", "list"] });
       setDraft((value) => {
@@ -500,7 +515,7 @@ function Editor({ series, listId }: { series: WelcomeSeries | null; listId: numb
         const filled = {
           ...(first ?? newStep(true)),
           templateId: template.id,
-          subject: first?.subject || STARTER_TEMPLATE.subject,
+          subject: first?.subject || template.subject || "",
         };
         return { ...value, steps: [filled, ...rest] };
       });
@@ -659,11 +674,11 @@ function Editor({ series, listId }: { series: WelcomeSeries | null; listId: numb
               data-testid="welcome-starter"
             >
               <div className="flex max-w-[460px] flex-col gap-0.5">
-                <p className="m-0 text-[13.5px] font-medium">Start from a welcome email</p>
+                <p className="m-0 text-[13.5px] font-medium">Start from the welcome template</p>
                 <p className="m-0 text-[12.5px] text-muted-foreground">
                   {templateItems.length === 0
-                    ? "You have no templates yet. Envelopen can create a short welcome email for email 1. Edit it later in Templates."
-                    : "Envelopen can create a short welcome email for email 1. Edit it later in Templates."}
+                    ? "You have no templates yet. Envelopen can add the welcome template from the gallery for email 1. It uses your brand kit. Edit it later in Templates."
+                    : "Envelopen can add the welcome template from the gallery for email 1. It uses your brand kit. Edit it later in Templates."}
                 </p>
               </div>
               <Button
@@ -674,7 +689,7 @@ function Editor({ series, listId }: { series: WelcomeSeries | null; listId: numb
                 onClick={() => starter.mutate()}
               >
                 <SparklesIcon className="size-3.5" aria-hidden="true" />
-                Use the starter email
+                Use the welcome template
               </Button>
               <FormError message={errorText(starter.error)} />
             </div>

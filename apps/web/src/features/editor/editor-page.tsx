@@ -10,10 +10,11 @@ import {
   brandFontStack,
   isBrandFont,
 } from "@envelopen/email-render/brand";
+import { type GalleryTemplate, galleryTemplate } from "@envelopen/email-render/gallery";
 import { missingMergeTags, renderMergeTags } from "@envelopen/email-render/merge-tags";
 import { previewValues } from "@envelopen/email-render/personalize";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import {
@@ -68,7 +69,7 @@ import { BrandContext, useLiveBrand } from "@/features/brand/shared";
 import { errorText } from "@/features/contacts/shared";
 import { cn } from "@/lib/utils";
 import { BlockLibrary, type LibraryEntry, LibrarySheet } from "./block-library";
-import { BlockSettings, SectionSettings } from "./block-settings";
+import { BlockSettings, PanelSettings, SectionSettings } from "./block-settings";
 import {
   blockName,
   blockPlace,
@@ -79,6 +80,7 @@ import {
   insertBlocks,
   LIBRARY_MIME,
   selectedAtom,
+  selectedPanel,
   selectedSection,
   setDocumentFont,
 } from "./doc";
@@ -118,21 +120,35 @@ interface Draft {
   preheader: string;
 }
 
-/** The route component: /templates/new starts a template, /templates/<id> opens one. */
+/**
+ * The route component: /templates/new starts a template, /templates/new?start=<id> starts
+ * from a gallery template (U15), and /templates/<id> opens one.
+ */
 export function EditorRoute() {
   const { templateId } = useParams({ strict: false }) as { templateId?: string };
+  const { start } = useSearch({ strict: false }) as { start?: string };
   const id = Number(templateId);
+  const existing = Number.isSafeInteger(id) && id > 0 ? id : null;
+  const starter = existing === null ? galleryTemplate(start) : null;
   return (
     <EditorPage
       // A new key per template, so the editor starts fresh when the id changes.
-      key={templateId ?? "new"}
-      templateId={Number.isSafeInteger(id) && id > 0 ? id : null}
+      key={`${templateId ?? "new"}:${starter?.id ?? ""}`}
+      templateId={existing}
+      starter={starter}
     />
   );
 }
 
 /** Loads the template, or starts a new one, then shows the editor for its format. */
-export function EditorPage({ templateId }: { templateId: number | null }) {
+export function EditorPage({
+  templateId,
+  starter = null,
+}: {
+  templateId: number | null;
+  /** The gallery template that a new template starts from. Null: the starter blocks. */
+  starter?: GalleryTemplate | null;
+}) {
   const { current } = useCurrentWorkspace();
   const template = useQuery({
     ...templateQuery(current.id, templateId ?? 0),
@@ -151,7 +167,7 @@ export function EditorPage({ templateId }: { templateId: number | null }) {
   }
   const data = template.data ?? null;
   if (data && data.format !== "blocks") return <SourceEditor template={data} />;
-  return <BlockEditor template={data} />;
+  return <BlockEditor template={data} starter={starter} />;
 }
 
 /** The editor while the template loads: the header, the subject fields, and the canvas. */
@@ -757,11 +773,13 @@ function SettingsPanel({
 }) {
   const selected = useEditorState({ editor, selector: ({ editor: e }) => selectedAtom(e) });
   const section = useEditorState({ editor, selector: ({ editor: e }) => selectedSection(e) });
+  const panel = useEditorState({ editor, selector: ({ editor: e }) => selectedPanel(e) });
   return (
     <div className="flex flex-col gap-4">
       {selected ? <BlockSettings editor={editor} block={selected} fields={fields} /> : null}
       {section ? <SectionSettings editor={editor} section={section} /> : null}
-      {!selected && !section ? (
+      {panel ? <PanelSettings editor={editor} panel={panel} /> : null}
+      {!selected && !section && !panel ? (
         <p className="m-0 rounded-xl border border-dashed border-border px-4 py-3 text-[13px] text-muted-foreground">
           Select a block on the canvas to change its settings. Text and headings use the toolbar.
         </p>
@@ -781,13 +799,19 @@ const CANVAS_WIDTHS: { id: "desktop" | "mobile"; label: string; icon: LucideIcon
   { id: "mobile", label: "Mobile", icon: SmartphoneIcon },
 ];
 
-function BlockEditor({ template }: { template: Template | null }) {
+function BlockEditor({
+  template,
+  starter,
+}: {
+  template: Template | null;
+  starter: GalleryTemplate | null;
+}) {
   const { current } = useCurrentWorkspace();
   const fields = useQuery(mergeFieldsQuery(current.id)).data?.items;
   const [draft, setDraft] = useState<Draft>({
-    name: template?.name ?? "Untitled template",
-    subject: template?.subject ?? "",
-    preheader: template?.preheader ?? "",
+    name: template?.name ?? starter?.name ?? "Untitled template",
+    subject: template?.subject ?? starter?.subject ?? "",
+    preheader: template?.preheader ?? starter?.preheader ?? "",
   });
   const [dirty, setDirty] = useState(template === null);
   // A new template starts as unsaved, but leaving it untouched loses nothing.
@@ -803,7 +827,9 @@ function BlockEditor({ template }: { template: Template | null }) {
 
   const editor = useEditor({
     extensions: editorExtensions({ announce: (text) => announceRef.current(text) }),
-    content: template ? (JSON.parse(template.source) as EmailDocument) : starterDocument(),
+    content: template
+      ? (JSON.parse(template.source) as EmailDocument)
+      : (starter?.document() ?? starterDocument()),
     editorProps: {
       attributes: {
         "aria-label": "Email body",

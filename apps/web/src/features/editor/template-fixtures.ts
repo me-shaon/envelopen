@@ -33,9 +33,10 @@ export const TEMPLATE_FIXTURES: { name: string; doc: EmailDocument }[] = [
     name: "origin block set",
     doc: {
       type: "doc",
-      content: BLOCK_TYPES.filter((type) => type !== "brandHeader" && type !== "brandFooter").map(
-        defaultBlock,
-      ),
+      // The v0.3 block set: the brand blocks (U13) and the panel (U15) came later.
+      content: BLOCK_TYPES.filter(
+        (type) => type !== "brandHeader" && type !== "brandFooter" && type !== "panel",
+      ).map(defaultBlock),
     },
   },
   {

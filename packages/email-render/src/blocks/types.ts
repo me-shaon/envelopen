@@ -4,7 +4,9 @@
 // HTML), the brand header and footer (U13), and the inline content of text blocks. The renderer in ./render-blocks.tsx turns
 // a document into React Email elements.
 //
-// This file has no dependencies, so the Worker, the browser, and the tests share it.
+// This file depends only on ../contrast, so the Worker, the browser, and the tests share it.
+
+import { readableTextColor } from "../contrast";
 
 /** Bump when a block changes shape. Templates and saved blocks store the version. */
 export const EDITOR_VERSION = 1;
@@ -129,6 +131,25 @@ export interface BrandFooterNode {
   attrs: { align: Align; networks: SocialNetwork[] };
 }
 
+/**
+ * A panel (U15): a box with a background color and padding that holds text blocks and
+ * buttons. The background is a brand color token or a hex color. The text color follows
+ * the background (`panelInk`), so text keeps 4.5:1 or more. A new node type: no
+ * existing node changes shape, so EDITOR_VERSION stays 1.
+ */
+export interface PanelNode {
+  type: "panel";
+  attrs: { background: string; padding: number; align: Align };
+  /** Text blocks, buttons, and sections. Panels do not nest. */
+  content?: (ColumnChild | ColumnsNode)[];
+}
+
+/** The light tint that a panel can use in place of a brand color. */
+export const PANEL_TINT = "#f4f2ee";
+
+/** The padding choices of a panel, in px. */
+export const PANEL_PADDINGS = [20, 28, 40] as const;
+
 /** Blocks that a column can hold. Columns do not nest. */
 export type ColumnChild =
   | HeadingNode
@@ -142,6 +163,7 @@ export type ColumnChild =
 export type BlockNode =
   | ColumnChild
   | ColumnsNode
+  | PanelNode
   | SocialNode
   | FooterNode
   | BrandHeaderNode
@@ -172,6 +194,7 @@ export const BLOCK_TYPES = [
   "html",
   "brandHeader",
   "brandFooter",
+  "panel",
 ] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
@@ -179,15 +202,38 @@ const KNOWN_NODES = new Set<string>([...BLOCK_TYPES, "column", "text", "hardBrea
 
 export const DEFAULT_BUTTON = { background: "#1a1917", color: "#ffffff" } as const;
 
-/** The brand color tokens that a color setting can hold in place of a hex color (U13). */
+/**
+ * The brand color tokens that a color setting can hold in place of a hex color (U13).
+ * `onPrimary` and `onAccent` are text colors that reach 4.5:1 on the brand colors (U15).
+ */
 export const BRAND_COLOR_TOKENS = {
   primary: "{{ brand.color_primary }}",
   accent: "{{ brand.color_accent }}",
+  onPrimary: "{{ brand.color_on_primary }}",
+  onAccent: "{{ brand.color_on_accent }}",
 } as const;
+
+const COLOR_TOKEN_VALUES = new Set<unknown>(Object.values(BRAND_COLOR_TOKENS));
 
 /** Whether a color setting holds a brand color token. */
 export function isBrandColorToken(value: unknown): boolean {
-  return value === BRAND_COLOR_TOKENS.primary || value === BRAND_COLOR_TOKENS.accent;
+  return COLOR_TOKEN_VALUES.has(value);
+}
+
+/** The primary color as text on white: the token gives dark text for a light primary. */
+export const BRAND_PRIMARY_TEXT = "{{ brand.color_primary_text }}";
+
+/**
+ * The text color for a panel background: the readable token for a brand color, the
+ * readable color for a hex color, or the default text color.
+ */
+export function panelInk(background: unknown): string {
+  if (background === BRAND_COLOR_TOKENS.primary) return BRAND_COLOR_TOKENS.onPrimary;
+  if (background === BRAND_COLOR_TOKENS.accent) return BRAND_COLOR_TOKENS.onAccent;
+  if (typeof background === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(background)) {
+    return readableTextColor(background);
+  }
+  return "#1a1917";
 }
 
 /** The token that a document with `font: "brand"` uses for its font. */
@@ -231,6 +277,22 @@ export function defaultBlock(type: BlockType): BlockNode {
       return { type, attrs: { align: "center", showName: true, logoWidth: 160 } };
     case "brandFooter":
       return { type, attrs: { align: "center", networks: [] } };
+    case "panel":
+      return {
+        type,
+        attrs: { background: BRAND_COLOR_TOKENS.primary, padding: 28, align: "left" },
+        content: [
+          {
+            type: "heading",
+            attrs: { level: 2 },
+            content: [{ type: "text", text: "A short headline" }],
+          },
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "One or two sentences about it." }],
+          },
+        ],
+      };
   }
 }
 

@@ -21,6 +21,7 @@ import {
   PanelBottomIcon,
   PanelTopIcon,
   PilcrowIcon,
+  RectangleHorizontalIcon,
   SearchIcon,
   Share2Icon,
 } from "lucide-react";
@@ -62,6 +63,12 @@ const BLOCKS: { type: BlockType; label: string; description: string; icon: Lucid
   },
   { type: "divider", label: "Divider", description: "A thin line.", icon: MinusIcon },
   { type: "spacer", label: "Spacer", description: "Empty space.", icon: MoveVerticalIcon },
+  {
+    type: "panel",
+    label: "Panel",
+    description: "A colored box for a headline, text, and a button.",
+    icon: RectangleHorizontalIcon,
+  },
   {
     type: "columns",
     label: "Columns",

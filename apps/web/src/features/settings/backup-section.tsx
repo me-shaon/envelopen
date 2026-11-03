@@ -150,7 +150,7 @@ function ReauthDialog({
               Your browser asks for the passkey of {session.data?.user.email}.
             </p>
           ) : (
-            <Field id="reauth-password" label="Password">
+            <Field required id="reauth-password" label="Password">
               <Input
                 id="reauth-password"
                 type="password"

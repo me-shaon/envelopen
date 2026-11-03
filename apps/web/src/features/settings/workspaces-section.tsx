@@ -63,7 +63,7 @@ function RenameDialog({
         <DialogHeader title="Rename workspace" />
         <form className="flex flex-col gap-5" onSubmit={onSubmit}>
           <FormError message={errorText(rename.error)} />
-          <Field id="rename-workspace" label="Name">
+          <Field required id="rename-workspace" label="Name">
             <Input
               id="rename-workspace"
               name="name"
@@ -169,7 +169,7 @@ export function WorkspacesSection() {
       </ul>
 
       <form className="flex max-w-[640px] flex-wrap items-end gap-3" onSubmit={onCreate}>
-        <Field id="new-workspace" label="New workspace" className="min-w-[220px] flex-1">
+        <Field required id="new-workspace" label="New workspace" className="min-w-[220px] flex-1">
           <Input
             id="new-workspace"
             name="name"

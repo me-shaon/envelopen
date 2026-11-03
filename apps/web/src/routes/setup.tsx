@@ -264,6 +264,7 @@ export function SetupPage() {
         <form className="flex flex-col gap-4" onSubmit={onToken}>
           <FormError message={error} />
           <Field
+            required
             id="token"
             label="Setup token"
             hint={
@@ -359,6 +360,7 @@ export function SetupPage() {
         </Field>
         {passkey ? null : (
           <Field
+            required
             id="owner-password"
             label="Password"
             hint={`Use ${PASSWORD_MIN_LENGTH} or more characters.`}
@@ -375,7 +377,12 @@ export function SetupPage() {
             />
           </Field>
         )}
-        <Field id="workspace-name" label="First workspace" hint="For example, your company name.">
+        <Field
+          required
+          id="workspace-name"
+          label="First workspace"
+          hint="For example, your company name."
+        >
           <Input
             id="workspace-name"
             name="workspaceName"

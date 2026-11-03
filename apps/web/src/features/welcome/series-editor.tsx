@@ -402,7 +402,7 @@ function StepCard({
           ) : null}
         </div>
       </div>
-      <Field id={subjectId} label="Subject">
+      <Field required id={subjectId} label="Subject">
         <Input
           id={subjectId}
           required
@@ -413,7 +413,7 @@ function StepCard({
         />
       </Field>
       <div className="flex flex-wrap items-end gap-2">
-        <Field id={templateId} label="Template" className="min-w-[220px] flex-1">
+        <Field required id={templateId} label="Template" className="min-w-[220px] flex-1">
           <NativeSelect
             id={templateId}
             required
@@ -579,7 +579,7 @@ function Editor({ series, listId }: { series: WelcomeSeries | null; listId: numb
         <FormError message={fieldError ? null : errorText(save.error)} />
         <section aria-labelledby="welcome-basics-title" className="flex flex-col gap-5">
           <SectionHeader id="welcome-basics-title" title="List and sender" />
-          <Field id="welcome-name" label="Name" error={errorOf("name")}>
+          <Field required id="welcome-name" label="Name" error={errorOf("name")}>
             <Input
               id="welcome-name"
               required
@@ -590,6 +590,7 @@ function Editor({ series, listId }: { series: WelcomeSeries | null; listId: numb
           </Field>
           <div className="flex flex-col gap-2">
             <Field
+              required
               id="welcome-list"
               label="List"
               hint={

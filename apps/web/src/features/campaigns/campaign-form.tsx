@@ -197,7 +197,7 @@ export function CampaignForm({
     <form className="flex max-w-[720px] flex-col gap-8" onSubmit={onSubmit} aria-label="Campaign">
       <UnsavedChangesGuard when={changed && !save.isPending} what="this campaign" />
       <Section id="campaign-basics" title="Campaign">
-        <Field id="campaign-name" label="Campaign name" hint="Only you see it.">
+        <Field required id="campaign-name" label="Campaign name" hint="Only you see it.">
           <Input
             id="campaign-name"
             required

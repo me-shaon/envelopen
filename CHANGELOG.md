@@ -16,10 +16,13 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 - The Worker makes `SIGNING_KEY` and `ENCRYPTION_KEY` on first use when they are not set, and keeps them in R2 under `secrets/`. The Deploy button now asks only for `SETUP_TOKEN`.
 - The setup screen tells you how to replace a forgotten setup token.
+- Required fields show a red asterisk after the label.
 - **Settings** > **Updates** shows the running version and the newest release on GitHub, with a **Check now** button. A daily check asks GitHub for the newest release. The owner can turn it off.
 
 ### Changed
 
+- A request of the admin app fails after 30 seconds without an answer, instead of a page that waits forever. A CSV upload gets 2 minutes.
+- A saved webhook signing secret shows as a masked value in the connection dialog.
 - The version is in `apps/worker/src/version.ts`, not in `package.json`. The Deploy button sets the version in `package.json` to `0.0.0`, so the app footer and the update workflow showed `0.0.0`.
 - The update workflow finds the release of a copy without a version from the release tag with the fewest changed lines.
 - Updates do not add back the `.github` files that a Deploy button copy left out, and they keep the `name` and `version` lines of `package.json`.

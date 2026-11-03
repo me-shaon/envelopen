@@ -14,8 +14,16 @@ import { Pill } from "@/components/ui/pill";
 import { toast } from "@/components/ui/toast";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { errorText } from "@/features/contacts/shared";
+import { cn } from "@/lib/utils";
 import { PresetFields, PresetPicker, presetPayload } from "./presets";
 import { type Connection, type ConnectionDetail, CopyValue, Note, type Provider } from "./shared";
+
+/**
+ * A saved secret never comes back to the browser. The empty field shows a mask, like a
+ * filled password field. Typing a new value replaces the saved one.
+ */
+const SAVED_SECRET_MASK = "\u2022".repeat(16);
+const SAVED_SECRET_NOTE = "Saved. Type a new value to replace it.";
 
 // The connect flow (one field where the provider allows, KTD13; presets for SMTP, U18;
 // a choice field such as the Mailgun region, U20),
@@ -112,6 +120,7 @@ export function ConnectDialog({
             const id = `field-${field.name}`;
             return (
               <Field
+                required={field.required}
                 key={field.name}
                 id={id}
                 label={field.required ? field.label : `${field.label} (optional)`}
@@ -302,6 +311,7 @@ export function WebhookDialog({
                       ? "Signing secret from the provider"
                       : "Replace the signing secret"
                   }
+                  hint={webhook.needsSecret ? undefined : SAVED_SECRET_NOTE}
                   className="flex-1"
                 >
                   <Input
@@ -309,8 +319,12 @@ export function WebhookDialog({
                     type="password"
                     value={secret}
                     onChange={(event) => setSecret(event.target.value)}
-                    className="font-mono text-[12.5px]"
-                    placeholder="whsec_..."
+                    className={cn(
+                      "font-mono text-[12.5px]",
+                      !webhook.needsSecret && "placeholder:text-foreground",
+                    )}
+                    placeholder={webhook.needsSecret ? "whsec_..." : SAVED_SECRET_MASK}
+                    aria-describedby={webhook.needsSecret ? undefined : "provider-secret-hint"}
                   />
                 </Field>
                 <Button

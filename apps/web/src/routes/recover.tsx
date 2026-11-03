@@ -82,6 +82,7 @@ export function RecoverPage() {
       <form className="flex flex-col gap-4" onSubmit={(event) => void onSubmit(event)}>
         <FormError message={error} />
         <Field
+          required
           id="recover-token"
           label="Setup token"
           hint="The SETUP_TOKEN secret that you set when you deployed Envelopen."
@@ -98,6 +99,7 @@ export function RecoverPage() {
         </Field>
         {passkey ? null : (
           <Field
+            required
             id="recover-password"
             label="New password"
             hint={`Use ${PASSWORD_MIN_LENGTH} or more characters.`}

@@ -86,7 +86,7 @@ export function LoginPage({ redirect }: { redirect?: string }) {
           <Field id="email" label="Email">
             <Input id="email" name="email" type="email" autoComplete="username" required />
           </Field>
-          <Field id="password" label="Password">
+          <Field required id="password" label="Password">
             <Input
               id="password"
               name="password"

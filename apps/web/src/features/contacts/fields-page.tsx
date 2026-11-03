@@ -222,7 +222,7 @@ function RenameOptionDialog({
         />
         <form className="flex flex-col gap-5" onSubmit={onSubmit}>
           <FormError message={errorText(rename.error)} />
-          <Field id="rename-option" label="Label">
+          <Field required id="rename-option" label="Label">
             <Input
               id="rename-option"
               name="label"

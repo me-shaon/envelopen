@@ -142,7 +142,12 @@ function CreateKeyDialog({
         />
         <form className="flex flex-col gap-5" onSubmit={onSubmit}>
           <FormError message={errorText(create.error)} />
-          <Field id="key-name" label="Name" hint="For example, the tool that uses the key.">
+          <Field
+            required
+            id="key-name"
+            label="Name"
+            hint="For example, the tool that uses the key."
+          >
             <Input
               id="key-name"
               name="name"

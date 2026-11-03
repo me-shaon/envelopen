@@ -94,7 +94,7 @@ function RenameDialog({
         <DialogHeader title={title} />
         <form className="flex flex-col gap-5" onSubmit={onSubmit}>
           <FormError message={errorText(error)} />
-          <Field id="rename-item" label="Name">
+          <Field required id="rename-item" label="Name">
             <Input
               id="rename-item"
               name="name"

@@ -371,6 +371,7 @@ function Editor({ form }: { form: SignupForm | null }) {
         >
           <FormError message={fieldError ? null : errorText(save.error)} />
           <Field
+            required
             id="form-name"
             label="Name"
             hint="The title of the form page."
@@ -424,6 +425,7 @@ function Editor({ form }: { form: SignupForm | null }) {
             </p>
           ) : null}
           <Field
+            required
             id="form-consent"
             label="Consent text"
             hint="The form shows it above the button. A change starts a new consent version."
@@ -439,6 +441,7 @@ function Editor({ form }: { form: SignupForm | null }) {
             />
           </Field>
           <Field
+            required
             id="form-success"
             label="Success message"
             hint="The page shows it after the subscriber confirms."

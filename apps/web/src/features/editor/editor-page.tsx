@@ -689,7 +689,7 @@ function SaveBlockDialog({
           }}
         >
           <FormError message={errorText(save.error)} />
-          <Field id="saved-block-name" label="Name">
+          <Field required id="saved-block-name" label="Name">
             <Input
               id="saved-block-name"
               name="name"

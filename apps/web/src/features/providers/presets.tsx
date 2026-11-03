@@ -107,6 +107,7 @@ export function PresetFields({ provider, preset }: { provider: Provider; preset:
         const required = field.required || field.name === "host" || field.name === "port";
         return (
           <Field
+            required={required}
             key={field.name}
             id={id}
             label={required ? label : `${label} (optional)`}
@@ -129,6 +130,7 @@ export function PresetFields({ provider, preset }: { provider: Provider; preset:
         );
       })}
       <Field
+        required={preset.defaultDailyCap !== null}
         id="field-dailyCap"
         label={preset.defaultDailyCap ? "Daily sending limit" : "Daily sending limit (optional)"}
         hint={

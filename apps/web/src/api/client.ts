@@ -6,6 +6,7 @@
 // the same public API that API keys use. openapi-fetch is a thin typed wrapper around
 // `fetch` (about 6 kB), and the generated file is types only.
 import createClient from "openapi-fetch";
+import { isTimeoutError, withTimeout } from "@/lib/timeout";
 import type { components, operations, paths } from "./schema";
 import { getWorkspaceId, WORKSPACE_HEADER } from "./workspace";
 
@@ -60,3 +61,29 @@ export async function unwrap<T>(
   }
   return data;
 }
+
+/**
+ * A call that gets no answer fails after this time. Without a limit, a page waits on its
+ * loading state forever when one request stalls. A failed query then retries.
+ */
+export const REQUEST_TIMEOUT_MS = 30_000;
+/** A CSV upload is up to 5 MB, so it gets more time on a slow connection. */
+export const UPLOAD_TIMEOUT_MS = 120_000;
+
+/** The time limit of one call. */
+export function timeoutFor(method: string, schemaPath: string): number {
+  return method === "POST" && schemaPath === "/imports" ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+}
+
+api.use({
+  onRequest({ request, schemaPath }) {
+    const signal = withTimeout(request.signal, timeoutFor(request.method, schemaPath));
+    return new Request(request, { signal });
+  },
+  onError({ error }) {
+    if (isTimeoutError(error)) {
+      return new ApiRequestError(0, "timeout", "The server took too long to answer. Try again.");
+    }
+    return undefined;
+  },
+});

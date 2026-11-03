@@ -13,6 +13,7 @@ import {
 } from "@envelopen/core";
 import { createDb, type DbConnection, isD1DailyLimitError, nextUtcMidnight } from "@envelopen/db";
 import { usageMeter, usageSink } from "../do/usage";
+import { withGeneratedSecrets } from "../secrets";
 import { dailyCounter, sendQueue } from "../services";
 
 // The campaign snapshot Workflow (U9, KTD22). One instance takes the recipient
@@ -72,6 +73,8 @@ export class CampaignWorkflow extends WorkflowEntrypoint<Env, CampaignJob> {
   }
 
   async run(event: WorkflowEvent<CampaignJob>, step: WorkflowStep): Promise<string> {
+    // SIGNING_KEY and ENCRYPTION_KEY come from R2 when they are not set (secrets.ts).
+    this.env = await withGeneratedSecrets(this.env);
     const job = event.payload;
     const queue = sendQueue(this.env);
     const start = (await this.step(step, "begin", (db) =>

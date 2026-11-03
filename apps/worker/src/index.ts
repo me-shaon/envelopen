@@ -12,6 +12,7 @@ import { createFormRoutes } from "./forms/routes";
 import { createHookRoutes } from "./hooks";
 import { createMcpRoutes, MCP_PATH } from "./mcp/route";
 import { handleSendBatch } from "./queue/send-consumer";
+import { withGeneratedSecrets } from "./secrets";
 import { createSetupRoutes } from "./setup/first-run";
 import { createRestoreRoutes } from "./setup/restore";
 import { createTrackingRoutes, createUnsubscribeRoutes } from "./tracking";
@@ -71,15 +72,18 @@ app.route("/f", createFormRoutes());
 app.route("/b", createBrandRoutes());
 
 export default {
-  fetch: app.fetch,
+  // SIGNING_KEY and ENCRYPTION_KEY come from R2 when they are not set (secrets.ts).
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    return app.fetch(request, await withGeneratedSecrets(env), ctx);
+  },
 
   // The send consumer (U9): one batch pointer per invocation.
   async queue(batch, env) {
-    await handleSendBatch(batch, env);
+    await handleSendBatch(batch, await withGeneratedSecrets(env));
   },
 
   // Due campaigns, the recovery sweep, the resume after the D1 limit, and cleanup.
   async scheduled(controller, env, ctx) {
-    await runCron(env, ctx, controller.scheduledTime);
+    await runCron(await withGeneratedSecrets(env), ctx, controller.scheduledTime);
   },
 } satisfies ExportedHandler<Env>;

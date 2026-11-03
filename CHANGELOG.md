@@ -12,6 +12,20 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+### Added
+
+- The Worker makes `SIGNING_KEY` and `ENCRYPTION_KEY` on first use when they are not set, and keeps them in R2 under `secrets/`. The Deploy button now asks only for `SETUP_TOKEN`.
+- The setup screen tells you how to replace a forgotten setup token.
+
+### Security
+
+- `.dev.vars.example` holds no example secret values. The Deploy button filled its secret fields from that file.
+- The setup screen stays closed when `SETUP_TOKEN` is the old public example value.
+
+### Manual steps
+
+- If your `SETUP_TOKEN` is `replace-with-at-least-32-random-characters`, set a new value. See [You forgot the setup token](README.md#you-forgot-the-setup-token).
+
 ## [0.5.0] - 2026-10-22
 
 ### Added

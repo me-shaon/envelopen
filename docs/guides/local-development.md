@@ -61,13 +61,13 @@ Copy the example file:
 cp .dev.vars.example .dev.vars
 ```
 
-Fill in the three empty values in `.dev.vars` with new random values:
+Fill in `SETUP_TOKEN` in `.dev.vars` with a new random value:
 
 ```sh
 SETUP_TOKEN=<output of: openssl rand -hex 32>
-ENCRYPTION_KEY=<output of: openssl rand -base64 32>
-SIGNING_KEY=<output of: openssl rand -base64 32>
 ```
+
+The Worker makes `ENCRYPTION_KEY` and `SIGNING_KEY` in the local R2 bucket on first use. To use your own keys, remove the `#` in front of them, and set each to the output of `openssl rand -base64 32`.
 
 Git ignores `.dev.vars`. Do not use these values in production.
 

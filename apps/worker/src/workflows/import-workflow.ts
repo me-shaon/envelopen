@@ -12,6 +12,7 @@ import {
 } from "@envelopen/core";
 import { createDb } from "@envelopen/db";
 import { usageSink } from "../do/usage";
+import { withGeneratedSecrets } from "../secrets";
 import { createServices } from "../services";
 
 // The import Workflow (U6). One instance runs one preview run or one import run of a
@@ -54,6 +55,8 @@ export class ImportWorkflow extends WorkflowEntrypoint<Env, ImportJob> {
   }
 
   async run(event: WorkflowEvent<ImportJob>, step: WorkflowStep): Promise<string> {
+    // SIGNING_KEY and ENCRYPTION_KEY come from R2 when they are not set (secrets.ts).
+    this.env = await withGeneratedSecrets(this.env);
     const job = event.payload;
     const seen = new Set<string>();
     let offset = 0;

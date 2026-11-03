@@ -16,7 +16,7 @@ Your contacts and stats stay in your own Cloudflare account. Envelopen has an ad
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/me-shaon/envelopen)
 
 1. Select the button above, and sign in to Cloudflare.
-2. Enter the three secrets (see [Secrets](#secrets)).
+2. Clear the `SETUP_TOKEN` field, and type a passphrase of 32 characters or more. Save it. See [Secrets](#secrets).
 3. Wait for the build and the deploy to finish.
 
 To get updates, open Actions in your new repository and enable the Envelopen updates workflow. See [Update Envelopen](docs/guides/updating.md).
@@ -27,16 +27,22 @@ Envelopen runs on the Workers Free plan. Free has daily limits, for example 100,
 
 ## Secrets
 
-The Deploy button asks for these values. `.dev.vars.example` explains each one.
-
-Your browser can fill in a saved password in the secret fields of the Deploy button. Clear each field first, then type or paste your value. Save `SETUP_TOKEN`, for example in a password manager. Cloudflare does not show a secret again.
+The Deploy button asks only for `SETUP_TOKEN`. `.dev.vars.example` explains each secret.
 
 | Name | Purpose | Generate with |
 |---|---|---|
 | `SETUP_TOKEN` | Opens the first-run setup screen. Use at least 32 characters, for example a passphrase of six random words. | Type it, or `openssl rand -hex 32` |
-| `ENCRYPTION_KEY` | Encrypts provider credentials (AES-GCM). 32 bytes, base64. | `openssl rand -base64 32` |
-| `SIGNING_KEY` | Signs tracking and unsubscribe tokens. The login session secret and the suppression hash come from it. 32 bytes, base64. | `openssl rand -base64 32` |
+| `ENCRYPTION_KEY` | Optional. Encrypts provider credentials (AES-GCM). 32 bytes, base64. | Made by the Worker, or `openssl rand -base64 32` |
+| `SIGNING_KEY` | Optional. Signs tracking and unsubscribe tokens. The login session secret and the suppression hash come from it. 32 bytes, base64. | Made by the Worker, or `openssl rand -base64 32` |
 | `SIGNING_KEYS_RETIRED` | Optional. Earlier `SIGNING_KEY` values, comma-separated. | Not generated |
+
+Your browser can fill in a saved password in the secret field of the Deploy button. Clear the field first, then type or paste your value. Save `SETUP_TOKEN`, for example in a password manager. Cloudflare does not show a secret again.
+
+When `SIGNING_KEY` or `ENCRYPTION_KEY` is not set, the Worker makes a random key on first use. It keeps the key in the R2 bucket, as `secrets/signing-key` and `secrets/encryption-key`. A secret that you set on the Worker wins over the key in R2.
+
+Never delete the objects in `secrets/`. A new `SIGNING_KEY` breaks the unsubscribe links in emails that you already sent, and suppression checks fail. A new `ENCRYPTION_KEY` means that you must connect each provider again. An Envelopen backup holds both keys. See [Back up and restore](docs/guides/backup-and-restore.md).
+
+If you set the `SIGNING_KEY` secret later, the Worker adds the key from R2 to the retired keys. Old links keep working.
 
 To set or change a secret after the deploy, run this command from the repository root:
 

@@ -7,6 +7,7 @@ import {
 } from "@envelopen/core";
 import { createDb, type DbConnection } from "@envelopen/db";
 import { usageSink } from "../do/usage";
+import { withGeneratedSecrets } from "../secrets";
 import { createServices } from "../services";
 
 // The key derivation Workflow (U4, KTD2). PBKDF2-SHA256 with 600,000 iterations takes
@@ -39,6 +40,8 @@ export class KeyDerivationWorkflow extends WorkflowEntrypoint<Env, KeyDerivation
   }
 
   async run(event: WorkflowEvent<KeyDerivationJob>, step: WorkflowStep): Promise<string> {
+    // SIGNING_KEY and ENCRYPTION_KEY come from R2 when they are not set (secrets.ts).
+    this.env = await withGeneratedSecrets(this.env);
     const job = event.payload;
     return driveKeyDerivation(
       {

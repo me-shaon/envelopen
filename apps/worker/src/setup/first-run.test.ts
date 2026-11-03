@@ -141,9 +141,29 @@ describe("binding and migration checks", () => {
     });
   });
 
-  it("gives a fix hint for each missing secret or binding", async () => {
+  it("passes the key checks with generated keys when the secrets are unset", async () => {
     const res = await call("/api/setup/check", {
-      env: testEnv({ SIGNING_KEY: undefined, ENCRYPTION_KEY: "c2hvcnQ=", KV: undefined }),
+      env: testEnv({ SIGNING_KEY: undefined, ENCRYPTION_KEY: undefined }),
+      ip: freshIp(),
+      body: { token: SETUP_TOKEN },
+    });
+    const body = (await res.json()) as { checks: { id: string; ok: boolean }[] };
+    const keys = body.checks.filter((item) => item.id.endsWith("_key"));
+    expect(keys.map((item) => [item.id, item.ok])).toEqual([
+      ["signing_key", true],
+      ["encryption_key", true],
+    ]);
+  });
+
+  it("gives a fix hint for each missing secret or binding", async () => {
+    // Without the bucket, the Worker cannot make the missing keys either.
+    const res = await call("/api/setup/check", {
+      env: testEnv({
+        SIGNING_KEY: undefined,
+        ENCRYPTION_KEY: "c2hvcnQ=",
+        KV: undefined,
+        BUCKET: undefined,
+      }),
       ip: freshIp(),
       body: { token: SETUP_TOKEN },
     });
@@ -155,7 +175,7 @@ describe("binding and migration checks", () => {
     const failed = Object.fromEntries(
       body.checks.filter((item) => !item.ok).map((item) => [item.id, item.hint]),
     );
-    expect(Object.keys(failed).sort()).toEqual(["encryption_key", "kv", "signing_key"]);
+    expect(Object.keys(failed).sort()).toEqual(["bucket", "encryption_key", "kv", "signing_key"]);
     expect(failed.signing_key).toContain("openssl rand -base64 32");
     expect(failed.kv).toContain("KV");
   });
@@ -185,7 +205,7 @@ describe("binding and migration checks", () => {
 
   it("does not create the owner while a check fails", async () => {
     const res = await call("/api/setup/owner", {
-      env: testEnv({ ENCRYPTION_KEY: undefined }),
+      env: testEnv({ KV: undefined }),
       ip: freshIp(),
       body: { token: SETUP_TOKEN, ...OWNER },
     });

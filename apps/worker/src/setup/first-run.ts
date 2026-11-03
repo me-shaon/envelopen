@@ -174,9 +174,11 @@ export async function runSetupChecks(env: Env): Promise<SetupCheck[]> {
       bindingHint("AUTH_RATE_LIMITER (Durable Object)"),
     ),
   );
+  // Without the secret, the Worker makes the key in R2 (secrets.ts). So a failed check
+  // means that the secret holds no usable key and R2 could not store one either.
   const keyHint = (name: string) =>
-    `Set the ${name} secret to 32 random bytes in base64: run \`openssl rand -base64 32\`, ` +
-    `then \`npx wrangler secret put ${name}\`.`;
+    `Check the R2 bucket binding, or set the ${name} secret to 32 random bytes in base64: ` +
+    `run \`openssl rand -base64 32\`, then \`npx wrangler secret put ${name}\`.`;
   checks.push(
     check(
       "signing_key",

@@ -9,11 +9,11 @@ Use a separate Cloudflare account on the Workers Free plan for the deploy checks
 Expected result: the button provisions every binding, and the first-run screen shows "9 of 9 pass".
 
 1. Open the Deploy to Cloudflare link in the [README](../../README.md) with a Free account.
-2. Enter `SETUP_TOKEN`, `SIGNING_KEY`, and `ENCRYPTION_KEY`.
+2. Type a passphrase of 32 characters or more for `SETUP_TOKEN`. The button asks for no other secret.
 3. Wait for the build and the deploy to finish.
 4. In the dashboard, check that these exist: the D1 database, the KV namespace, the R2 bucket, `send-queue`, `send-queue-dlq`, the import Workflow, the campaign Workflow, and the four Durable Object classes.
 5. Open `/setup` on the Worker, and type the setup token.
-6. Check that the deployment check shows "9 of 9 pass".
+6. Check that the deployment check shows "9 of 9 pass". The Worker made `SIGNING_KEY` and `ENCRYPTION_KEY` in R2, so check that the bucket has `secrets/signing-key` and `secrets/encryption-key`.
 
 Record if the dead-letter queue exists on Free. The plan lists this as an open question.
 

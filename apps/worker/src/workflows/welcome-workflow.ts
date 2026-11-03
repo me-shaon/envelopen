@@ -12,6 +12,7 @@ import {
 import { createDb, type DbConnection, isD1DailyLimitError, nextUtcMidnight } from "@envelopen/db";
 import { pendingUnsubscribedContacts, unsubscribeLedger } from "../do/unsubscribes";
 import { activeLimit, usageMeter, usageSink } from "../do/usage";
+import { withGeneratedSecrets } from "../secrets";
 import { createServices, dailyCounter, tokenSigner } from "../services";
 
 // The welcome series Workflow (U10, KTD8). One instance sends one series to one contact.
@@ -110,6 +111,8 @@ export class WelcomeWorkflow extends WorkflowEntrypoint<Env, WelcomeJob> {
   }
 
   async run(event: WorkflowEvent<WelcomeJob>, step: WorkflowStep): Promise<string> {
+    // SIGNING_KEY and ENCRYPTION_KEY come from R2 when they are not set (secrets.ts).
+    this.env = await withGeneratedSecrets(this.env);
     const job: WelcomeJob = {
       workspaceId: event.payload.workspaceId,
       seriesId: event.payload.seriesId,

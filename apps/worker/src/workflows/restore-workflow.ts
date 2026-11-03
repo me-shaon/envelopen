@@ -13,6 +13,7 @@ import {
   RESTORE_PASSPHRASE_RULE,
 } from "../auth/rate-limit-do";
 import { usageMeter, usageReader, usageSink } from "../do/usage";
+import { withGeneratedSecrets } from "../secrets";
 import {
   createServices,
   forgetImportedSigningKeys,
@@ -93,6 +94,8 @@ export class RestoreWorkflow extends WorkflowEntrypoint<Env, RestoreJob> {
   }
 
   async run(event: WorkflowEvent<RestoreJob>, step: WorkflowStep): Promise<string> {
+    // SIGNING_KEY and ENCRYPTION_KEY come from R2 when they are not set (secrets.ts).
+    this.env = await withGeneratedSecrets(this.env);
     const job = event.payload;
     const runner: RestoreRunner = {
       step: async <T>(name: string, work: () => Promise<T>): Promise<T> => {

@@ -9,6 +9,7 @@ import {
 } from "@envelopen/core";
 import { createDb, isD1DailyLimitError, nextUtcMidnight } from "@envelopen/db";
 import { usageMeter, usageSink } from "../do/usage";
+import { withGeneratedSecrets } from "../secrets";
 import { createServices } from "../services";
 
 // The backup Workflow (U4, KTD2). One instance runs one backup run: the start, one step
@@ -73,6 +74,8 @@ export class BackupWorkflow extends WorkflowEntrypoint<Env, BackupJob> {
   }
 
   async run(event: WorkflowEvent<BackupJob>, step: WorkflowStep): Promise<string> {
+    // SIGNING_KEY and ENCRYPTION_KEY come from R2 when they are not set (secrets.ts).
+    this.env = await withGeneratedSecrets(this.env);
     const job = event.payload;
     const runner: BackupRunner = {
       step: async <T>(name: string, work: () => Promise<T>): Promise<T> => {

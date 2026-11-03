@@ -6,14 +6,16 @@
 # Generate with: openssl rand -hex 32
 SETUP_TOKEN=
 
-# Encrypts provider credentials (AES-GCM). 32 bytes, base64.
-# Generate with: openssl rand -base64 32
-ENCRYPTION_KEY=
-
-# Signs tracking and unsubscribe tokens (HMAC). 32 bytes, base64.
+# Optional. Without them, the Worker makes both keys on first use and keeps them in R2
+# under secrets/ (apps/worker/src/secrets.ts). Set them to use your own keys.
+# Generate each with: openssl rand -base64 32
+#
+# ENCRYPTION_KEY encrypts provider credentials (AES-GCM). 32 bytes, base64.
+# ENCRYPTION_KEY=
+#
+# SIGNING_KEY signs tracking and unsubscribe tokens (HMAC). 32 bytes, base64.
 # The login session secret is derived from it, so a new value signs everyone out.
-# Generate with: openssl rand -base64 32
-SIGNING_KEY=
+# SIGNING_KEY=
 
 # Optional. After you replace SIGNING_KEY, put the old value here (comma-separated for
 # several), so unsubscribe links in emails that were already sent keep working.

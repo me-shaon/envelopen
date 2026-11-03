@@ -27,8 +27,8 @@ import { readBodyLimited } from "../body";
 // Restore of a backup (U5) is under /api/setup/restore (restore.ts). A running or
 // part-done restore blocks the owner form, because the restore writes the owner.
 //
-// Every route answers 404, the same as an unknown API route, when SETUP_TOKEN is unset
-// or shorter than 32 characters. The setup routes also answer 404 once the owner
+// Every route answers 404, the same as an unknown API route, when SETUP_TOKEN is unset,
+// shorter than 32 characters, or the public example value. The setup routes also answer 404 once the owner
 // exists, and recovery answers 404 before it exists. Wrong tokens count per IP in the
 // AuthRateLimiter Durable Object. The token is in the body, never in the URL.
 
@@ -44,8 +44,19 @@ export interface SetupRoutesOptions {
   appOrigin?: (c: Context<SetupAppEnv>) => string;
 }
 
+/**
+ * The example values that `.dev.vars.example` held up to v0.5.0. They are public, and the
+ * Deploy button fills its secret fields from that file, so a deployment may still use one.
+ * The setup screen treats them as unset.
+ */
+const PUBLIC_EXAMPLE_TOKENS = new Set(["replace-with-at-least-32-random-characters"]);
+
 export function setupTokenConfigured(token: string | undefined): token is string {
-  return typeof token === "string" && token.length >= SETUP_TOKEN_MIN_LENGTH;
+  return (
+    typeof token === "string" &&
+    token.length >= SETUP_TOKEN_MIN_LENGTH &&
+    !PUBLIC_EXAMPLE_TOKENS.has(token.trim())
+  );
 }
 
 async function sha256(text: string): Promise<Uint8Array> {

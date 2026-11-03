@@ -22,12 +22,14 @@ import { Field, FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import { RestoreFlow } from "@/features/restore/restore-flow";
-import { guideUrl } from "@/lib/guides";
+import { guideUrl, REPOSITORY_URL } from "@/lib/guides";
 
 // First-run setup (KTD6): the setup token, then the binding and migration checks with
 // a fix hint for each failure, then the plan limits, then the owner form. From the
 // checks, the owner can restore a backup instead (U5). A restore that already started
 // shows its progress right after the token, so a reload keeps it.
+
+const FORGOT_TOKEN_GUIDE = `${REPOSITORY_URL}#you-forgot-the-setup-token`;
 
 type Step = "token" | "review" | "owner" | "restore" | "closed";
 
@@ -222,7 +224,7 @@ export function SetupPage() {
     return (
       <AuthLayout
         title="Setup is closed"
-        description="The owner already exists, or the SETUP_TOKEN secret is not set. It needs at least 32 characters."
+        description="The owner already exists, or the SETUP_TOKEN secret is not set. It needs at least 32 characters, and it cannot be the example value from .dev.vars.example."
       >
         <Button asChild>
           <Link to="/login">Go to sign in</Link>
@@ -264,7 +266,22 @@ export function SetupPage() {
           <Field
             id="token"
             label="Setup token"
-            hint="The SETUP_TOKEN secret that you set when you deployed Envelopen."
+            hint={
+              <>
+                The SETUP_TOKEN secret that you set when you deployed Envelopen. Forgot it?
+                Cloudflare does not show a secret again. Set a new SETUP_TOKEN on the Worker in the
+                Cloudflare dashboard, under Settings &gt; Variables and Secrets. Then use the new
+                value.{" "}
+                <a
+                  href={FORGOT_TOKEN_GUIDE}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-foreground underline underline-offset-2"
+                >
+                  Read the steps
+                </a>
+              </>
+            }
           >
             <Input
               id="token"

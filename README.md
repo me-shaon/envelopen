@@ -29,9 +29,11 @@ Envelopen runs on the Workers Free plan. Free has daily limits, for example 100,
 
 The Deploy button asks for these values. `.dev.vars.example` explains each one.
 
+Your browser can fill in a saved password in the secret fields of the Deploy button. Clear each field first, then type or paste your value. Save `SETUP_TOKEN`, for example in a password manager. Cloudflare does not show a secret again.
+
 | Name | Purpose | Generate with |
 |---|---|---|
-| `SETUP_TOKEN` | Opens the first-run setup screen. Use at least 32 characters. | `openssl rand -hex 32` |
+| `SETUP_TOKEN` | Opens the first-run setup screen. Use at least 32 characters, for example a passphrase of six random words. | Type it, or `openssl rand -hex 32` |
 | `ENCRYPTION_KEY` | Encrypts provider credentials (AES-GCM). 32 bytes, base64. | `openssl rand -base64 32` |
 | `SIGNING_KEY` | Signs tracking and unsubscribe tokens. The login session secret and the suppression hash come from it. 32 bytes, base64. | `openssl rand -base64 32` |
 | `SIGNING_KEYS_RETIRED` | Optional. Earlier `SIGNING_KEY` values, comma-separated. | Not generated |
@@ -59,7 +61,18 @@ The `PBKDF2_ITERATIONS` variable in `wrangler.jsonc` sets the password hash cost
 5. Type your name, your email, your password, and the name of the first workspace.
 6. Select **Create the owner**.
 
-The setup screen closes after the owner exists. If the owner loses the password or the passkey, the same token resets it at `/recover`. A reset ends every session and removes every passkey. The screen stays closed when `SETUP_TOKEN` is missing or shorter than 32 characters.
+The setup screen closes after the owner exists. If the owner loses the password or the passkey, the same token resets it at `/recover`. A reset ends every session and removes every passkey. The screen stays closed when `SETUP_TOKEN` is missing, shorter than 32 characters, or the old example value `replace-with-at-least-32-random-characters`.
+
+### You forgot the setup token
+
+Cloudflare does not show a secret after you save it. Set a new value instead:
+
+1. Choose a new passphrase of 32 characters or more, or make a random value with `openssl rand -hex 32`.
+2. In the Cloudflare dashboard, open the Worker, and go to **Settings** > **Variables and Secrets**.
+3. Edit `SETUP_TOKEN`, paste the new value, and select **Deploy**.
+4. Reload `/setup`, and type the new value.
+
+If you deploy from a computer, run `npx wrangler secret put SETUP_TOKEN`, and paste the new value instead.
 
 ## Send your first campaign
 

@@ -61,7 +61,7 @@ Copy the example file:
 cp .dev.vars.example .dev.vars
 ```
 
-Replace the three values in `.dev.vars` with new random values:
+Fill in the three empty values in `.dev.vars` with new random values:
 
 ```sh
 SETUP_TOKEN=<output of: openssl rand -hex 32>

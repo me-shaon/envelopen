@@ -37,6 +37,7 @@ describe("first-run screen stays closed", () => {
     ["unset", undefined],
     ["empty", ""],
     ["shorter than 32 characters", "x".repeat(31)],
+    ["the public example value", "replace-with-at-least-32-random-characters"],
   ] as const) {
     it(`returns 404 on every setup route when SETUP_TOKEN is ${label}`, async () => {
       const closed = testEnv({ SETUP_TOKEN: token });

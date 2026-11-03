@@ -133,6 +133,8 @@ export interface Services {
   outboundFetch: typeof fetch;
   /** Outbound TCP for SMTP adapters (KTD12). Tests pass the mock SMTP server. */
   connectSocket: SocketConnect;
+  /** The Envelopen version that this deployment runs, for example "0.6.0". */
+  appVersion: string;
   /** The public origin of this deployment, for webhook URLs. For example `https://mail.example.com`. */
   appOrigin: string;
   /** Starts the campaign snapshot Workflow (U9). */

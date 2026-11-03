@@ -27,6 +27,7 @@ import { dailyCounter } from "./do/daily-counter";
 import { usageReader } from "./do/usage";
 import { turnstileKeys } from "./forms/turnstile";
 import { socketConnect } from "./sockets";
+import { ENVELOPEN_VERSION } from "./version";
 
 // Builds the platform services that operations need from the Worker's bindings (see
 // packages/core/src/services.ts). The keyed hasher, the link signer, and the
@@ -355,6 +356,7 @@ export function createServices(
 ): Partial<Services> {
   const services: Partial<Services> = {
     bucket: env.BUCKET,
+    appVersion: ENVELOPEN_VERSION,
     async startImportJob(job) {
       await env.IMPORT_WORKFLOW.create({ id: importInstanceId(job), params: job });
     },

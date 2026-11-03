@@ -16,6 +16,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 - The Worker makes `SIGNING_KEY` and `ENCRYPTION_KEY` on first use when they are not set, and keeps them in R2 under `secrets/`. The Deploy button now asks only for `SETUP_TOKEN`.
 - The setup screen tells you how to replace a forgotten setup token.
+- **Settings** > **Updates** shows the running version and the newest release on GitHub, with a **Check now** button. A daily check asks GitHub for the newest release. The owner can turn it off.
 
 ### Changed
 

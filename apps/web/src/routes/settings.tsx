@@ -4,6 +4,7 @@ import { ApiKeysSection } from "@/features/settings/api-keys-section";
 import { BackupSection } from "@/features/settings/backup-section";
 import { SourceCodeSection } from "@/features/settings/source-code-section";
 import { TrackingSection } from "@/features/settings/tracking-section";
+import { UpdatesSection } from "@/features/settings/updates-section";
 import { WorkersPlanSection } from "@/features/settings/workers-plan-section";
 import { WorkspacesSection } from "@/features/settings/workspaces-section";
 
@@ -19,6 +20,7 @@ export function SettingsPage() {
       <ApiKeysSection />
       <BackupSection />
       <WorkersPlanSection />
+      <UpdatesSection />
       <SourceCodeSection />
       <AuditLogSection />
     </div>

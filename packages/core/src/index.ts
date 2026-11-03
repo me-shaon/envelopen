@@ -213,6 +213,21 @@ export {
   WORKERS_PLAN_SETTING,
 } from "./settings/operations";
 export {
+  fetchLatestRelease,
+  isNewerVersion,
+  MANUAL_CHECK_INTERVAL_MS,
+  parseReleaseVersion,
+  type Release,
+  readUpdateStatus,
+  runDailyUpdateCheck,
+  UPSTREAM_REPO,
+  type UpdateStatus,
+  UpdateStatusSchema,
+  updatesCheck,
+  updatesGet,
+  updatesUpdate,
+} from "./settings/updates";
+export {
   annotateClicks,
   type CampaignStats,
   CampaignStatsSchema,

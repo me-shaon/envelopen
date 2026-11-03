@@ -32,6 +32,14 @@ The script follows these rules:
 
 The workflow does nothing in the `me-shaon/envelopen` repository itself.
 
+## Learn about a new release
+
+Envelopen tells you about new releases in these ways:
+
+- **In the app.** Open **Settings** > **Updates**. The section shows the version that runs and the newest release on GitHub. Select **Check now** to ask GitHub at once. Once a day, at 06:17 UTC, Envelopen asks GitHub for the newest release of `me-shaon/envelopen`. It sends no workspace data. To stop the daily check, clear **Check for new versions every day** in the same section.
+- **In your repository.** The update workflow applies each new release, or it opens a pull request. See [Add the update workflow](#add-the-update-workflow).
+- **On GitHub.** On the [Envelopen repository](https://github.com/me-shaon/envelopen), select **Watch** > **Custom** > **Releases**. GitHub then sends you an email for each release.
+
 ## Before you start
 
 - Make sure that your repository is on GitHub. The workflow is a GitHub Actions workflow. On GitLab, use [Update by hand](#update-by-hand).

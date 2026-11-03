@@ -33,6 +33,8 @@ const ACTIONS: Record<string, ActionText> = {
   "workspaces.rename": { label: () => "Workspace renamed." },
   "workspaces.archive": { label: () => "Workspace archived.", notable: true },
   "workspaces.update_settings": { label: () => "Workspace settings changed." },
+  "updates.update": { label: () => "Update check changed." },
+  "updates.check": { label: counted("Checked for a new version", "checks for a new version") },
   "api_keys.create": { label: () => "API key created.", notable: true },
   "api_keys.revoke": { label: () => "API key revoked.", notable: true },
 

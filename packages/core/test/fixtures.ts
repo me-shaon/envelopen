@@ -190,6 +190,7 @@ export async function testServices(
     dailyClock,
     dailyCounter: memoryDailyCounter(dailySends, dailyClock),
     bucket: env.BUCKET,
+    appVersion: "0.5.0",
     hashEmail: await createEmailHasher(TEST_SIGNING_KEY),
     signFileLink: (file) => signer.sign(file),
     async startImportJob(job) {

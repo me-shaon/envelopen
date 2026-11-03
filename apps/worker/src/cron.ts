@@ -20,6 +20,7 @@ import {
   resealLegacyConnections,
   restoreInProgress,
   resumeAfterPlatformLimit,
+  runDailyUpdateCheck,
   type SweepDeps,
   sendDeferredConfirmations,
   startBackup,
@@ -36,7 +37,14 @@ import {
   unsubscribeLedger,
 } from "./do/unsubscribes";
 import { usageMeter, usageSink } from "./do/usage";
-import { backupStarter, campaignStarter, createServices, sendQueue } from "./services";
+import {
+  backupStarter,
+  campaignStarter,
+  createServices,
+  outboundFetch,
+  sendQueue,
+} from "./services";
+import { ENVELOPEN_VERSION } from "./version";
 
 // The per-minute cron (U9, KTD19, KTD24). In order:
 //
@@ -246,6 +254,15 @@ function isRecountTime(now: number): boolean {
   return date.getUTCHours() === RECOUNT_HOUR && date.getUTCMinutes() === RECOUNT_MINUTE;
 }
 
+/** The UTC hour and minute of the daily update check. */
+export const UPDATE_CHECK_HOUR = 6;
+export const UPDATE_CHECK_MINUTE = 17;
+
+function isUpdateCheckTime(now: number): boolean {
+  const date = new Date(now);
+  return date.getUTCHours() === UPDATE_CHECK_HOUR && date.getUTCMinutes() === UPDATE_CHECK_MINUTE;
+}
+
 /** The UTC hour and minute of the daily backup (packages/core/src/backup/model.ts). */
 export { BACKUP_HOUR, BACKUP_MINUTE };
 
@@ -341,6 +358,17 @@ export async function runCron(
       await repairAllCounts(db).catch((error) =>
         console.error("Cron job recount of member counts failed", error),
       );
+    }
+    // The update check asks GitHub for the newest release (packages/core/src/settings/updates.ts).
+    if (!report.limited && isUpdateCheckTime(now)) {
+      await runDailyUpdateCheck(
+        {
+          db,
+          outboundFetch: outboundFetch(env),
+          currentVersion: ENVELOPEN_VERSION,
+        },
+        now,
+      ).catch((error) => console.error("Cron job update check failed", error));
     }
     if (!report.limited && isBackupTime(now)) {
       const services = createServices(env);

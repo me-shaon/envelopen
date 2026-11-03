@@ -101,6 +101,7 @@ import {
   tagsRename,
 } from "../lists/operations";
 import { settingsGet, settingsUpdate } from "../settings/operations";
+import { updatesCheck, updatesGet, updatesUpdate } from "../settings/updates";
 import { campaignsClickMap, campaignsStats, statsLatest } from "../stats/operations";
 import { suppressionsAdd, suppressionsList, suppressionsRemove } from "../suppression/operations";
 import {
@@ -204,6 +205,10 @@ export const registry = createRegistry([
   // Deployment settings (KTD16): the source link of this deployment.
   settingsGet,
   settingsUpdate,
+  // The update check: the running version and the newest release on GitHub.
+  updatesGet,
+  updatesUpdate,
+  updatesCheck,
   // Encrypted backups (U4, U5): owner session only, never MCP.
   backupsGet,
   backupsRuns,

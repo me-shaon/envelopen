@@ -6,10 +6,16 @@ This guide explains how a deployment gets new Envelopen releases. It also shows 
 
 The Deploy to Cloudflare button copies the Envelopen repository into your GitHub or GitLab account. The copy is not a fork, and it does not share the history of the Envelopen repository. Workers Builds watches the production branch of the copy (usually `main`). Each push to that branch builds Envelopen and deploys it. The deploy command runs the `deploy` script of `package.json`. The script applies the new D1 migrations, and then deploys the Worker.
 
-The copy includes the workflow **Envelopen updates** (`.github/workflows/envelopen-update.yml`). Each Monday, the workflow does these steps:
+The copy is different from the Envelopen repository in these ways:
+
+- It has no `.github` folder. So it does not have the update workflow until you add it. See [Add the update workflow](#add-the-update-workflow).
+- `package.json` has your Worker name and the version `0.0.0`. Envelopen keeps its version in `apps/worker/src/version.ts` instead.
+- `wrangler.jsonc` has your Worker name and the IDs and names of your resources.
+
+When you add the workflow **Envelopen updates** (`.github/workflows/envelopen-update.yml`), it does these steps each Monday:
 
 1. It reads the latest release of `me-shaon/envelopen`. It uses releases only, never the `main` branch.
-2. It compares the release with the `version` in your `package.json`. If the release is not newer, the workflow stops.
+2. It compares the release with `ENVELOPEN_VERSION` in your `apps/worker/src/version.ts`. If the release is not newer, the workflow stops. A copy of v0.5.0 or older has no usable version. For such a copy, the workflow finds the release tag with the fewest changed lines.
 3. It gets the files of the new release and of the release that you have now.
 4. It runs `scripts/update/apply-release.mjs`. The script applies the changes of the release to your files.
 5. It commits the result to your default branch, or it opens a pull request. Workers Builds then deploys the update.
@@ -20,6 +26,8 @@ The script follows these rules:
 - If the release deleted a file and you did not change it, the script deletes it.
 - If you changed a file and the release did not, your version stays.
 - Files that you added stay.
+- A file in `.github` that your copy does not have is not added again. The Deploy button leaves out `.github`.
+- `package.json` keeps your `name` and `version` lines.
 - `wrangler.jsonc` gets a merge. The release gives the structure, the comments, and the new bindings. Your copy keeps its Worker name, `account_id`, routes and custom domains, the resource IDs and names of each binding, the vars that you changed, and the bindings that you added.
 
 The workflow does nothing in the `me-shaon/envelopen` repository itself.
@@ -30,6 +38,16 @@ The workflow does nothing in the `me-shaon/envelopen` repository itself.
 - Read the release notes of each new version on the [releases page](https://github.com/me-shaon/envelopen/releases). Do the steps under **Manual steps** and **Breaking** yourself.
 - Back up before each update. Select **Back up now** in **Settings** > **Backups**, and wait until the backup succeeds. See [Back up and restore](backup-and-restore.md).
 - Before a release that adds a D1 migration, also export the database. See [Back up the database](#back-up-the-database).
+
+## Add the update workflow
+
+Do this one time, after the first deploy. The Deploy button does not copy the `.github` folder, so you add the workflow file yourself. A fork already has the file. For a fork, go to [Turn on the update workflow](#turn-on-the-update-workflow).
+
+1. Open [`.github/workflows/envelopen-update.yml`](https://github.com/me-shaon/envelopen/blob/main/.github/workflows/envelopen-update.yml) in the Envelopen repository. Select **Copy raw file**.
+2. In your repository, select **Add file** > **Create new file**.
+3. Type the name `.github/workflows/envelopen-update.yml`, and paste the contents.
+4. Select **Commit changes**. Workers Builds deploys the commit. Nothing in the app changes.
+5. Do the steps in [Turn on the update workflow](#turn-on-the-update-workflow).
 
 ## Turn on the update workflow
 
@@ -95,7 +113,7 @@ To keep updates automatic, keep your own changes small. Put your own files in ne
 
 ## Update by hand
 
-Use these steps on GitLab, or when the workflow cannot run. Replace `v0.2.0` with the new release, and `v0.1.0` with the `version` in your `package.json`.
+Use these steps on GitLab, or when the workflow cannot run. Replace `v0.2.0` with the new release, and `v0.1.0` with `ENVELOPEN_VERSION` in your `apps/worker/src/version.ts`. In a copy of v0.5.0 or older, `version.ts` has no version. Use the release that you deployed first, or the release that you last updated to.
 
 1. Open a terminal in your copy of the repository.
 2. Add the Envelopen repository as a remote:
@@ -191,9 +209,10 @@ If you forked `me-shaon/envelopen` on GitHub instead of using the Deploy button,
 | The push to the default branch fails. | A branch protection rule blocks the push. | Set `ENVELOPEN_UPDATE_MODE` to `pr`. |
 | The push fails with "refusing to allow a GitHub App to create or update workflow". | The release changes a workflow file, and the token has no **Workflows** permission. | Give the token **Workflows** write access, or remove the secret. |
 | An issue asks you to update the workflow files. | The release changes a file in `.github/workflows`, and no update token is set. | Copy each linked file into your repository, or add `ENVELOPEN_UPDATE_TOKEN`. |
-| Each update opens a pull request. | You changed files that each release changes too, for example `package.json`. | Move your changes out of those files, or merge each pull request. |
+| Each update opens a pull request. | You changed files that each release changes too, for example `pnpm-lock.yaml`. | Move your changes out of those files, or merge each pull request. |
 | The Workers Builds deploy fails after an update. | A new binding, secret, or manual step is missing. | Read **Manual steps** in the release notes. Read the build log in **Workers & Pages** > your Worker > **Deployments**. |
-| The job summary says that Envelopen is up to date, but a new release exists. | The `version` in your `package.json` is not the release that you have. | Set `version` to the release that your files match, and run the workflow again. |
+| The job summary says that Envelopen is up to date, but a new release exists. | `ENVELOPEN_VERSION` in `apps/worker/src/version.ts` is not the release that you have. | Set `ENVELOPEN_VERSION` to the release that your files match, and run the workflow again. |
+| There is no **Envelopen updates** workflow in **Actions**. | The Deploy button does not copy `.github`. | Add the workflow file. See [Add the update workflow](#add-the-update-workflow). |
 
 ## Related guides
 
@@ -211,4 +230,4 @@ If you forked `me-shaon/envelopen` on GitHub instead of using the Deploy button,
 - [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)
 - [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow)
 
-Last checked: 2026-10-21
+Last checked: 2026-11-03

@@ -3,7 +3,13 @@ name: Envelopen updates
 # Keeps a repository made with the Deploy to Cloudflare button up to date with the
 # releases of me-shaon/envelopen. See docs/guides/updating.md.
 #
-# - The workflow reads the latest release, and compares it with "version" in package.json.
+# The Deploy button does not copy the .github folder. Add this file to your copy by hand
+# (docs/guides/updating.md > Add the update workflow).
+#
+# - The workflow reads the latest release, and compares it with ENVELOPEN_VERSION in
+#   apps/worker/src/version.ts. The Deploy button sets the version in package.json to
+#   0.0.0, so the workflow does not read it. When the copy has no usable version (a copy of
+#   v0.5.0 or older), the workflow uses the release tag with the fewest changed lines.
 # - scripts/update/apply-release.mjs applies the release files. wrangler.jsonc keeps your
 #   resource names, IDs, routes, and vars.
 # - Mode: the repository variable ENVELOPEN_UPDATE_MODE, or the input of a manual run.
@@ -63,7 +69,32 @@ jobs:
             echo "::error::Run this workflow on the default branch ($default_branch)."
             exit 1
           fi
-          current="$(node scripts/update/version.mjs current)"
+          current="$(node scripts/update/version.mjs current 2>/dev/null || true)"
+          if [ -z "$current" ] || [ "$current" = "0.0.0" ]; then
+            # A copy of v0.5.0 or older that the Deploy button made has the version 0.0.0.
+            # Find the release that it runs: the release tag with the fewest changed lines.
+            # No tag matches exactly, because the button changes package.json and
+            # wrangler.jsonc. On a tie, the newer tag wins. The upstream repository is
+            # public, so do not send the token of this repository to it.
+            git -c http.https://github.com/.extraheader= fetch --quiet --no-tags \
+              "https://github.com/$UPSTREAM_REPO.git" "+refs/tags/v*:refs/envelopen-upstream/v*"
+            current=""
+            fewest=""
+            for tag in $(git for-each-ref --sort=v:refname --format='%(refname:lstrip=2)' refs/envelopen-upstream/); do
+              [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+              lines="$(git diff --numstat "refs/envelopen-upstream/$tag" HEAD -- . ':(exclude).github' | awk '{ n += $1 + $2 } END { print n + 0 }')"
+              if [ -z "$fewest" ] || [ "$lines" -le "$fewest" ]; then
+                fewest="$lines"
+                current="${tag#v}"
+              fi
+            done
+            if [ -z "$current" ]; then
+              echo "::notice::$UPSTREAM_REPO has no release tags yet."
+              echo "update=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::notice::This repository has no version. It is closest to v$current ($fewest changed lines)."
+          fi
 
           if ! gh api "repos/$UPSTREAM_REPO/releases/latest" > "$RUNNER_TEMP/release.json"; then
             echo "::notice::Could not read the latest release of $UPSTREAM_REPO. It may have no release yet."

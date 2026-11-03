@@ -118,6 +118,43 @@ describe("apply-release: files", () => {
     assert.deepEqual(applied.report.skippedWorkflows, []);
   });
 
+  it("does not add back the .github files that a Deploy button copy left out", () => {
+    const { report, read } = run({
+      base: {
+        ".github/workflows/ci.yml": "v1",
+        ".github/workflows/envelopen-update.yml": "u1",
+        ".github/assets/logo.svg": "l1",
+        "a.txt": "1",
+      },
+      upstream: {
+        ".github/workflows/ci.yml": "v2",
+        ".github/workflows/envelopen-update.yml": "u2",
+        ".github/assets/logo.svg": "l2",
+        "a.txt": "2",
+      },
+      // The owner added only the update workflow by hand.
+      current: { ".github/workflows/envelopen-update.yml": "u1", "a.txt": "1" },
+      skipWorkflows: true,
+    });
+    assert.equal(read(".github/workflows/ci.yml"), undefined);
+    assert.equal(read(".github/assets/logo.svg"), undefined);
+    assert.equal(read("a.txt"), "2");
+    assert.deepEqual(report.conflicts, []);
+    assert.deepEqual(report.skippedWorkflows, [".github/workflows/envelopen-update.yml"]);
+  });
+
+  it("keeps the name and version that the Deploy button wrote in package.json", () => {
+    const pkg = (name, version, extra) =>
+      `{\n  "name": "${name}",\n  "version": "${version}",\n  "private": true${extra}\n}\n`;
+    const { report, read } = run({
+      base: { "package.json": pkg("envelopen", "0.5.0", "") },
+      upstream: { "package.json": pkg("envelopen", "0.0.0", ',\n  "type": "module"') },
+      current: { "package.json": pkg("my-mail", "0.0.0", "") },
+    });
+    assert.equal(read("package.json"), pkg("my-mail", "0.0.0", ',\n  "type": "module"'));
+    assert.deepEqual(report.conflicts, []);
+  });
+
   it("without a base, writes the release and deletes nothing", () => {
     const { report, read } = run({
       upstream: { "a.txt": "2" },

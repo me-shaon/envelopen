@@ -389,7 +389,7 @@ Expected result: Envelopen creates the webhook on the domain at connect, and rem
 A release is a `vX.Y.Z` tag on `main`. The release workflow (`.github/workflows/release.yml`) checks the tag, runs the checks, and creates the GitHub release. The update workflow in each copy then finds the release.
 
 1. Do the checks in this guide that the release needs.
-2. Set `version` in the root `package.json` to the new version, for example `0.2.0`. This file is the only place that holds the version.
+2. Set `ENVELOPEN_VERSION` in `apps/worker/src/version.ts` to the new version, for example `0.2.0`. This file is the only place that holds the version. Keep `version` in `package.json` at `0.0.0`. The Deploy button sets it to `0.0.0` in each copy, and the same value keeps updates free of conflicts.
 3. In `CHANGELOG.md`, move the notes under **Unreleased** to a new section `## [0.2.0] - YYYY-MM-DD`.
 4. If the owner must do something by hand, write it under **Manual steps**. Write changes that need a decision under **Breaking**.
 5. Update the links at the end of `CHANGELOG.md`.
@@ -403,7 +403,7 @@ Rules for each release:
 
 - Never change or delete a D1 migration that a release shipped. Put each change in a new migration file. CI fails if a shipped migration changes (`scripts/check-migrations.mjs`).
 - Never remove or reorder a Durable Object migration in `wrangler.jsonc`. Add new entries at the end.
-- Use a tag that matches `version` in `package.json`. The release workflow fails on a mismatch.
+- Use a tag that matches `ENVELOPEN_VERSION` in `apps/worker/src/version.ts`. The release workflow fails on a mismatch.
 - Do not move or delete a tag after the release. Copies compare their files with the tag of their version.
 
 ## Open questions to record

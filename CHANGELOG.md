@@ -17,6 +17,12 @@ The release workflow uses the section of a version as the notes of its GitHub re
 - The Worker makes `SIGNING_KEY` and `ENCRYPTION_KEY` on first use when they are not set, and keeps them in R2 under `secrets/`. The Deploy button now asks only for `SETUP_TOKEN`.
 - The setup screen tells you how to replace a forgotten setup token.
 
+### Changed
+
+- The version is in `apps/worker/src/version.ts`, not in `package.json`. The Deploy button sets the version in `package.json` to `0.0.0`, so the app footer and the update workflow showed `0.0.0`.
+- The update workflow finds the release of a copy without a version from the release tag with the fewest changed lines.
+- Updates do not add back the `.github` files that a Deploy button copy left out, and they keep the `name` and `version` lines of `package.json`.
+
 ### Security
 
 - `.dev.vars.example` holds no example secret values. The Deploy button filled its secret fields from that file.
@@ -24,6 +30,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ### Manual steps
 
+- The Deploy button does not copy `.github`. If your repository has no **Envelopen updates** workflow, add it by hand. See [Add the update workflow](docs/guides/updating.md#add-the-update-workflow).
 - If your `SETUP_TOKEN` is `replace-with-at-least-32-random-characters`, set a new value. See [You forgot the setup token](README.md#you-forgot-the-setup-token).
 
 ## [0.5.0] - 2026-10-22

@@ -5,8 +5,8 @@
 //     [--skip-workflows] [--dry-run] [--report <file>]
 //
 // --upstream  The files of the new release (for example `git archive v0.2.0`).
-// --base      The files of the release that the copy is on now (the version in its
-//             package.json). Without it, the script cannot see local changes or files
+// --base      The files of the release that the copy is on now (ENVELOPEN_VERSION in
+//             apps/worker/src/version.ts, or the closest release tag). Without it, the script cannot see local changes or files
 //             that the release deleted, and the report sets `baseMissing`.
 // --current   The copy to change. The script changes it in place, unless --dry-run.
 //
@@ -34,6 +34,13 @@
 // - Durable Object migrations come from the release. If the copy has migrations that
 //   the release does not start with, the merge reports a conflict.
 //
+// The Deploy button makes these changes to a copy, so the script allows for them:
+// - The copy has no .github folder. A file of the base release in .github that the copy
+//   does not have is not added again. The owner adds the update workflow by hand
+//   (docs/guides/updating.md).
+// - package.json has the Worker name and the version 0.0.0. Before the comparison, the
+//   package.json of each release gets the `name` and `version` lines of the copy.
+//
 // --skip-workflows leaves .github/workflows/ unchanged, and lists the files that the
 // release changes there in `skippedWorkflows`. A push with GITHUB_TOKEN cannot change
 // workflow files.
@@ -57,6 +64,8 @@ import { parseArgs } from "node:util";
 import { deepEqual, editJsonc, parseJsonc } from "./jsonc.mjs";
 
 export const WRANGLER_FILE = "wrangler.jsonc";
+export const PACKAGE_FILE = "package.json";
+export const GITHUB_DIR = ".github/";
 export const WORKFLOW_DIR = ".github/workflows/";
 const SKIPPED_DIRS = new Set([".git", "node_modules"]);
 
@@ -109,6 +118,26 @@ function readTree(root, files) {
   const map = new Map();
   for (const path of files) map.set(path, readFileSync(join(root, path)));
   return map;
+}
+
+/** The first line of a top-level key in package.json, for example `  "version": "0.0.0",`. */
+function packageLine(text, key) {
+  return new RegExp(`^  "${key}": "[^"]*"`, "m").exec(text)?.[0];
+}
+
+/**
+ * package.json of a release, with the `name` and `version` lines of the copy. The Deploy
+ * button writes the Worker name and the version 0.0.0 into the copy. Without this step,
+ * these two lines would make package.json a conflict in each update.
+ */
+export function likeThisCopy(releaseText, copyText) {
+  let out = releaseText;
+  for (const key of ["name", "version"]) {
+    const mine = packageLine(copyText, key);
+    const theirs = packageLine(out, key);
+    if (mine && theirs) out = out.replace(theirs, mine);
+  }
+  return out;
 }
 
 function same(a, b) {
@@ -413,9 +442,18 @@ export function planUpdate({ upstreamDir, currentDir, baseDir, skipWorkflows = f
   const paths = [...new Set([...U.keys(), ...B.keys(), ...C.keys()])].sort();
 
   for (const path of paths) {
-    const u = U.get(path);
-    const b = B.get(path);
+    let u = U.get(path);
+    let b = B.get(path);
     const c = C.get(path);
+    // The Deploy button copies the repository without .github, and the owner adds the
+    // update workflow by hand. So a file of the base release in .github that the copy does
+    // not have stays out. A file that is new in the release follows the usual rules.
+    if (path.startsWith(GITHUB_DIR) && c === undefined && b !== undefined) continue;
+    if (path === PACKAGE_FILE && c !== undefined) {
+      const copyText = c.toString("utf8");
+      if (u !== undefined) u = Buffer.from(likeThisCopy(u.toString("utf8"), copyText), "utf8");
+      if (b !== undefined) b = Buffer.from(likeThisCopy(b.toString("utf8"), copyText), "utf8");
+    }
     let target = c;
     let conflict;
 

@@ -1,6 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import rootPackage from "../../../package.json";
+import { ENVELOPEN_VERSION } from "./version";
 
 const BASE = "https://envelopen.test";
 
@@ -8,7 +8,12 @@ describe("worker shell", () => {
   it("returns ok from /api/health", async () => {
     const res = await exports.default.fetch(`${BASE}/api/health`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "ok", version: rootPackage.version });
+    expect(await res.json()).toEqual({ status: "ok", version: ENVELOPEN_VERSION });
+  });
+
+  it("has a release version in version.ts", () => {
+    // The release and update workflows read this exact format.
+    expect(ENVELOPEN_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it("routes /u/<token> to the Worker, not the SPA", async () => {

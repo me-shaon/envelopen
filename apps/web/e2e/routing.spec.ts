@@ -8,9 +8,10 @@ import { PASSWORD_PORT } from "../playwright.config";
 // a real `wrangler dev` can show it.
 
 const BASE = `http://localhost:${PASSWORD_PORT}`;
-const VERSION: string = JSON.parse(
-  readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
-).version;
+const VERSION =
+  /^export const ENVELOPEN_VERSION = "([^"]+)";$/m.exec(
+    readFileSync(new URL("../../worker/src/version.ts", import.meta.url), "utf8"),
+  )?.[1] ?? "";
 const SPA_MARKER = '<div id="root"></div>';
 // The headers of a browser navigation, so the SPA fallback applies where it can.
 const NAVIGATION = { accept: "text/html", "sec-fetch-mode": "navigate" };

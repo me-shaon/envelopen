@@ -3,7 +3,8 @@ name: Release
 # Creates the GitHub release for a version tag. Only the upstream repository makes
 # releases. In a copy made with the Deploy button, this workflow does nothing.
 #
-# To release: bump "version" in package.json, move the Unreleased notes in CHANGELOG.md
+# To release: bump ENVELOPEN_VERSION in apps/worker/src/version.ts (keep "version" in
+# package.json at 0.0.0), move the Unreleased notes in CHANGELOG.md
 # to a section for the version, commit, then push the tag `vX.Y.Z`.
 
 on:
@@ -32,11 +33,11 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Check that the tag matches package.json
+      - name: Check that the tag matches apps/worker/src/version.ts
         run: |
           version="$(node scripts/update/version.mjs current)"
           if [ "$TAG" != "v$version" ]; then
-            echo "::error::The tag $TAG does not match the version $version in package.json."
+            echo "::error::The tag $TAG does not match the version $version in apps/worker/src/version.ts."
             exit 1
           fi
 

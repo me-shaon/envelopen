@@ -3,14 +3,15 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// The root package.json holds the Envelopen version. The Settings page shows it.
-const rootPackage = JSON.parse(
-  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
-) as { version: string };
+// apps/worker/src/version.ts holds the Envelopen version. The app footer shows it.
+const version = /^export const ENVELOPEN_VERSION = "([^"]+)";$/m.exec(
+  readFileSync(new URL("../worker/src/version.ts", import.meta.url), "utf8"),
+)?.[1];
+if (!version) throw new Error("apps/worker/src/version.ts has no ENVELOPEN_VERSION line.");
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  define: { __ENVELOPEN_VERSION__: JSON.stringify(rootPackage.version) },
+  define: { __ENVELOPEN_VERSION__: JSON.stringify(version) },
   resolve: {
     alias: [
       { find: "@", replacement: new URL("./src", import.meta.url).pathname },

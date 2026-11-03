@@ -19,7 +19,7 @@ Your contacts and stats stay in your own Cloudflare account. Envelopen has an ad
 2. Clear the `SETUP_TOKEN` field, and type a passphrase of 32 characters or more. Save it. See [Secrets](#secrets).
 3. Wait for the build and the deploy to finish.
 
-To get updates, open Actions in your new repository and enable the Envelopen updates workflow. See [Update Envelopen](docs/guides/updating.md).
+The Deploy button copies the repository without the `.github` folder. To get updates, add the update workflow to your new repository. See [Add the update workflow](docs/guides/updating.md#add-the-update-workflow).
 
 The button creates the D1 database, the KV namespace, the R2 bucket, the queues with the dead-letter queue, the Workflows, and the Durable Objects. The deploy script applies the D1 migrations.
 

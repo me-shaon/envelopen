@@ -2,7 +2,8 @@
 // Semantic version helpers for the update and release workflows. No dependencies.
 //
 //   node scripts/update/version.mjs compare <a> <b>   Prints "newer" if a > b, "same", or "older".
-//   node scripts/update/version.mjs current [dir]     Prints the version in package.json.
+//   node scripts/update/version.mjs current [dir]     Prints ENVELOPEN_VERSION from
+//                                                     apps/worker/src/version.ts.
 //   node scripts/update/version.mjs notes <version> [CHANGELOG.md]
 //                                                     Prints the CHANGELOG section of a version.
 import { readFileSync, realpathSync } from "node:fs";
@@ -64,15 +65,31 @@ export function changelogSection(changelog, version) {
     .trim();
 }
 
+export const VERSION_FILE = "apps/worker/src/version.ts";
+const VERSION_LINE = /^export const ENVELOPEN_VERSION = "([^"]+)";$/m;
+
+/**
+ * The version of the Envelopen files in `dir`. It is not in package.json, because the
+ * Deploy button sets the version there to 0.0.0. Up to v0.5.0, version.ts read package.json,
+ * so a copy of those releases prints 0.0.0 here, or the version in its package.json.
+ */
+export function currentVersion(dir) {
+  const source = readFileSync(join(dir, VERSION_FILE), "utf8");
+  const match = VERSION_LINE.exec(source);
+  const version = match
+    ? match[1]
+    : JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).version;
+  parseVersion(version);
+  return version;
+}
+
 function main() {
   const [command, ...args] = process.argv.slice(2);
   if (command === "compare" && args.length === 2) {
     const r = compareVersions(args[0], args[1]);
     console.log(r > 0 ? "newer" : r === 0 ? "same" : "older");
   } else if (command === "current") {
-    const pkg = JSON.parse(readFileSync(join(args[0] ?? ".", "package.json"), "utf8"));
-    parseVersion(pkg.version);
-    console.log(pkg.version);
+    console.log(currentVersion(args[0] ?? "."));
   } else if (command === "notes" && args.length >= 1) {
     const section = changelogSection(readFileSync(args[1] ?? "CHANGELOG.md", "utf8"), args[0]);
     if (section === undefined) {

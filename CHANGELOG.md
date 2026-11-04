@@ -12,6 +12,8 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-04
+
 ### Added
 
 - The Worker makes `SIGNING_KEY` and `ENCRYPTION_KEY` on first use when they are not set, and keeps them in R2 under `secrets/`. The Deploy button now asks only for `SETUP_TOKEN`.
@@ -199,7 +201,8 @@ The first release of Envelopen: self-hosted email campaigns on Cloudflare Worker
 - Erase also removes the contact from stored batch data.
 - Unsubscribe links use the tracking domain only after it is verified.
 
-[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/me-shaon/envelopen/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/me-shaon/envelopen/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/me-shaon/envelopen/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/me-shaon/envelopen/compare/v0.2.0...v0.3.0

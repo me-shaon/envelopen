@@ -12,6 +12,10 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+### Added
+
+- On the **Contacts** page, you can select contacts, or every contact that matches the filters, and add them to a list or a tag, or remove them from it. A contact who is in the list or has the tag already does not change. See [Change the lists or tags of many contacts](docs/guides/import-contacts.md#change-the-lists-or-tags-of-many-contacts).
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

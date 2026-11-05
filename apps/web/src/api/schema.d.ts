@@ -554,6 +554,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contacts/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the lists or tags of many contacts
+         * @description Adds the selected contacts to a list or a tag, or removes them from it. Select the contacts by id (at most 500) or by the filters of the contact list (at most 50,000 matches). A contact who unsubscribed from the list stays unsubscribed, and removing from a list keeps that record. Adding to a list does not start its welcome series.
+         */
+        post: operations["contacts.bulk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contacts/{id}/consent": {
         parameters: {
             query?: never;
@@ -2403,6 +2423,14 @@ export interface components {
                 recipients: number;
                 auditEntries: number;
             };
+        };
+        BulkContactsResult: {
+            /** @description The selected contacts that exist. */
+            matched: number;
+            /** @description The contacts that the action added or removed. The others had it already. */
+            changed: number;
+            listId: number | null;
+            tagId: number | null;
         };
         List: {
             id: number;
@@ -6566,6 +6594,122 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An email provider or a DNS resolver failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "contacts.bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description add_to_list and remove_from_list need listId. add_tag needs tagName, and creates a missing tag. remove_tag needs tagId.
+                     * @enum {string}
+                     */
+                    action: "add_to_list" | "remove_from_list" | "add_tag" | "remove_tag";
+                    listId?: number;
+                    tagName?: string;
+                    tagId?: number;
+                    /** @description The selected contacts. Send this or filters, not both. */
+                    contactIds?: number[];
+                    /** @description Every contact that matches these filters, as on the contact list. An empty object selects every contact of the workspace. */
+                    filters?: {
+                        /** @description Matches part of the email address or the name. */
+                        search?: string;
+                        listId?: number;
+                        tagId?: number;
+                        /** @enum {string} */
+                        status?: "subscribed" | "unsubscribed" | "suppressed";
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkContactsResult"];
+                };
+            };
+            /** @description The input is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No valid session or API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The principal lacks the scope, or a session request is cross-origin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A request with the same Idempotency-Key is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The Idempotency-Key was used with a different path or body. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -197,6 +197,63 @@ test.describe("contacts", () => {
     await expect(page.getByRole("button", { name: "Remove tag Intro to Data" })).toBeVisible();
   });
 
+  test("tags and lists many contacts at once, and adds no duplicate", async ({ page }) => {
+    await signIn(page);
+    const base = `http://localhost:${CONTACTS_PORT}`;
+    const created = await page.request.post(`${base}/api/lists`, {
+      data: { name: "Bulk list" },
+      headers: { Origin: base },
+    });
+    expect(created.ok(), await created.text()).toBe(true);
+
+    await page.goto("/contacts");
+    await expect(page.getByTestId("contact-row")).toHaveCount(3);
+    await page.getByRole("checkbox", { name: "Select ana.silva@example.com" }).click();
+    await page.getByRole("checkbox", { name: "Select chen@example.com" }).click();
+    const bar = page.getByTestId("bulk-bar");
+    await expect(bar.getByTestId("bulk-count")).toHaveText("2 selected");
+
+    await bar.getByRole("button", { name: "Add tag" }).click();
+    const tagDialog = page.getByRole("dialog", { name: "Add a tag" });
+    await expect(tagDialog).toContainText("The change applies to 2 selected contacts.");
+    await tagDialog.getByLabel("Tag", { exact: true }).fill("Bulk VIP");
+    await tagDialog.getByRole("button", { name: "Add tag" }).click();
+    await expect(page.getByTestId("toast")).toContainText("Tagged 2 contacts with Bulk VIP.");
+    await expect(bar).toHaveCount(0);
+    await expect(page.getByTestId("contact-row").filter({ hasText: "Bulk VIP" })).toHaveCount(2);
+
+    // Every contact on the page, twice: the second run adds nobody.
+    for (const expected of [
+      "Added 3 contacts to Bulk list.",
+      "Added 0 contacts to Bulk list. 3 contacts were in the list already.",
+    ]) {
+      await page.getByRole("checkbox", { name: "Select the contacts on this page" }).click();
+      await expect(bar.getByTestId("bulk-count")).toHaveText("3 selected");
+      await bar.getByRole("button", { name: "Add to list" }).click();
+      const listDialog = page.getByRole("dialog", { name: "Add to a list" });
+      await listDialog.getByLabel("List", { exact: true }).selectOption({ label: "Bulk list" });
+      await listDialog.getByRole("button", { name: "Add to list" }).click();
+      await expect(page.getByTestId("toast").filter({ hasText: expected })).toBeVisible();
+    }
+
+    // The filter selects the tagged contacts. Removing the tag through it clears them.
+    await page
+      .getByRole("form", { name: "Filter contacts" })
+      .getByLabel("Tag", { exact: true })
+      .selectOption({ label: "Bulk VIP" });
+    await expect(page.getByTestId("contact-row")).toHaveCount(2);
+    await page.getByRole("checkbox", { name: "Select the contacts on this page" }).click();
+    await bar.getByRole("button", { name: "Remove tag" }).click();
+    const removeDialog = page.getByRole("dialog", { name: "Remove a tag" });
+    await removeDialog.getByLabel("Tag", { exact: true }).selectOption({ label: "Bulk VIP" });
+    await removeDialog.getByRole("button", { name: "Remove tag" }).click();
+    await expect(
+      page.getByTestId("toast").filter({ hasText: "Removed the tag Bulk VIP from 2 contacts." }),
+    ).toBeVisible();
+    await expect(page.getByTestId("contact-row")).toHaveCount(0);
+    await expectNoSeriousViolations(page);
+  });
+
   test("edits choice fields: options, contact answers, rename, and delete with merge", async ({
     page,
   }) => {

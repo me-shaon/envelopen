@@ -50,6 +50,7 @@ import {
   testAddressesRemove,
 } from "../connections/test-send";
 import { consentList, consentRecord } from "../consent/operations";
+import { contactsBulk } from "../contacts/bulk";
 import {
   fieldsAddOption,
   fieldsCreate,
@@ -236,6 +237,7 @@ export const registry = createRegistry([
   contactsErase,
   contactsAddTags,
   contactsRemoveTag,
+  contactsBulk,
   consentList,
   consentRecord,
   listsList,

@@ -1,6 +1,6 @@
 # Import contacts
 
-This guide explains how to import contacts from a CSV file, how to suppress addresses, and how to export contacts.
+This guide explains how to import contacts from a CSV file, how to change the lists or tags of many contacts, how to suppress addresses, and how to export contacts.
 
 ## Before you start
 
@@ -124,6 +124,30 @@ A suppressed address gets no campaign email. Hard bounces and complaints suppres
 3. Select **Suppress N addresses**.
 
 An address that is suppressed already keeps its first reason. A contact with a suppressed address stays in the workspace with the status **Suppressed**. Envelopen stores a keyed hash of each suppressed address, so a later import or API call skips it. Only the owner can remove a suppression.
+
+### Change the lists or tags of many contacts
+
+Use this to put contacts that you already imported into a list or a tag, or to take them out.
+
+1. Open **Contacts**.
+2. Set the filters, if you need them.
+3. Select the checkbox of each contact. To select every contact on the page, select the checkbox in the table header.
+4. To select every contact that matches the filters, select **Select all N that match**. This option shows when you select every contact on the page and more contacts match.
+5. Select **Add to list**, **Add tag**, **Remove from list**, or **Remove tag**.
+6. Select the list or the tag. For **Add tag**, you can type a new tag name. Envelopen creates the tag.
+7. Select the button of the action.
+
+A message shows how many contacts changed. A contact who is in the list or has the tag already does not change, so a contact never gets a second membership.
+
+These rules apply:
+
+- A contact who unsubscribed from the list stays unsubscribed. **Add to list** does not subscribe the contact again.
+- **Remove from list** keeps the record of each contact who unsubscribed from the list.
+- **Add to list** does not start the welcome series of the list.
+- One change can include at most 500 selected contacts, or at most 50,000 contacts that match the filters. For more contacts, narrow the filters, and repeat the change.
+- On Workers Free, each new membership counts toward the D1 daily write limit.
+
+The audit log records each change with the number of contacts. The REST API has the same action: `POST /api/contacts/bulk`, with the `contacts:write` scope.
 
 ### Export contacts
 

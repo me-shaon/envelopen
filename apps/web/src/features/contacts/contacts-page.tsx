@@ -12,6 +12,7 @@ import {
 } from "@/api/queries";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { FormError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import { Table, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { useCurrentWorkspace } from "@/components/workspace-context";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { type BulkAction, BulkBar, BulkDialog, NO_SELECTION, type Selection } from "./bulk-actions";
 import {
   CONSENT,
   ContactsNav,
@@ -201,12 +203,32 @@ function Filters({
   );
 }
 
-function ContactRow({ contact }: { contact: Contact }) {
+function ContactRow({
+  contact,
+  selected,
+  onSelect,
+}: {
+  contact: Contact;
+  selected: boolean;
+  onSelect: (selected: boolean) => void;
+}) {
   const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ");
   const subscribedLists = contact.lists.filter((list) => list.status === "subscribed").length;
   const leftLists = contact.lists.length - subscribedLists;
   return (
-    <TableRow data-testid="contact-row" className="hover:bg-muted/60">
+    <TableRow
+      data-testid="contact-row"
+      data-selected={selected || undefined}
+      className="hover:bg-muted/60 data-selected:bg-muted/40"
+    >
+      <TableCell className="w-8 pr-0">
+        <Checkbox
+          checked={selected}
+          onCheckedChange={(checked) => onSelect(checked === true)}
+          aria-label={`Select ${contact.email}`}
+          className="mt-0 align-middle"
+        />
+      </TableCell>
       <TableCell className="max-w-[280px]">
         <Link
           to="/contacts/$contactId"
@@ -345,9 +367,39 @@ export function ContactsPage({
     placeholderData: keepPreviousData,
   });
   const [exporting, setExporting] = useState(false);
+  const [selection, setSelection] = useState<Selection>(NO_SELECTION);
+  const [bulkAction, setBulkAction] = useState<BulkAction | null>(null);
   const items = contacts.data?.pages.flatMap((page) => page.items) ?? [];
   const filtered = Object.values(filters).some((value) => value !== undefined && value !== "");
   const empty = !filtered && contacts.isSuccess && items.length === 0;
+
+  // A selection belongs to the filters that made it, so new filters clear it.
+  const filtersKey = JSON.stringify(filters);
+  const [selectionKey, setSelectionKey] = useState(filtersKey);
+  if (selectionKey !== filtersKey) {
+    setSelectionKey(filtersKey);
+    setSelection(NO_SELECTION);
+  }
+  const matchingCount = matching.data?.matching;
+  const isSelected = (id: number) => selection.mode === "all" || selection.ids.has(id);
+  const selectedCount =
+    selection.mode === "all" ? (matchingCount ?? items.length) : selection.ids.size;
+  const allLoadedSelected = items.length > 0 && items.every((contact) => isSelected(contact.id));
+
+  function selectOne(id: number, selected: boolean) {
+    const ids = new Set(
+      selection.mode === "all" ? items.map((contact) => contact.id) : selection.ids,
+    );
+    if (selected) ids.add(id);
+    else ids.delete(id);
+    setSelection({ mode: "ids", ids });
+  }
+
+  function selectLoaded(selected: boolean) {
+    setSelection(
+      selected ? { mode: "ids", ids: new Set(items.map((contact) => contact.id)) } : NO_SELECTION,
+    );
+  }
 
   return (
     <div className="flex flex-col gap-10">
@@ -390,7 +442,7 @@ export function ContactsPage({
             <Filters filters={filters} onChange={onFiltersChange} />
             <div className="flex min-h-[18px] items-center gap-3">
               <div className="text-xs text-muted-foreground" aria-live="polite">
-                {matching.data ? (
+                {selectedCount > 0 ? null : matching.data ? (
                   <>
                     <Figure value={matching.data.matching} />{" "}
                     {matching.data.matching === 1 ? "contact" : "contacts"}
@@ -403,6 +455,18 @@ export function ContactsPage({
               {/* The old rows stay while new filters load. This note says they are updating. */}
               <Refreshing active={contacts.isPlaceholderData && contacts.isFetching} />
             </div>
+            {selectedCount > 0 ? (
+              <BulkBar
+                selection={selection}
+                selectedCount={selectedCount}
+                loadedCount={items.length}
+                matchingCount={matchingCount}
+                filtered={filtered}
+                onSelectAll={() => setSelection({ mode: "all" })}
+                onClear={() => setSelection(NO_SELECTION)}
+                onAction={setBulkAction}
+              />
+            ) : null}
             {contacts.isError ? (
               <p role="alert" className="m-0 text-[13px] text-muted-foreground">
                 The contacts did not load. {errorText(contacts.error)}
@@ -423,6 +487,14 @@ export function ContactsPage({
                 <Table aria-label="Contacts">
                   <thead>
                     <tr>
+                      <TableHead className="w-8 pr-0">
+                        <Checkbox
+                          checked={allLoadedSelected}
+                          onCheckedChange={(checked) => selectLoaded(checked === true)}
+                          aria-label="Select the contacts on this page"
+                          className="mt-0 align-middle"
+                        />
+                      </TableHead>
                       <TableHead>Contact</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Consent</TableHead>
@@ -433,7 +505,12 @@ export function ContactsPage({
                   </thead>
                   <tbody>
                     {items.map((contact) => (
-                      <ContactRow key={contact.id} contact={contact} />
+                      <ContactRow
+                        key={contact.id}
+                        contact={contact}
+                        selected={isSelected(contact.id)}
+                        onSelect={(selected) => selectOne(contact.id, selected)}
+                      />
                     ))}
                   </tbody>
                 </Table>
@@ -454,6 +531,19 @@ export function ContactsPage({
         )}
       </div>
       <ExportDialog open={exporting} onOpenChange={setExporting} filters={filters} />
+      <BulkDialog
+        action={bulkAction}
+        selection={selection}
+        selectedCount={selectedCount}
+        filters={filters}
+        onOpenChange={(open) => {
+          if (!open) setBulkAction(null);
+        }}
+        onDone={() => {
+          setBulkAction(null);
+          setSelection(NO_SELECTION);
+        }}
+      />
     </div>
   );
 }

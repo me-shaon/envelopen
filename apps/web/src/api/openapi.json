@@ -1376,6 +1376,37 @@
           "removed"
         ]
       },
+      "BulkContactsResult": {
+        "type": "object",
+        "properties": {
+          "matched": {
+            "type": "integer",
+            "description": "The selected contacts that exist."
+          },
+          "changed": {
+            "type": "integer",
+            "description": "The contacts that the action added or removed. The others had it already."
+          },
+          "listId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tagId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "matched",
+          "changed",
+          "listId",
+          "tagId"
+        ]
+      },
       "List": {
         "type": "object",
         "properties": {
@@ -10487,6 +10518,191 @@
           },
           "404": {
             "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "An email provider or a DNS resolver failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contacts/bulk": {
+      "post": {
+        "operationId": "contacts.bulk",
+        "summary": "Change the lists or tags of many contacts",
+        "description": "Adds the selected contacts to a list or a tag, or removes them from it. Select the contacts by id (at most 500) or by the filters of the contact list (at most 50,000 matches). A contact who unsubscribed from the list stays unsubscribed, and removing from a list keeps that record. Adding to a list does not start its welcome series.",
+        "tags": [
+          "contacts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-envelopen-scope": "contacts:write",
+        "x-envelopen-risk": "write",
+        "x-envelopen-mcp": "later",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "add_to_list",
+                      "remove_from_list",
+                      "add_tag",
+                      "remove_tag"
+                    ],
+                    "description": "add_to_list and remove_from_list need listId. add_tag needs tagName, and creates a missing tag. remove_tag needs tagId."
+                  },
+                  "listId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "tagName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "tagId": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "contactIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "description": "The selected contacts. Send this or filters, not both."
+                  },
+                  "filters": {
+                    "type": "object",
+                    "properties": {
+                      "search": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Matches part of the email address or the name."
+                      },
+                      "listId": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "tagId": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "subscribed",
+                          "unsubscribed",
+                          "suppressed"
+                        ]
+                      }
+                    },
+                    "description": "Every contact that matches these filters, as on the contact list. An empty object selects every contact of the workspace."
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkContactsResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The input is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session or API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The principal lacks the scope, or a session request is cross-origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A request with the same Idempotency-Key is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The Idempotency-Key was used with a different path or body.",
             "content": {
               "application/json": {
                 "schema": {

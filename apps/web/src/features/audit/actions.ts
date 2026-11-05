@@ -86,6 +86,7 @@ const ACTIONS: Record<string, ActionText> = {
   "contacts.export": { label: counted("Contact data exported", "contact exports") },
   "contacts.add_tags": { label: counted("Tags added to a contact", "tag changes") },
   "contacts.remove_tag": { label: counted("Tag removed from a contact", "tag changes") },
+  "contacts.bulk": { label: counted("Lists or tags changed for many contacts", "bulk changes") },
   "consent.record": { label: counted("Consent recorded", "consent changes") },
   "imports.create": { label: () => "Contact file uploaded." },
   "imports.start": { label: () => "Contact import started.", notable: true },

@@ -1,12 +1,13 @@
 import {
   type FormPageForm,
   type FormPageView,
+  headlessSnippet,
   recommendedFormHeight,
   renderFormPage,
 } from "@envelopen/email-render/form-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, CheckIcon, CopyIcon } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { ApiRequestError, api, unwrap } from "@/api/client";
 import {
@@ -248,7 +249,60 @@ function Embed({ form }: { form: SignupForm }) {
       >
         <CopyValue label="iframe snippet" value={form.embedSnippet} testId="embed-snippet" />
       </Field>
+      <OwnForm hostedUrl={form.hostedUrl} />
     </section>
+  );
+}
+
+/** The headless flow: the website renders its own form and posts JSON. */
+function OwnForm({ hostedUrl }: { hostedUrl: string }) {
+  const example = useMemo(() => headlessSnippet(hostedUrl), [hostedUrl]);
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(example);
+      setCopied(true);
+      toast("Example copied.");
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("The example was not copied. Select the text and copy it.");
+    }
+  }
+  return (
+    <fieldset className="flex flex-col gap-2" aria-describedby="own-form-hint">
+      <legend className="mb-1 text-[13px] font-medium">Your own form</legend>
+      <span id="own-form-hint" className="text-xs text-muted-foreground">
+        Your website renders the fields and posts JSON. Add its origin under "Websites that can
+        embed the form", and add its host name to your Turnstile widget.
+      </span>
+      <Field id="own-form-metadata" label="Metadata URL">
+        <CopyValue label="metadata URL" value={`${hostedUrl}.json`} testId="own-form-metadata" />
+      </Field>
+      <Field id="own-form-post" label="Post URL">
+        <CopyValue label="post URL" value={hostedUrl} testId="own-form-post" />
+      </Field>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-medium">Example</span>
+        <Button type="button" variant="ghost" size="sm" onClick={() => void copy()}>
+          {copied ? (
+            <CheckIcon className="size-3.5" aria-hidden="true" />
+          ) : (
+            <CopyIcon className="size-3.5" aria-hidden="true" />
+          )}
+          {copied ? "Copied" : "Copy example"}
+        </Button>
+      </div>
+      {/* Focusable, so a keyboard user can scroll the example. */}
+      <section
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access.
+        tabIndex={0}
+        aria-label="HTML and JavaScript example"
+        data-testid="own-form-example"
+        className="max-h-64 overflow-auto rounded-[9px] border border-input bg-card px-3 py-2"
+      >
+        <pre className="m-0 font-mono text-[11.5px] leading-relaxed">{example}</pre>
+      </section>
+    </fieldset>
   );
 }
 
@@ -459,7 +513,7 @@ function Editor({ form }: { form: SignupForm | null }) {
           <Field
             id="form-origins"
             label="Websites that can embed the form"
-            hint="One origin on each line, for example https://www.example.com. Use https and no path."
+            hint="One origin on each line, for example https://www.example.com. Use https and no path. These websites can also post your own form."
             error={errorOf("allowedOrigins")}
           >
             <Textarea

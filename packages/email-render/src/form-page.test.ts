@@ -3,6 +3,7 @@ import {
   embedSnippet,
   FORM_COPY,
   type FormPageForm,
+  headlessSnippet,
   recommendedFormHeight,
   renderFormPage,
   usesTurnstile,
@@ -103,6 +104,20 @@ describe("renderFormPage", () => {
     expect(snippet).toContain('src="https://mail.example.com/f/abc?embed=1"');
     expect(snippet).toContain(`height="${base}"`);
     expect(snippet).not.toContain("<script");
+  });
+});
+
+describe("the headless snippet", () => {
+  it("loads the metadata, uses the headless action, and renders owner texts as text", () => {
+    const snippet = headlessSnippet("https://mail.example.com/f/0123456789abcdef0123");
+    expect(snippet).toContain('"https://mail.example.com/f/0123456789abcdef0123.json"');
+    expect(snippet).toContain("meta.turnstile.action");
+    expect(snippet).toContain('"content-type": "application/json"');
+    expect(snippet).toContain("response.status === 409");
+    expect(snippet).not.toContain("innerHTML");
+    // A URL cannot close the inline script.
+    const hostile = headlessSnippet("https://x.test/f/</script><script>alert(1)</script>");
+    expect(hostile.match(/<\/script>/g)).toHaveLength(2);
   });
 });
 

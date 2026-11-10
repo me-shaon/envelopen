@@ -273,6 +273,111 @@ export function embedSnippet(hostedUrl: string, title: string, height: number): 
   return `<iframe src="${esc(hostedUrl)}?embed=1" title="${esc(title)}" width="100%" height="${height}" style="border:0;max-width:560px;width:100%" loading="lazy"></iframe>`;
 }
 
+/** A JSON string that is safe inside an inline script: no `<` can close the script element. */
+function scriptString(value: string): string {
+  return JSON.stringify(value).replaceAll("<", "\\u003c");
+}
+
+/**
+ * A minimal page for a website that renders the form itself (the headless flow). It
+ * loads the metadata, renders the fields with `textContent` (no HTML from the owner's
+ * texts), runs the Turnstile widget with the headless action, and posts JSON. A 409
+ * means that the consent text changed, so the page loads the metadata again.
+ */
+export function headlessSnippet(hostedUrl: string): string {
+  return `<form id="signup" novalidate>
+  <label>Email address <input type="email" name="email" required autocomplete="email"></label>
+  <div id="signup-fields"></div>
+  <p id="signup-consent"></p>
+  <div id="signup-turnstile"></div>
+  <button type="submit">Subscribe</button>
+  <p id="signup-status" role="status"></p>
+</form>
+<script src="${TURNSTILE_SCRIPT}?render=explicit"></script>
+<script>
+(() => {
+  const META_URL = ${scriptString(`${hostedUrl}.json`)};
+  const form = document.getElementById("signup");
+  const status = document.getElementById("signup-status");
+  let meta = null;
+  let widget = null;
+
+  function fieldOf(field) {
+    const box = document.createElement("fieldset");
+    const legend = document.createElement("legend");
+    legend.textContent = field.label + (field.required ? " (required)" : "");
+    box.append(legend);
+    const add = (type, value, text) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = type;
+      input.name = field.key;
+      if (value) input.value = value;
+      label.append(input, text ? " " + text : "");
+      box.append(label);
+    };
+    if (field.type === "choice" || field.type === "multi") {
+      const type = field.type === "choice" ? "radio" : "checkbox";
+      for (const option of field.options) add(type, String(option.id), option.label);
+    } else if (field.type === "boolean") {
+      add("checkbox", "true", "");
+    } else {
+      add(field.type === "number" || field.type === "date" ? field.type : "text", "", "");
+    }
+    return box;
+  }
+
+  async function load() {
+    meta = await (await fetch(META_URL, { cache: "no-store" })).json();
+    if (!meta.ok) {
+      status.textContent = "This form is not available. Try again later.";
+      return;
+    }
+    document.getElementById("signup-fields").replaceChildren(...meta.fields.map(fieldOf));
+    document.getElementById("signup-consent").textContent = meta.consentText;
+    if (widget === null) {
+      widget = turnstile.render("#signup-turnstile", {
+        sitekey: meta.turnstile.siteKey,
+        action: meta.turnstile.action,
+      });
+    }
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!meta || !meta.ok) return;
+    const data = new FormData(form);
+    const fields = {};
+    for (const field of meta.fields) fields[field.key] = data.getAll(field.key);
+    const response = await fetch(meta.submitUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: data.get("email"),
+        fields,
+        consentVersion: meta.consentVersion,
+        turnstileToken: turnstile.getResponse(widget) || "",
+      }),
+    });
+    // A token works one time only.
+    turnstile.reset(widget);
+    if (response.status === 409) {
+      await load();
+      status.textContent = "The consent text changed. Read it, then submit again.";
+      return;
+    }
+    const result = await response.json();
+    status.textContent = result.ok
+      ? "Check your inbox. Select the link in the email to confirm your subscription."
+      : (result.errors || []).map((error) => error.message).join(" ") ||
+        "This form is not available. Try again later.";
+  });
+
+  load();
+})();
+</script>`;
+}
+
 function errorFor(errors: readonly FormPageError[], target: string): FormPageError | undefined {
   return errors.find((error) => error.target === target);
 }

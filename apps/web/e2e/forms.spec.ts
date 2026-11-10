@@ -180,6 +180,15 @@ test.describe("signup forms", () => {
     expect(hostedUrl).toMatch(new RegExp(`^${BASE}/f/[0-9a-f]{20}$`));
     expect(snippet).toContain(`src="${hostedUrl}?embed=1"`);
     expect(snippet).toMatch(/height="\d+"/);
+    // Your own form: the two URLs and an example that loads the metadata.
+    await expect(page.getByTestId("own-form-metadata")).toHaveText(`${hostedUrl}.json`);
+    await expect(page.getByTestId("own-form-post")).toHaveText(hostedUrl);
+    await expect(page.getByTestId("own-form-example")).toContainText(`"${hostedUrl}.json"`);
+    const metadata = await page.request.get(`${hostedUrl}.json`, {
+      headers: { origin: ALLOWED_SITE },
+    });
+    expect(metadata.headers()["access-control-allow-origin"]).toBe(ALLOWED_SITE);
+    expect(await metadata.json()).toMatchObject({ ok: true, submitUrl: hostedUrl });
     await expectNoSeriousViolations(page);
     checkCsp();
   });

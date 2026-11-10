@@ -22,12 +22,18 @@ Turnstile is the bot check of Cloudflare. The form page shows the widget, and th
 3. Under the hostnames, add the hostname of your deployment, for example `envelopen.example.workers.dev`. If people also open the Worker on a custom domain, add that hostname too.
 4. Select the widget mode **Managed**.
 5. Create the widget. Copy the site key and the secret key.
-6. From the root of your deployment repository, set the two Worker secrets:
+6. Set the two keys as Worker secrets. Use one of these methods:
 
-   ```sh
-   npx wrangler secret put TURNSTILE_SITE_KEY
-   npx wrangler secret put TURNSTILE_SECRET
-   ```
+   - From the root of your deployment repository, run:
+
+     ```sh
+     npx wrangler secret put TURNSTILE_SITE_KEY
+     npx wrangler secret put TURNSTILE_SECRET
+     ```
+
+   - In the Cloudflare dashboard, open the Worker, then **Settings** > **Variables and Secrets**. Select **Add variable** for each key, and set **Type** to **Secret**.
+
+   Do not use the type **Text**, also for the site key. Each deploy replaces the text variables with the `vars` of `wrangler.jsonc`, so a text key disappears at the next update. Secrets stay. Ignore the dashboard notice that tells you to add a text variable to `wrangler.jsonc`.
 
 7. Open **Forms** in Envelopen. Check that the notice "Forms cannot take signups yet" is gone.
 

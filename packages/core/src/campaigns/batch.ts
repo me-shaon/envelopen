@@ -340,6 +340,42 @@ export async function writeBatchResults(
   results: BatchResults,
   now: number,
 ): Promise<boolean> {
-  const out = await db.atomic(resultQueries(db.db, pointer, results, now));
+  const out = await db.atomic(
+    resultQueries(db.db, pointer, await onlyPending(db, pointer, results), now),
+  );
   return (out.at(-1)?.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Drops the results for recipients that are no longer pending. A Resend retry that keeps
+ * its set reports recipients that an earlier attempt marked sent already. Their rows do
+ * not change, so the counters and the rollups must not count them again.
+ */
+async function onlyPending(
+  db: DbConnection,
+  pointer: BatchPointer,
+  results: BatchResults,
+): Promise<BatchResults> {
+  const ids = [...results.sent, ...results.failed, ...results.skipped].map((row) => row.id);
+  if (ids.length === 0) return results;
+  const pending = new Set<number>();
+  // D1 allows at most 100 bound parameters in one query.
+  for (const part of chunk(ids, 90)) {
+    const rows = await db.db
+      .selectFrom("campaign_recipients")
+      .select("id")
+      .where("workspace_id", "=", pointer.workspaceId)
+      .where("batch_id", "=", pointer.batchId)
+      .where("status", "=", "pending")
+      .where("id", "in", part)
+      .execute();
+    for (const row of rows) pending.add(row.id);
+  }
+  if (pending.size === ids.length) return results;
+  return {
+    ...results,
+    sent: results.sent.filter((row) => pending.has(row.id)),
+    failed: results.failed.filter((row) => pending.has(row.id)),
+    skipped: results.skipped.filter((row) => pending.has(row.id)),
+  };
 }

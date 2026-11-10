@@ -23,6 +23,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 - On Workers Free, the send consumer stops taking new campaign batches when the day's D1 writes reach 95% of the limit. The batches wait on the queue until 00:00 UTC. Before, batches that sent at the limit could not record their results, and the campaign asked you to retry or skip them.
 - After the D1 daily limit resets, the cron resumes at most 20 campaigns and dispatches a few rounds of batches for each, so one run stays within the subrequest limit. The sweep dispatches the rest in the next minutes. Campaigns that the limit did not stop no longer get pause and resume rows in the audit log.
 - An unsubscribe that waits in the ledger and fails with an error other than the D1 limit no longer holds every campaign after the reset. It stays in the ledger, sends still skip the contact, and the cron tries it again.
+- A Resend retry that kept its recipient set counted the recipients that an earlier attempt sent a second time in the campaign stats. Now only the recipients that change count.
 
 ### Security
 

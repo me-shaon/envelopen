@@ -22,6 +22,12 @@ The release workflow uses the section of a version as the notes of its GitHub re
 - An error in the cleanup of expired idempotency keys or expired files no longer stops the other cron jobs, for example the daily backup. These two jobs wait while the D1 daily limit is reached.
 - On Workers Free, the send consumer stops taking new campaign batches when the day's D1 writes reach 95% of the limit. The batches wait on the queue until 00:00 UTC. Before, batches that sent at the limit could not record their results, and the campaign asked you to retry or skip them.
 
+### Security
+
+- The MCP server SDK is now 2.3.1 and `agents` is now 0.29.0. The new versions limit the request body size, and they fix a memory exhaustion bug during validation.
+- Zod is now 4.6.7, with the fix for memory exhaustion on large constrained collections.
+- `body-parser` and `fast-uri`, which come in through the MCP SDK, are pinned to their fixed versions.
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

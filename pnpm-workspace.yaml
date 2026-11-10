@@ -15,3 +15,7 @@ overrides:
   # react-email asks for any render at or above 2.1.0. Pin it, so a fresh release
   # does not enter the lockfile before it is two weeks old.
   react-email>@react-email/render: 2.1.0
+  # The legacy MCP SDK under agents pulls these in through express and ajv. Pin the
+  # releases with the security fixes until agents ships them.
+  "body-parser@>=2.0.0 <2.4.0": 2.4.0
+  "fast-uri@>=3.0.0 <3.1.9": 3.1.9

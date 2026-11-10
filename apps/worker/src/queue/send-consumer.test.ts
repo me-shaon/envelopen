@@ -9,6 +9,7 @@ import {
   runOperation,
   type SweepDeps,
   sessionPrincipal,
+  writeBatchResults,
 } from "@envelopen/core";
 import { addContacts } from "@envelopen/core/testing/campaign-fixtures";
 import { getAdapter } from "@envelopen/providers";
@@ -255,6 +256,36 @@ describe("exactly once and uncertain batches", () => {
       sent_count: 3,
     });
     expect((await campaignRow(db, seeded.workspaceId, campaignId)).status).toBe("sent");
+  });
+
+  it("counts a recipient once when a later result reports it as sent again", async () => {
+    const { db, seeded, campaignId, pointers } = await sendingCampaign({ contacts: 2 });
+    const pointer = pointers[0] as (typeof pointers)[number];
+    const claim = await claimBatch(
+      db,
+      pointer,
+      {
+        frozen: { v: 1, origin: "https://envelopen.test", recipients: [], skipped: [] },
+        idempotencyKey: null,
+        leaseUntil: T0 + LEASE_MS,
+      },
+      T0,
+    );
+    expect(claim).not.toBeNull();
+    const [one, two] = await recipientRows(db, seeded.workspaceId, campaignId);
+    const sent = (row: typeof one) => ({ id: row?.id ?? 0, providerMessageId: null });
+    const results = { failed: [], skipped: [] };
+    await writeBatchResults(db, pointer, { ...results, sent: [sent(one)], status: "claimed" }, T0);
+    await writeBatchResults(
+      db,
+      pointer,
+      { ...results, sent: [sent(one), sent(two)], status: "done" },
+      T0,
+    );
+    expect(await batchRow(db, seeded.workspaceId, pointer.batchId)).toMatchObject({
+      status: "done",
+      sent_count: 2,
+    });
   });
 
   it("keeps the set and the key after a refusal that follows an unknown attempt, so nobody gets two copies", async () => {

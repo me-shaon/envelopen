@@ -1,0 +1,11 @@
+# The workflows pin each action to a full commit SHA. Dependabot opens a pull request
+# when an action has a new release, so the pins do not get old.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

@@ -12,9 +12,17 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-10
+
 ### Added
 
+- Your website can render its own signup form and post it as JSON to `/f/<id>`. The metadata is at `/f/<id>.json`. Only the origins in **Websites that can embed the form** get CORS headers. Envelopen keeps the Turnstile check, the rate limits, and double opt-in. The form editor shows the two URLs and an example under **Share and embed** > **Your own form**. See [Use your own form](docs/guides/signup-forms.md#use-your-own-form).
+- The consent record of a signup stores its source: the hosted page, the iframe, or your own form. For your own form, it also stores the origin of the website. Signups from before this version count as the hosted page.
 - On the **Contacts** page, you can select contacts, or every contact that matches the filters, and add them to a list or a tag, or remove them from it. A contact who is in the list or has the tag already does not change. See [Change the lists or tags of many contacts](docs/guides/import-contacts.md#change-the-lists-or-tags-of-many-contacts).
+
+### Manual steps
+
+- Only if you use your own form: add the hostname of each website to your Turnstile widget. A widget on the Free plan holds at most 10 hostnames. See [Set up Turnstile](docs/guides/signup-forms.md#set-up-turnstile).
 
 ### Breaking
 
@@ -230,7 +238,8 @@ The first release of Envelopen: self-hosted email campaigns on Cloudflare Worker
 - Erase also removes the contact from stored batch data.
 - Unsubscribe links use the tracking domain only after it is verified.
 
-[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/me-shaon/envelopen/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/me-shaon/envelopen/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/me-shaon/envelopen/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/me-shaon/envelopen/compare/v0.3.0...v0.4.0

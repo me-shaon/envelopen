@@ -384,6 +384,19 @@ Expected result: Envelopen creates the webhook on the domain at connect, and rem
 5. Remove the connection in Envelopen. Check that Mailgun keeps your own URL and removed the Envelopen URL.
 6. Connect again with a domain sending key. Record whether the automatic setup fails, and whether the dialog shows the manual steps.
 
+## 30. Your own form on a real website (v0.7)
+
+Expected result: a JSON signup from a listed website passes Turnstile and gets a confirmation email, and another website gets no CORS headers.
+
+1. Add the hostname of a website that you control to the Turnstile widget.
+2. Add the origin of that website to **Websites that can embed the form**, and save the form.
+3. Paste the **Example** from **Your own form** into a page of that website. Publish the page over https.
+4. Submit one of your own addresses. Check that the page shows "Check your inbox", and that the email arrives.
+5. Confirm the address. Check that the contact is subscribed.
+6. Change the consent text, and save the form. Submit from the open page without a reload. Check that the page loads the new text and asks you to submit again.
+7. Paste the example into a page on a website that is not in the list. Check that the browser console shows a CORS error, and that no email arrives.
+8. Run `npx wrangler tail --format json`. Check that no siteverify call fails with `hostname-mismatch` or `action-mismatch`.
+
 ## Release process
 
 A release is a `vX.Y.Z` tag on `main`. The release workflow (`.github/workflows/release.yml`) checks the tag, runs the checks, and creates the GitHub release. The update workflow in each copy then finds the release.

@@ -1,6 +1,6 @@
 # Signup forms
 
-This guide explains how to create a signup form, how to put it on your website, and how double opt-in works. A form adds a subscriber to your lists only after the subscriber confirms the address.
+This guide explains how to create a signup form, how to put it on your website or post your own form to it, and how double opt-in works. A form adds a subscriber to your lists only after the subscriber confirms the address.
 
 ## Before you start
 
@@ -37,7 +37,9 @@ Turnstile is the bot check of Cloudflare. The form page shows the widget, and th
 
 7. Open **Forms** in Envelopen. Check that the notice "Forms cannot take signups yet" is gone.
 
-You do not add the websites that embed the form to the widget. The widget runs on the hosted page of the Worker, also inside an iframe. The Worker accepts a token only when its hostname is the hostname of the form page, and its action is the action of the widget (`signup` or `resend`).
+For the hosted page and the iframe, you do not add the websites that embed the form to the widget. The widget runs on the hosted page of the Worker, also inside an iframe. The Worker accepts a token only when its hostname is the hostname of the form page, and its action is the action of the widget (`signup` or `resend`).
+
+For [your own form](#use-your-own-form), the widget runs on your website. Add the hostname of each of those websites to the widget, for example `www.example.com`. A widget on the Free plan holds at most 10 hostnames, for all workspaces of the deployment together. A hostname also covers its subdomains.
 
 For local development, use the test keys of Cloudflare in `.dev.vars`. They always pass. See `.dev.vars.example`.
 
@@ -86,6 +88,86 @@ The rules for an origin:
 Envelopen puts these origins in the `frame-ancestors` policy of the form page. A browser refuses to show the form in an iframe on any other website.
 
 The snippet sets a recommended height in pixels. The editor shows the number in the hint of **Iframe snippet**. This height fits every state of the form, including the error summary. The height grows with the number of fields and options. If you add fields or options, copy the snippet again. The snippet sets a width of 100% and a maximum width of 560 px.
+
+### Use your own form
+
+Your website can render its own form and post it to Envelopen. Envelopen keeps the same rules as for the hosted page: Turnstile, the rate limits, double opt-in, and the consent record.
+
+1. In **Websites that can embed the form**, type the origin of your website, for example `https://www.example.com`. The rules for an origin are the same as for the iframe.
+2. Select **Save form**.
+3. Add the hostname of your website to your Turnstile widget. See [Set up Turnstile](#set-up-turnstile).
+4. Under **Share and embed** > **Your own form**, copy the **Example**.
+5. Paste the example into your website, and change the markup and the styles as necessary.
+
+The example loads the form, shows the fields and the consent text, runs the Turnstile widget, and posts the answers. It shows the owner's texts as plain text.
+
+Your website must show the consent text from the metadata, and send the consent version of that text. Envelopen cannot see your page, so the consent record names your website as the place where the subscriber saw the text. See [The consent record](#the-consent-record).
+
+Remove `http://localhost` origins before you go live. An origin in the list can post the form.
+
+If your website has a Content Security Policy, allow `https://challenges.cloudflare.com` in `script-src` and `frame-src`, and the origin of your deployment in `connect-src`.
+
+#### Load the form
+
+Send `GET https://<your-worker>/f/<id>.json`. The **Metadata URL** in the editor is this URL.
+
+```json
+{
+  "ok": true,
+  "name": "Course news",
+  "consentText": "I agree to get the course news.",
+  "consentVersion": 3,
+  "fields": [
+    {
+      "key": "topics",
+      "label": "Topics",
+      "type": "multi",
+      "options": [{ "id": 12, "label": "Design" }],
+      "required": false
+    }
+  ],
+  "turnstile": { "siteKey": "0x4AAAA...", "action": "signup-headless" },
+  "submitUrl": "https://<your-worker>/f/<id>"
+}
+```
+
+The field `type` is `text`, `number`, `date`, `boolean`, `choice`, or `multi`. Do not keep the metadata in a cache. If the consent text changes, a submission with the old version fails.
+
+| Status | Body | Meaning |
+|---|---|---|
+| 200 | `{ "ok": true, ... }` | The form is on. |
+| 404 | `{ "ok": false, "reason": "unavailable" }` | The form does not exist or is off. |
+| 503 | `{ "ok": false, "reason": "not_set_up" }` | Turnstile is not set up. |
+
+#### Submit the form
+
+Send `POST https://<your-worker>/f/<id>` from the browser, with the header `Content-Type: application/json`:
+
+```json
+{
+  "email": "reader@example.org",
+  "fields": { "topics": ["12"], "company": "Example Ltd" },
+  "consentVersion": 3,
+  "turnstileToken": "<token from the widget>"
+}
+```
+
+- Give each field value as a string, or as a list of strings. For a choice field, send the option ids. For a **Yes or no** field, send `"true"` when the box is selected.
+- Render the Turnstile widget with the site key and the action from the metadata. A token works one time only. Reset the widget after each submission.
+- Post from the browser of the subscriber, not from your server. The rate limit counts each IP address, and the Turnstile token must come from a widget on your website.
+
+| Status | Body | Meaning |
+|---|---|---|
+| 200 | `{ "ok": true }` | Show "Check your inbox". The answer is the same for every valid submission, so it does not show if the address is already on your lists. |
+| 400 | `{ "ok": false, "errors": [{ "target": "email", "message": "..." }] }` | A value or the Turnstile check failed. `target` is `email`, a field key, or `null` for the whole form. |
+| 403 | `{ "ok": false, "reason": "origin" }` | The request has no `Origin`, or the origin is not in **Websites that can embed the form**. |
+| 404 | `{ "ok": false, "reason": "unavailable" }` | The form does not exist or is off. |
+| 409 | `{ "ok": false, "reason": "consent_changed" }` | The consent text changed. Load the metadata again, show the new text, and let the subscriber submit again. |
+| 503 | `{ "ok": false, "reason": "not_set_up" }` or `"unavailable"` | Turnstile is not set up, or the Worker could not do the request. Try again later. |
+
+Envelopen sends CORS headers only to an origin in the list. It does not allow credentials. The confirmation link in the email opens the Worker, not your website.
+
+The `Origin` check stops other websites in a browser. It does not stop a script, because a script can send any `Origin`. The Turnstile check stops scripts: the Worker accepts a token only when its hostname is the host of the `Origin`, and its action is `signup-headless`.
 
 ### Custom fields on a form
 
@@ -143,6 +225,7 @@ Each confirmation adds a consent event to the contact. The contact page shows it
 
 - The form.
 - The consent text version that the subscriber saw.
+- The source of the signup: the hosted page, the iframe, or your own form. For your own form, it also stores the origin of your website.
 - A keyed hash of the IP address of the submission. Envelopen does not store the IP address.
 - The user agent of the browser, up to 300 characters.
 
@@ -192,6 +275,9 @@ The hosted page and the embeds show "This form is not available". Confirmation l
 | "Select at least one list before you turn on the form." | The form has no list. | Select a list under **Lists**. |
 | "The From address must be on a sending domain of this workspace." | The domain of **From address** is not a sending domain. | Add and verify the domain, or clear **From address**. |
 | The subscriber gets no confirmation email. | One of the cases in [When no email goes out](#when-no-email-goes-out), no verified sending domain, or a provider refusal. | Check the Worker logs with `npx wrangler tail`. Wait one hour before the next test with the same address. |
+| Your own form gets 403 on each submission. | The origin of the page is not in **Websites that can embed the form**. | Add the exact origin of the page, and save the form. |
+| Your own form shows "We could not make sure that you are a person." on each submission. | The hostname of your website is not in the Turnstile widget, or the widget does not use the action `signup-headless`. | Add the hostname to the widget. Render the widget with the action from the metadata. |
+| Your own form gets 409. | The consent text changed after the page loaded the metadata. | Load the metadata again. The example does this. |
 | The iframe cuts off the form. | The height in the snippet is from an older version of the form. | Copy the **Iframe snippet** again after you change fields or options. |
 | "This link has expired" and no **Send a new link** button. | The signup got 3 new links, or Turnstile is not set up. | Fill in the form again. |
 | "N contacts hold the option ..." when you delete an option. | Contacts hold the option. | Select an option in **Move its contacts to**, then **Merge and delete**. |
@@ -209,5 +295,7 @@ The hosted page and the embeds show "This form is not available". Confirmation l
 - [Cloudflare Turnstile: get started](https://developers.cloudflare.com/turnstile/get-started/)
 - [Cloudflare Turnstile: server-side validation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)
 - [Cloudflare Turnstile: testing](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)
+- [Cloudflare Turnstile: hostname management](https://developers.cloudflare.com/turnstile/additional-configuration/hostname-management/)
+- [Cloudflare Turnstile: plans](https://developers.cloudflare.com/turnstile/plans/)
 
-Last checked: 2026-10-21
+Last checked: 2026-11-10

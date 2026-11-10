@@ -340,9 +340,17 @@ export async function runCron(
       unsubscribes: { ledger: unsubscribeLedger(env), sink: eventSink(env) },
       sweep: { db, queue: sendQueue(env), startCampaignJob: campaignStarter(env), now },
     });
-    await purgeExpiredIdempotencyKeys(db);
-    // Uploads, error files, and exports that hold contact data expire after 24 hours.
-    await cleanupExpiredFiles(db, env.BUCKET);
+    // Each job below catches its own error, so one failure does not skip the backup or
+    // the other jobs. At the D1 daily limit, the jobs that write to D1 wait for the reset.
+    if (!report.limited) {
+      await purgeExpiredIdempotencyKeys(db).catch((error) =>
+        console.error("Cron job idempotency key purge failed", error),
+      );
+      // Uploads, error files, and exports that hold contact data expire after 24 hours.
+      await cleanupExpiredFiles(db, env.BUCKET).catch((error) =>
+        console.error("Cron job expired file cleanup failed", error),
+      );
+    }
     // Provider secrets from before v2 ciphertexts get bound to their connection id.
     await resealLegacyConnections(db, createServices(env)).catch((error) =>
       console.error("Cron job reseal connections failed", error),

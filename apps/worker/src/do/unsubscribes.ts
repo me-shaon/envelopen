@@ -5,7 +5,7 @@ import {
   recipientTargets,
   type UnsubscribeSource,
 } from "@envelopen/core";
-import type { DbConnection } from "@envelopen/db";
+import { type DbConnection, isD1DailyLimitError } from "@envelopen/db";
 import type { EventSink } from "./events";
 import { USAGE_METER_NAME } from "./usage";
 
@@ -151,12 +151,18 @@ export interface DrainReport {
   dropped: number;
   /** Intents that still wait in the ledger. */
   left: number;
+  /**
+   * Intents that failed with an error other than the D1 daily limit. They stay in the
+   * ledger, so sends still skip the contact, and the next drain tries them again.
+   */
+  failed: number;
 }
 
 /**
  * Writes the oldest intents to D1 through the unsubscribe write path, at most `max` per
- * call, and deletes them from the ledger. A D1 error stops the drain: the intents that
- * D1 has are deleted, and the error is thrown again.
+ * call, and deletes them from the ledger. A D1 daily-limit error stops the drain: the
+ * intents that D1 has are deleted, and the error is thrown again. Another error on one
+ * intent keeps that intent in the ledger, and the drain goes on.
  */
 export async function drainUnsubscribes(
   db: DbConnection,
@@ -165,7 +171,7 @@ export async function drainUnsubscribes(
   now: number,
   max = DRAIN_BATCH,
 ): Promise<DrainReport> {
-  const report: DrainReport = { applied: 0, dropped: 0, left: 0 };
+  const report: DrainReport = { applied: 0, dropped: 0, left: 0, failed: 0 };
   const intents = await ledger.list(max);
   const done: { id: number; at: number }[] = [];
   const events = new Map<number, BufferedEvent[]>();
@@ -180,18 +186,28 @@ export async function drainUnsubscribes(
           ? { workspaceId: intent.workspaceId, contactId: intent.contactId }
           : looked.get(intent.recipientId);
       if (target) {
-        const changed = await applyUnsubscribeIntent(
-          db,
-          {
-            workspaceId: target.workspaceId,
-            contactId: target.contactId,
-            campaignId: intent.campaignId,
-            listId: intent.listId,
-            source: intent.source,
-            at: intent.at,
-          },
-          now,
-        );
+        let changed: boolean;
+        try {
+          changed = await applyUnsubscribeIntent(
+            db,
+            {
+              workspaceId: target.workspaceId,
+              contactId: target.contactId,
+              campaignId: intent.campaignId,
+              listId: intent.listId,
+              source: intent.source,
+              at: intent.at,
+            },
+            now,
+          );
+        } catch (error) {
+          // At the D1 limit the drain stops. Another error skips only this intent, so
+          // one bad intent cannot hold every campaign.
+          if (isD1DailyLimitError(error)) throw error;
+          console.error("Unsubscribe intent of the drain failed", intent.id, error);
+          report.failed++;
+          continue;
+        }
         if (changed) {
           report.applied++;
           const list = events.get(target.workspaceId) ?? [];

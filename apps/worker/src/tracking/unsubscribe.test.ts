@@ -209,7 +209,7 @@ describe("unsubscribe at the D1 daily limit (KTD1, AE1)", () => {
     });
     expect(await deps.ledger.pending()).toBe(true);
 
-    expect(await drain(sent, deps)).toEqual({ applied: 1, dropped: 0, left: 0 });
+    expect(await drain(sent, deps)).toEqual({ applied: 1, dropped: 0, left: 0, failed: 0 });
     const after = await contact(sent);
     expect(after.status).toBe("unsubscribed");
     expect(after.unsubscribedAt).toBe(at);
@@ -220,6 +220,27 @@ describe("unsubscribe at the D1 daily limit (KTD1, AE1)", () => {
     expect(deps.events.map(({ event }) => event.source === "tracking" && event.type)).toEqual([
       "unsubscribe",
     ]);
+  });
+
+  it("keeps an intent that fails on its own in the ledger, and applies the others", async () => {
+    const { sent, deps, app, at, token } = await limited();
+    // An intent for a campaign that does not exist fails its foreign key.
+    await deps.ledger.record([
+      {
+        campaignId: 999_999_999,
+        recipientId: sent.recipients[1]?.id ?? 0,
+        workspaceId: sent.seeded.workspaceId,
+        contactId: sent.recipients[1]?.contact_id ?? 0,
+        listId: null,
+        source: "one_click",
+        at: at - 1,
+      },
+    ]);
+    expect((await call(app, `/u/${token}`, oneClickUrlencoded())).status).toBe(200);
+    expect(await drain(sent, deps)).toEqual({ applied: 1, dropped: 0, left: 1, failed: 1 });
+    expect((await contact(sent)).status).toBe("unsubscribed");
+    expect((await contact(sent, 1)).status).toBe("subscribed");
+    expect(await deps.ledger.pending()).toBe(true);
   });
 
   it("covers AE1: when the D1 read fails too, the POST succeeds from the token alone", async () => {
@@ -365,7 +386,7 @@ describe("unsubscribe at the D1 daily limit (KTD1, AE1)", () => {
       .where("workspace_id", "=", sent.seeded.workspaceId)
       .where("id", "=", second?.contact_id ?? 0)
       .execute();
-    expect(await drain(sent, deps)).toEqual({ applied: 1, dropped: 1, left: 0 });
+    expect(await drain(sent, deps)).toEqual({ applied: 1, dropped: 1, left: 0, failed: 0 });
     expect((await contact(sent, 0)).status).toBe("subscribed");
     expect((await contact(sent, 1)).status).toBe("unsubscribed");
   });

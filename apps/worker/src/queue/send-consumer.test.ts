@@ -585,7 +585,7 @@ describe("Workers Free limits", () => {
       sweep: sweepDeps(db, Date.UTC(2026, 9, 20, 0, 1)),
     });
     expect(first.held).toBe(true);
-    expect(first.unsubscribes).toEqual({ applied: 0, dropped: DRAIN_BATCH, left: 1 });
+    expect(first.unsubscribes).toEqual({ applied: 0, dropped: DRAIN_BATCH, left: 1, failed: 0 });
     expect(first.resumed).toEqual([]);
     expect((await meter.status()).platformLimit).not.toBeNull();
 
@@ -596,7 +596,7 @@ describe("Workers Free limits", () => {
       sweep: sweepDeps(db, Date.UTC(2026, 9, 20, 0, 2)),
     });
     expect(second.held).toBe(false);
-    expect(second.unsubscribes).toEqual({ applied: 0, dropped: 1, left: 0 });
+    expect(second.unsubscribes).toEqual({ applied: 0, dropped: 1, left: 0, failed: 0 });
     const status = await meter.status();
     expect(status.platformLimit).toBeNull();
     expect(status.unsubscribesPending).toBe(false);

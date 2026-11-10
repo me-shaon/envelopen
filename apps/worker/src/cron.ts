@@ -148,7 +148,12 @@ export async function runCampaignCron(deps: CronDeps): Promise<CronReport> {
     });
     if (report.limited) return report;
     // A failed drain or a drain with intents left keeps the flag until a later run.
-    if (limit && (report.unsubscribes === null || report.unsubscribes.left > 0)) {
+    // Intents that failed on their own do not: they stay in the ledger, where sends
+    // still find them, and they must not hold every campaign.
+    const waiting = report.unsubscribes
+      ? report.unsubscribes.left - report.unsubscribes.failed
+      : Number.POSITIVE_INFINITY;
+    if (limit && waiting > 0) {
       report.held = true;
       return report;
     }

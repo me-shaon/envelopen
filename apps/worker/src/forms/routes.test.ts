@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { campaignDb, T0, testKeys } from "../../test/campaign-helpers";
 import { call, mount, ORIGIN } from "../../test/tracking-helpers";
 import type { FormDeps } from "./deps";
+import { keyedErrors } from "./headless";
 import { createFormRoutes } from "./routes";
 import { SITEVERIFY_URL, verifyTurnstile } from "./turnstile";
 
@@ -38,17 +39,18 @@ async function setup(
   const seeded = await seedCampaignWorkspace(db, { credentials, hashEmail }, { contacts: 1 });
   const mock = createProviderMock();
   const siteverify: Setup["siteverify"] = [];
-  // Siteverify: a token `pass-<action>` passes for that action on the test origin.
+  // Siteverify: a token `pass-<action>` passes for that action on the test origin, and
+  // `pass-<action>@<host>` passes for that action on that host.
   const outbound: typeof fetch = async (input, init) => {
     const request = new Request(input, init);
     if (request.url === SITEVERIFY_URL) {
       const body = new URLSearchParams(await request.text());
       siteverify.push({ body });
-      const token = body.get("response") ?? "";
+      const [token = "", host = new URL(ORIGIN).hostname] = (body.get("response") ?? "").split("@");
       const action = token.startsWith("pass-") ? token.slice(5) : null;
       return Response.json(
         action
-          ? { success: true, hostname: new URL(ORIGIN).hostname, action, "error-codes": [] }
+          ? { success: true, hostname: host, action, "error-codes": [] }
           : { success: false, "error-codes": ["invalid-input-response"] },
       );
     }
@@ -467,5 +469,263 @@ describe("Turnstile siteverify", () => {
       ok: false,
       reason: "hostname-mismatch",
     });
+  });
+});
+
+// The headless form ----------------------------------------------------------------------
+
+const SITE = "https://www.example.com";
+const SITE_TOKEN = "pass-signup-headless@www.example.com";
+
+function postJson(path: string, body: unknown, headers: Record<string, string> = {}) {
+  return [
+    path,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cf-connecting-ip": "198.51.100.7",
+        "sec-fetch-site": "cross-site",
+        origin: SITE,
+        ...headers,
+      },
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    },
+  ] as const;
+}
+
+function signupBody(email: string, extra: Record<string, unknown> = {}) {
+  return { email, fields: {}, consentVersion: 1, turnstileToken: SITE_TOKEN, ...extra };
+}
+
+describe("the headless form metadata", () => {
+  it("returns the form for an allowed origin with CORS headers, and no CORS for another", async () => {
+    const { f, publicId } = await setup();
+    const response = await call(f, `/f/${publicId}.json`, { headers: { origin: SITE } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe(SITE);
+    expect(response.headers.get("access-control-allow-credentials")).toBeNull();
+    expect(response.headers.get("vary")).toBe("Origin");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).toEqual({
+      ok: true,
+      name: "Course news",
+      consentText: "I agree to get the course news.",
+      consentVersion: 1,
+      fields: [],
+      turnstile: { siteKey: SITE_KEY, action: "signup-headless" },
+      submitUrl: `${ORIGIN}/f/${publicId}`,
+    });
+    expect(JSON.stringify(body)).not.toContain("allowed");
+
+    const other = await call(f, `/f/${publicId}.json`, {
+      headers: { origin: "https://evil.test" },
+    });
+    expect(other.status).toBe(200);
+    expect(other.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("reports a disabled form and a deployment without Turnstile", async () => {
+    const off = await setup();
+    await off.disable();
+    const disabled = await call(off.f, `/f/${off.publicId}.json`);
+    expect(disabled.status).toBe(404);
+    expect(await disabled.json()).toEqual({ ok: false, reason: "unavailable" });
+
+    const bare = await setup({ turnstile: false });
+    const unset = await call(bare.f, `/f/${bare.publicId}.json`, { headers: { origin: SITE } });
+    expect(unset.status).toBe(503);
+    expect(await unset.json()).toEqual({ ok: false, reason: "not_set_up" });
+    expect(unset.headers.get("access-control-allow-origin")).toBe(SITE);
+  });
+});
+
+describe("the headless form preflight", () => {
+  const preflight = (origin: string) => ({
+    method: "OPTIONS",
+    headers: {
+      origin,
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type",
+    },
+  });
+
+  it("allows POST and the content type for an allowed origin, without credentials", async () => {
+    const { f, publicId } = await setup();
+    const response = await call(f, `/f/${publicId}`, preflight(SITE));
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe(SITE);
+    expect(response.headers.get("access-control-allow-methods")).toBe("POST");
+    expect(response.headers.get("access-control-allow-headers")).toBe("content-type");
+    expect(response.headers.get("access-control-allow-credentials")).toBeNull();
+  });
+
+  it("gives no CORS headers to an origin that is not allowed", async () => {
+    const { f, publicId } = await setup();
+    const response = await call(f, `/f/${publicId}`, preflight("https://evil.test"));
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(response.headers.get("access-control-allow-methods")).toBeNull();
+  });
+});
+
+describe("a headless submission", () => {
+  it("accepts an allowed origin with a valid token and stores a pending headless signup", async () => {
+    const { f, publicId, emails, db, workspaceId, siteverify } = await setup();
+    const response = await call(f, ...postJson(`/f/${publicId}`, signupBody("Site@Example.org")));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(response.headers.get("access-control-allow-origin")).toBe(SITE);
+    expect(siteverify[0]?.body.get("response")).toBe(SITE_TOKEN);
+    const signup = await db.db
+      .selectFrom("signups")
+      .selectAll()
+      .where("workspace_id", "=", workspaceId)
+      .where("email", "=", "site@example.org")
+      .executeTakeFirstOrThrow();
+    expect(signup).toMatchObject({
+      consent_version: 1,
+      confirmed_at: null,
+      source: "headless",
+      source_origin: SITE,
+    });
+    // The confirmation link stays on this deployment, not on the website.
+    const token = tokenOf(emails[0]?.html ?? "");
+    expect(emails[0]?.html).toContain(`${ORIGIN}/f/confirm/${token}`);
+  });
+
+  it("refuses another origin, a missing origin, and a null origin", async () => {
+    const { f, publicId, emails, siteverify } = await setup();
+    for (const origin of ["https://evil.test", "null", "https://www.example.com.evil.test"]) {
+      const response = await call(
+        f,
+        ...postJson(`/f/${publicId}`, signupBody("a@example.org"), { origin }),
+      );
+      expect(response.status).toBe(403);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    }
+    const [path, init] = postJson(`/f/${publicId}`, signupBody("a@example.org"));
+    const headers = new Headers(init.headers);
+    headers.delete("origin");
+    const missing = await call(f, path, { ...init, headers });
+    expect(missing.status).toBe(403);
+    expect(siteverify).toHaveLength(0);
+    expect(emails).toHaveLength(0);
+  });
+
+  it("refuses a token from another host or another widget", async () => {
+    const { f, publicId, emails } = await setup();
+    for (const turnstileToken of [
+      "pass-signup-headless",
+      "pass-signup-headless@evil.test",
+      "pass-signup@www.example.com",
+    ]) {
+      const response = await call(
+        f,
+        ...postJson(`/f/${publicId}`, signupBody("a@example.org", { turnstileToken })),
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        ok: false,
+        errors: [{ target: null, message: FORM_COPY.turnstileFailed }],
+      });
+    }
+    expect(emails).toHaveLength(0);
+  });
+
+  it("answers a stale consent version with 409", async () => {
+    const { f, publicId, emails } = await setup();
+    const response = await call(
+      f,
+      ...postJson(`/f/${publicId}`, signupBody("a@example.org", { consentVersion: 0 })),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ ok: false, reason: "consent_changed" });
+    expect(emails).toHaveLength(0);
+  });
+
+  it("returns validation errors and refuses a body that is not the contract", async () => {
+    const { f, publicId, emails } = await setup();
+    const invalid = await call(f, ...postJson(`/f/${publicId}`, signupBody("not an email")));
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({
+      ok: false,
+      errors: [{ target: "email", message: FORM_COPY.emailInvalid }],
+    });
+    for (const body of ["{not json", JSON.stringify({ email: 1 }), "x".repeat(40 * 1024)]) {
+      const response = await call(f, ...postJson(`/f/${publicId}`, body));
+      expect(response.status).toBe(400);
+    }
+    expect(emails).toHaveLength(0);
+  });
+
+  it("gives a subscribed address, an IP over the limit, and a new address the same answer", async () => {
+    const { f, publicId, emails } = await setup();
+    const first = await call(f, ...postJson(`/f/${publicId}`, signupBody("known@example.org")));
+    const token = tokenOf(emails[0]?.html ?? "");
+    await call(f, ...post(`/f/confirm/${token}`, {}));
+
+    const answers: string[] = [];
+    answers.push(await first.text());
+    const known = await call(f, ...postJson(`/f/${publicId}`, signupBody("known@example.org")));
+    answers.push(await known.text());
+    const fresh = await call(f, ...postJson(`/f/${publicId}`, signupBody("fresh@example.org")));
+    answers.push(await fresh.text());
+    for (let i = 0; i < 20; i++) {
+      await call(f, ...postJson(`/f/${publicId}`, signupBody(`bulk${i}@example.org`)));
+    }
+    const limited = await call(f, ...postJson(`/f/${publicId}`, signupBody("late@example.org")));
+    answers.push(await limited.text());
+    expect([first, known, fresh, limited].map((response) => response.status)).toEqual([
+      200, 200, 200, 200,
+    ]);
+    expect(new Set(answers)).toEqual(new Set([JSON.stringify({ ok: true })]));
+    const sentTo = emails.flatMap((email) => email.to);
+    expect(sentTo.filter((to) => to === "known@example.org")).toHaveLength(1);
+    expect(sentTo).not.toContain("late@example.org");
+  });
+
+  it("records the hosted page and the iframe as their own sources", async () => {
+    const { f, publicId, db, workspaceId } = await setup();
+    const fields = (email: string) => ({ email, "cf-turnstile-response": "pass-signup" });
+    await call(f, ...post(`/f/${publicId}`, fields("page@example.org")));
+    await call(f, ...post(`/f/${publicId}?embed=1`, fields("frame@example.org")));
+    const rows = await db.db
+      .selectFrom("signups")
+      .select(["email", "source", "source_origin"])
+      .where("workspace_id", "=", workspaceId)
+      .orderBy("email")
+      .execute();
+    expect(rows).toEqual([
+      { email: "frame@example.org", source: "embed", source_origin: null },
+      { email: "page@example.org", source: "hosted", source_origin: null },
+    ]);
+  });
+
+  it("keeps refusing a cross-site post of the HTML form", async () => {
+    const { f, publicId } = await setup();
+    const response = await call(
+      f,
+      ...post(
+        `/f/${publicId}`,
+        { email: "a@example.org", "cf-turnstile-response": "pass-signup" },
+        { "sec-fetch-site": "cross-site", origin: SITE },
+      ),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it("maps the input ids of field errors to field keys", () => {
+    expect(
+      keyedErrors([
+        { target: "field-company", message: "a" },
+        { target: "email", message: "b" },
+        { target: null, message: "c" },
+      ]),
+    ).toEqual([
+      { target: "company", message: "a" },
+      { target: "email", message: "b" },
+      { target: null, message: "c" },
+    ]);
   });
 });

@@ -24,22 +24,37 @@ import { clientIp } from "../auth/rate-limit-do";
 import { readBodyLimited } from "../body";
 import { isSameOriginPost } from "../tracking/csrf";
 import { FORM_IP_RULE, type FormDeps, type FormDepsFactory, formDeps } from "./deps";
+import {
+  allowedOrigin,
+  BAD_BODY_MESSAGE,
+  HEADLESS_ACTION,
+  JSON_TYPE,
+  jsonResponse,
+  keyedErrors,
+  metadataBody,
+  parseSubmission,
+  preflightResponse,
+} from "./headless";
 import { formPageResponse } from "./page";
 
 // Public signup form routes (U8, R10, R11, KTD6, KTD7, F1). Under /f:
 //
 //   GET  /f/<publicId>                 the hosted form. `?embed=1` in the iframe snippet.
+//   GET  /f/<publicId>.json            the metadata for a form that a website renders itself.
 //   POST /f/<publicId>                 a submission: IP limit, values, Turnstile, then the
-//                                      same "check your inbox" page for every address.
+//                                      same "check your inbox" page for every address. A
+//                                      JSON body is the headless flow (headless.ts).
+//   OPTIONS /f/<publicId>              the CORS preflight of the headless flow.
 //   GET  /f/confirm/<token>            the confirm page with a Confirm button. A GET never
 //                                      confirms, so a mail scanner cannot.
 //   POST /f/confirm/<token>            the Confirm button.
 //   POST /f/confirm/<token>/resend     a new link for an expired one. It needs Turnstile.
 //
 // The signup work after a valid submission runs after the response (`waitUntil`), so the
-// response time does not show whether an email went out. Every POST must come from a page
-// of this origin (`Sec-Fetch-Site`). The embedded form is an iframe of the hosted page, so
-// its POST is same-origin too, and no CORS is needed.
+// response time does not show whether an email went out. Every form POST must come from a
+// page of this origin (`Sec-Fetch-Site`). The embedded form is an iframe of the hosted
+// page, so its POST is same-origin too. Only the JSON flow is cross-origin: it needs an
+// `Origin` from the form's `allowed_origins`, and it gets CORS headers only for that origin.
 
 const MAX_FORM_BYTES = 32 * 1024;
 const FORM_TYPES = /^(application\/x-www-form-urlencoded|multipart\/form-data)\b/i;
@@ -236,6 +251,121 @@ export function createFormRoutes(options: FormRoutesOptions = {}) {
     }
   });
 
+  // The headless form ------------------------------------------------------------------
+
+  app.get("/:file{[0-9a-f]{20}\\.json}", async (c) => {
+    const deps = makeDeps(c.env, c.req.raw);
+    let origin: string | null = null;
+    try {
+      const form = await loadPublicForm(deps.db, c.req.param("file").slice(0, -".json".length));
+      origin = allowedOrigin(c.req.raw, form);
+      if (form?.row.enabled !== 1) {
+        return jsonResponse({ ok: false, reason: "unavailable" }, 404, origin);
+      }
+      if (!deps.turnstile) return jsonResponse({ ok: false, reason: "not_set_up" }, 503, origin);
+      const submitUrl = `${new URL(c.req.url).origin}/f/${form.row.public_id}`;
+      return jsonResponse(metadataBody(form, deps.turnstile.siteKey, submitUrl), 200, origin);
+    } catch (error) {
+      console.error("Form metadata failed", error);
+      return jsonResponse({ ok: false, reason: "unavailable" }, 503, origin);
+    } finally {
+      flushLater(c, deps);
+    }
+  });
+
+  app.options("/:publicId", async (c) => {
+    const deps = makeDeps(c.env, c.req.raw);
+    try {
+      const form = await loadPublicForm(deps.db, c.req.param("publicId"));
+      const origin = form?.row.enabled === 1 ? allowedOrigin(c.req.raw, form) : null;
+      const method = c.req.header("access-control-request-method");
+      return preflightResponse(method === "POST" ? origin : null);
+    } catch (error) {
+      console.error("Form preflight failed", error);
+      return preflightResponse(null);
+    } finally {
+      flushLater(c, deps);
+    }
+  });
+
+  /** A JSON submission from a website that renders its own form. */
+  async function headlessSubmission(c: AppContext): Promise<Response> {
+    const deps = makeDeps(c.env, c.req.raw);
+    let origin: string | null = null;
+    try {
+      const form = await loadPublicForm(deps.db, c.req.param("publicId") ?? "");
+      origin = allowedOrigin(c.req.raw, form);
+      if (form?.row.enabled !== 1) {
+        return jsonResponse({ ok: false, reason: "unavailable" }, 404, origin);
+      }
+      if (!deps.turnstile) return jsonResponse({ ok: false, reason: "not_set_up" }, 503, origin);
+      // No `Origin`, `null`, or an origin that the owner did not list.
+      if (!origin) return jsonResponse({ ok: false, reason: "origin" }, 403, null);
+      const accepted = () => jsonResponse({ ok: true }, 200, origin);
+      const bytes = await readBodyLimited(c.req.raw, MAX_FORM_BYTES);
+      const body = bytes ? parseSubmission(bytes) : null;
+      if (!body) {
+        return jsonResponse(
+          { ok: false, errors: [{ target: null, message: BAD_BODY_MESSAGE }] },
+          400,
+          origin,
+        );
+      }
+
+      // Too many submissions from one IP: the same answer, and nothing else happens.
+      const ip = clientIp(c.req.raw);
+      const ipCount = await deps.limiter.record(`form-ip:${ip}`, FORM_IP_RULE);
+      if (ipCount.count > FORM_IP_RULE.limit) return accepted();
+
+      // The site showed an older consent text. It must load the metadata again.
+      if (body.consentVersion !== form.row.consent_version) {
+        return jsonResponse({ ok: false, reason: "consent_changed" }, 409, origin);
+      }
+      const checked = validateSubmission(form.defs, body.raw, form.required);
+      if (!checked.ok) {
+        return jsonResponse({ ok: false, errors: keyedErrors(checked.errors) }, 400, origin);
+      }
+      const verified = await deps.verifyTurnstile({
+        token: body.turnstileToken,
+        ip,
+        // The token must come from a widget on the checked origin.
+        hostname: new URL(origin).hostname,
+        action: HEADLESS_ACTION,
+      });
+      if (!verified.ok) {
+        return jsonResponse(
+          { ok: false, errors: [{ target: null, message: FORM_COPY.turnstileFailed }] },
+          400,
+          origin,
+        );
+      }
+      const linkOrigin = new URL(c.req.url).origin;
+      const userAgent = c.req.header("user-agent") ?? null;
+      const sourceOrigin = origin;
+      background(
+        c,
+        (async () => {
+          await submitSignup(signupDeps(deps), form, {
+            email: checked.email,
+            values: checked.values,
+            ipHash: await deps.ipHash(ip),
+            userAgent,
+            origin: linkOrigin,
+            consentVersion: body.consentVersion,
+            source: "headless",
+            sourceOrigin,
+          }).finally(() => deps.db.meter.flush());
+        })(),
+      );
+      return accepted();
+    } catch (error) {
+      if (!isD1DailyLimitError(error)) console.error("Headless form submission failed", error);
+      return jsonResponse({ ok: false, reason: "unavailable" }, 503, origin);
+    } finally {
+      flushLater(c, deps);
+    }
+  }
+
   app.get("/:publicId", async (c) => {
     const deps = makeDeps(c.env, c.req.raw);
     const embed = c.req.query("embed") === "1";
@@ -271,6 +401,7 @@ export function createFormRoutes(options: FormRoutesOptions = {}) {
   });
 
   app.post("/:publicId", async (c) => {
+    if (JSON_TYPE.test(c.req.header("content-type") ?? "")) return headlessSubmission(c);
     const deps = makeDeps(c.env, c.req.raw);
     const embed = c.req.query("embed") === "1";
     try {
@@ -328,6 +459,7 @@ export function createFormRoutes(options: FormRoutesOptions = {}) {
             ipHash: await deps.ipHash(ip),
             userAgent,
             origin,
+            source: embed ? "embed" : "hosted",
           }).finally(() => deps.db.meter.flush());
         })(),
       );

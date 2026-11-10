@@ -85,7 +85,11 @@ export interface FormPageLayout {
 export const TURNSTILE_SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js";
 export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 /** The Turnstile actions that siteverify checks. */
-export const TURNSTILE_ACTIONS = { signup: "signup", resend: "resend" } as const;
+export const TURNSTILE_ACTIONS = {
+  signup: "signup",
+  resend: "resend",
+  headless: "signup-headless",
+} as const;
 
 /** Copy of the page states (ASD-STE100). Tests and the admin app use the same text. */
 export const FORM_COPY = {

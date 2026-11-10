@@ -1,11 +1,13 @@
 // Turnstile siteverify (KTD6, R11). The browser gets a one-time token from the widget on
-// the hosted form page. The Worker sends it with the secret to siteverify and accepts the
+// the form page. The Worker sends it with the secret to siteverify and accepts the
 // submission only when:
 //
 // - `success` is true,
-// - `hostname` is the host of the form page (the token was not made on another site), and
-// - `action` is the action of the widget (`signup` or `resend`), so a token from one
-//   widget cannot be used for the other.
+// - `hostname` is the host of the form page (the token was not made on another site).
+//   For the hosted form, that is the host of this Worker. For a headless form, it is the
+//   host of the request `Origin`, which the route checked against `allowed_origins`.
+// - `action` is the action of the widget (`signup`, `resend`, or `signup-headless`), so a
+//   token from one widget cannot be used for another.
 //
 // The call goes through `outboundFetch`, so the end-to-end tests answer it with the local
 // provider mock. Cloudflare's documented test secrets answer with the hostname

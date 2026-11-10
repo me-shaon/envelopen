@@ -519,6 +519,16 @@ describe("restore plan", () => {
     expect(upgradeRow("signups", { id: 1, source: "headless" }, 25)).toMatchObject({
       source: "headless",
     });
+    // 0027 removes the Envelopen-made secret of a manual toSend connection.
+    const tosend = { id: 1, provider: "tosend", events_setup: "manual" };
+    expect(
+      upgradeRow("provider_connections", { ...tosend, webhook_secret_encrypted: "x" }, 26),
+    ).toEqual({
+      ...tosend,
+      webhook_secret_encrypted: null,
+    });
+    const auto = { id: 2, provider: "tosend", events_setup: "auto", webhook_secret_encrypted: "y" };
+    expect(upgradeRow("provider_connections", auto, 26)).toEqual(auto);
     expect(schemaProblem(BACKUP_SCHEMA_VERSION + 1)).toContain("newer Envelopen");
     expect(schemaProblem(15)).toContain("too old");
   });

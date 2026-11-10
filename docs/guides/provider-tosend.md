@@ -1,6 +1,6 @@
 # toSend
 
-Last checked: 2026-10-19
+Last checked: 2026-11-10
 
 ## What Envelopen uses it for
 
@@ -39,7 +39,7 @@ If you plan to send campaigns, ask toSend first whether they allow your newslett
 | Idempotency key | None | If a request times out, the batch becomes uncertain. Open the campaign page and select retry or skip for each uncertain batch. |
 | Webhook events | `bounced` and `complaint` only. No delivery event. | The **Delivered** number in the campaign stats shows "Not reported". The other numbers show normally. Opens and clicks come from Envelopen tracking. |
 | Webhook retries | None. toSend sends each event once. It logs a failure after a non-2xx answer or after 10 seconds. | If Envelopen is down, the events of that time are lost. Check the toSend **Logs** page (kept 14 days) and the toSend suppression list. |
-| Webhook signature | `X-ToSend-Signature: sha256=<hex>`, an HMAC-SHA256 of the raw body. toSend sends it only when the webhook has a secret. | Envelopen rejects a request without a valid signature. Always set a secret. |
+| Webhook signature | `X-ToSend-Signature: sha256=<hex>`, an HMAC-SHA256 of the raw body. toSend makes the signing secret of each webhook. You cannot set your own secret. | Envelopen rejects a request without a valid signature. In manual setup, paste the toSend secret into Envelopen. |
 | API key types | Sending keys start with `tsend_`. Admin keys start with `tsend_admin_`. | An admin key with `webhooks:write` lets Envelopen create the webhook. An admin key also needs `emails:send` to send. |
 | Automatic suppression | toSend suppresses bounced and complaining addresses. It blocks disposable addresses before it sends. | Envelopen keeps its own suppression list too. Both lists apply. |
 | Custom headers | Supported | Envelopen sends `List-Unsubscribe` and `List-Unsubscribe-Post` unchanged. |
@@ -90,10 +90,15 @@ The card then shows the date of acceptance.
 
 1. In the toSend dashboard, open **Webhooks** and select **Create Webhook**.
 2. Paste the **Webhook URL** from the Envelopen dialog.
-3. Set the secret to the **Webhook secret** from the Envelopen dialog.
-4. Select the **Bounced** and **Complaint** events.
-5. Do not limit the webhook to one domain, unless you send from that domain only.
-6. Select **Create Webhook**.
+3. Select the **Bounced** and **Complaint** events.
+4. Do not limit the webhook to one domain, unless you send from that domain only.
+5. Select **Create Webhook**.
+6. In the list of webhooks, find the new webhook. Select the copy button next to **Signing secret**.
+7. In Envelopen, paste the secret into **Signing secret from the provider**, and select **Save secret**.
+
+Envelopen rejects the webhooks of this connection until you save the secret.
+
+To open the dialog again, select **Set up the webhook** on the connection card.
 
 ### Webhook URL
 
@@ -111,7 +116,7 @@ The secret is not in the URL. The `X-ToSend-Signature` header proves that the re
 | The send checklist fails on **Provider policy** | The owner did not accept the warning. | Select **Open connections**, then **Review the warning**. Or connect a campaign provider. |
 | The card shows "The toSend account has no credits left." | The balance is 0. | Add credits in toSend. Select **Check**. |
 | The campaign pauses with a credits message | The balance cannot cover the whole batch. | Add credits, then resume the campaign. |
-| Webhook requests fail with 401 | The secret in toSend does not match, or no secret is set. | Set the same secret in toSend and Envelopen. |
+| Webhook requests fail with 401 | The secret in Envelopen is not the signing secret of the toSend webhook, or no secret is saved. | Copy the **Signing secret** of the webhook in toSend, and paste it into Envelopen again. |
 | Bounces are missing after an outage | toSend does not retry webhooks. | Check the toSend **Logs** page and the suppression list. Suppress the addresses in Envelopen. |
 | "Delivered" shows "Not reported" | toSend sends no delivery events. | This is expected. |
 

@@ -1,5 +1,5 @@
 import type { DbConnection } from "@envelopen/db";
-import { postmarkAuthorization, svixSign } from "@envelopen/providers";
+import { postmarkAuthorization, svixSign, toSendSignature } from "@envelopen/providers";
 import {
   MAILGUN_EU,
   mailgunEventData,
@@ -9,6 +9,7 @@ import {
 import { postmarkFixtures } from "@envelopen/providers/conformance/fixtures/postmark";
 import { resendFixtures } from "@envelopen/providers/conformance/fixtures/resend";
 import { sesFixtures, TOPIC_ARN } from "@envelopen/providers/conformance/fixtures/ses";
+import { toSendFixtures } from "@envelopen/providers/conformance/fixtures/tosend";
 import { mockFetch, type RecordedExchange } from "@envelopen/providers/conformance/mock-fetch";
 import { createSnsSigner } from "@envelopen/providers/conformance/sns-signer";
 import { describe, expect, it } from "vitest";
@@ -265,6 +266,42 @@ describe("one-field connect with auto-webhook (KTD13)", () => {
           authorization: postmarkAuthorization(created.webhook.secret ?? ""),
         }),
         body: postmarkFixtures.events.delivery,
+      },
+    );
+    expect(outcome).toMatchObject({ status: 200, stored: 1 });
+  });
+
+  it("asks for toSend's own secret in a manual setup, and verifies events with it", async () => {
+    const setup = await owner();
+    const { services } = await servicesWith([toSendFixtures.info]);
+    const created = await runOperation(
+      setup.principal,
+      connectionsCreate,
+      { provider: "tosend", credentials: toSendFixtures.credentials },
+      { db: setup.db, services },
+    );
+    // toSend makes the secret, so Envelopen shows none and asks for it.
+    expect(created).toMatchObject({
+      eventsSetup: "manual",
+      webhook: { secret: null, secretSource: "provider", needsSecret: true },
+    });
+    expect(created.webhook.steps.join(" ")).toContain("Copy the signing secret");
+    const secret = "3a6814f0c2d94b7e8a1f5c0a";
+    await runOperation(
+      setup.principal,
+      connectionsSetWebhookSecret,
+      { id: created.id, secret },
+      { db: setup.db, services },
+    );
+    const body = toSendFixtures.events.bounced;
+    const outcome = await receiveProviderWebhook(
+      { db: setup.db, services },
+      { provider: "tosend", workspaceId: setup.workspaceId, connectionId: created.id },
+      {
+        url: created.webhook.url ?? "",
+        method: "POST",
+        headers: new Headers({ "x-tosend-signature": await toSendSignature(secret, body) }),
+        body,
       },
     );
     expect(outcome).toMatchObject({ status: 200, stored: 1 });

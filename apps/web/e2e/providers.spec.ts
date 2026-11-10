@@ -141,8 +141,13 @@ test.describe("providers", () => {
     // A sending key cannot create the webhook, so the manual steps open.
     const webhook = page.getByRole("dialog", { name: "toSend events" });
     await expect(webhook.getByTestId("webhook-url")).toHaveText(`${BASE}/hooks/tosend/1/2`);
-    await expect(webhook.getByTestId("webhook-secret")).toHaveText(/^[A-Za-z0-9_-]{40,}$/);
+    // toSend makes the signing secret, so the owner pastes it here.
+    await expect(webhook.getByTestId("webhook-secret")).toHaveCount(0);
     await expect(webhook.getByTestId("webhook-steps")).toContainText("Bounced and Complaint");
+    await expect(webhook.getByTestId("webhook-steps")).toContainText("Copy the signing secret");
+    await webhook.getByLabel("Signing secret from the provider").fill("3a6814f0c2d94b7e8a1f5c0a");
+    await webhook.getByRole("button", { name: "Save secret" }).click();
+    await expect(webhook.getByRole("status")).toContainText("The secret is saved.");
     await expectNoSeriousViolations(page);
     await webhook.getByRole("button", { name: "Done" }).click();
 

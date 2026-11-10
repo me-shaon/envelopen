@@ -270,7 +270,9 @@ export const toSendAdapter: ProviderAdapter = {
     docsUrl: "https://tosend.com/docs/api/batch-emails/",
   },
   dns: { spfInclude: "amazonses.com", dkimSelectors: [] },
-  manualSecret: "envelopen",
+  // toSend makes the signing secret of each webhook. Its dashboard has no field to set
+  // one, so manual setup stores the secret that the owner copies from toSend.
+  manualSecret: "provider",
 
   connect,
   sendBatch,
@@ -327,8 +329,8 @@ export const toSendAdapter: ProviderAdapter = {
     return [
       "In the toSend dashboard, open Webhooks and create a webhook.",
       `Paste this URL: ${target.url}`,
-      "Set the secret to the webhook secret below. Envelopen rejects webhooks without it.",
       "Select the Bounced and Complaint events, and save.",
+      "Copy the signing secret that toSend shows for the webhook, and paste it into Envelopen. Envelopen rejects webhooks until you do.",
     ];
   },
 };

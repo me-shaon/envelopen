@@ -218,6 +218,8 @@ const identity: Upgrade = (_table, row) => row;
  * - 0025 adds only the webhook nonces, which are not in a backup.
  * - 0026 adds `source` and `source_origin` to signups and form consents. An older signup
  *   came from the hosted page or the iframe, which the old rows do not tell apart.
+ * - 0027 removes the webhook secret of a toSend connection with manual setup. Envelopen
+ *   made that secret, and toSend cannot use it. The owner pastes the toSend secret.
  */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
@@ -243,6 +245,10 @@ export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   26: (table, row) =>
     table === "signups" || table === "form_consents"
       ? { source: "hosted", source_origin: null, ...row }
+      : row,
+  27: (table, row) =>
+    table === "provider_connections" && row.provider === "tosend" && row.events_setup === "manual"
+      ? { ...row, webhook_secret_encrypted: null }
       : row,
 };
 

@@ -323,7 +323,13 @@ export function WebhookDialog({
                       "font-mono text-[12.5px]",
                       !webhook.needsSecret && "placeholder:text-foreground",
                     )}
-                    placeholder={webhook.needsSecret ? "whsec_..." : SAVED_SECRET_MASK}
+                    placeholder={
+                      webhook.needsSecret
+                        ? data.provider === "resend"
+                          ? "whsec_..."
+                          : undefined
+                        : SAVED_SECRET_MASK
+                    }
                     aria-describedby={webhook.needsSecret ? undefined : "provider-secret-hint"}
                   />
                 </Field>

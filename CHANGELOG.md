@@ -12,6 +12,14 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+### Fixed
+
+- Manual webhook setup for toSend now asks for the signing secret that toSend shows. Before, Envelopen showed its own secret and asked you to copy it into toSend, but toSend has no field for it. So toSend webhooks failed with 401, and bounces and complaints were lost. See [toSend manual setup](docs/guides/provider-tosend.md#manual-setup).
+
+### Manual steps
+
+- Only for a toSend connection with manual webhook setup: on the connection card, select **Set up the webhook**. Copy the **Signing secret** of the webhook in the toSend dashboard, and paste it into Envelopen. The update removes the old secret, which toSend could not use.
+
 ## [0.7.0] - 2026-11-10
 
 ### Added

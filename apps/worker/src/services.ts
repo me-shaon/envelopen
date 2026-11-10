@@ -201,27 +201,39 @@ export function campaignInstanceId(job: CampaignJob): string {
   return `campaign-${job.workspaceId}-${job.campaignId}-${job.startedAt}`;
 }
 
+/** The most successors of a failed snapshot instance. After that, the owner must act. */
+export const MAX_SNAPSHOT_RETRIES = 10;
+
 /**
  * Starts the snapshot Workflow of a campaign. The sweep calls it again for a snapshot
  * that did not finish: a running instance keeps running, and an instance that failed
  * gets a successor, because the snapshot is safe to repeat.
+ *
+ * The successors have fixed ids (`-r1`, `-r2`, and so on). Each call walks the chain to
+ * the first instance that has not failed, so a campaign has at most one live snapshot
+ * instance at a time.
  */
 export function campaignStarter(env: Pick<Env, "CAMPAIGN_WORKFLOW">) {
   return async (job: CampaignJob): Promise<void> => {
-    const id = campaignInstanceId(job);
-    try {
-      await env.CAMPAIGN_WORKFLOW.create({ id, params: job });
-      return;
-    } catch (error) {
-      let status: string;
+    const base = campaignInstanceId(job);
+    for (let attempt = 0; attempt <= MAX_SNAPSHOT_RETRIES; attempt++) {
+      const id = attempt === 0 ? base : `${base}-r${attempt}`;
       try {
-        status = (await (await env.CAMPAIGN_WORKFLOW.get(id)).status()).status;
-      } catch {
-        throw error;
+        await env.CAMPAIGN_WORKFLOW.create({ id, params: job });
+        return;
+      } catch (error) {
+        let status: string;
+        try {
+          status = (await (await env.CAMPAIGN_WORKFLOW.get(id)).status()).status;
+        } catch {
+          throw error;
+        }
+        if (status !== "errored" && status !== "terminated") return;
       }
-      if (status !== "errored" && status !== "terminated") return;
-      await env.CAMPAIGN_WORKFLOW.create({ id: `${id}-r${Date.now()}`, params: job });
     }
+    console.error(
+      `Campaign snapshot ${base} failed ${MAX_SNAPSHOT_RETRIES + 1} times. No new instance started.`,
+    );
   };
 }
 

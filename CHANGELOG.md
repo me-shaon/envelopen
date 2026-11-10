@@ -12,6 +12,8 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-10
+
 ### Fixed
 
 - Manual webhook setup for toSend now asks for the signing secret that toSend shows. Before, Envelopen showed its own secret and asked you to copy it into toSend, but toSend has no field for it. So toSend webhooks failed with 401, and bounces and complaints were lost. See [toSend manual setup](docs/guides/provider-tosend.md#manual-setup).
@@ -246,7 +248,8 @@ The first release of Envelopen: self-hosted email campaigns on Cloudflare Worker
 - Erase also removes the contact from stored batch data.
 - Unsubscribe links use the tracking domain only after it is verified.
 
-[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/me-shaon/envelopen/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/me-shaon/envelopen/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/me-shaon/envelopen/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/me-shaon/envelopen/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/me-shaon/envelopen/compare/v0.4.0...v0.5.0

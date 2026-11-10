@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import {
+  campaignReserveReached,
   campaignsGet,
   claimBatch,
   expireLeases,
@@ -38,7 +39,7 @@ import {
   pendingUnsubscribedContacts,
 } from "../do/unsubscribes";
 import { usageMeter, usageReader } from "../do/usage";
-import { consumerDeps, MAX_RATE_WAIT_MS, processPointer } from "./send-consumer";
+import { consumerDeps, MAX_RATE_WAIT_MS, processPointer, secondsUntilReset } from "./send-consumer";
 
 // The send consumer (U9). The execution note of the plan asks for the redelivery,
 // stale-generation, and pause tests first: they are the first three groups here.
@@ -609,6 +610,44 @@ describe("Workers Free limits", () => {
     expect((await processPointer(deps, pointers[0])).result).toBe("platform_limit");
     expect(db.meter.rowsWritten).toBe(writes);
     expect(deps.mock.calls).toHaveLength(0);
+  });
+
+  it("holds a batch on the queue without a claim or a write at the campaign reserve", async () => {
+    const { db, seeded, pointers } = await sendingCampaign({ contacts: 1 });
+    const deps = await testDeps(db, {
+      usage: {
+        gate: async () => ({ limit: null, unsubscribesPending: false, reserveReached: true }),
+        setPlatformLimit: async () => undefined,
+      },
+    });
+    const writes = db.meter.rowsWritten;
+    const outcome = await processPointer(deps, pointers[0]);
+    expect(outcome).toMatchObject({ action: "retry", result: "reserve" });
+    expect(db.meter.rowsWritten).toBe(writes);
+    expect(deps.mock.calls).toHaveLength(0);
+    const batch = await batchRow(db, seeded.workspaceId, pointers[0]?.batchId as number);
+    expect(batch.status).toBe("enqueued");
+  });
+
+  it("waits until a minute after 00:00 UTC, at most 12 hours", () => {
+    expect(secondsUntilReset(Date.UTC(2026, 9, 19, 23, 0))).toBe(3660);
+    expect(secondsUntilReset(Date.UTC(2026, 9, 19, 1, 0))).toBe(12 * 60 * 60);
+  });
+
+  it("reaches the campaign reserve at 95% of the daily writes on Free only", () => {
+    expect(campaignReserveReached("free", 94_999, 100_000)).toBe(false);
+    expect(campaignReserveReached("free", 95_000, 100_000)).toBe(true);
+    expect(campaignReserveReached("paid", 99_999, 100_000)).toBe(false);
+  });
+
+  it("the consumer gate reads the reserve from the UsageMeter and the plan setting", async () => {
+    const { db } = await sendingCampaign({ contacts: 1 });
+    const meter = usageMeter(env);
+    const before = (await meter.status()).rowsWritten;
+    const deps = await consumerDeps(env, db);
+    expect((await deps.usage.gate()).reserveReached).toBe(false);
+    await meter.record(Math.max(0, 95_000 - before));
+    expect((await deps.usage.gate()).reserveReached).toBe(true);
   });
 
   for (const provider of ["ses", "resend", "postmark", "tosend", "cloudflare"]) {

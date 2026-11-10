@@ -1,5 +1,7 @@
 export {
   type BudgetDecision,
+  CAMPAIGN_RESERVE_RATIO,
+  campaignReserveReached,
   PLAN_LIMITS,
   type PlanLimit,
   reservedThreshold,

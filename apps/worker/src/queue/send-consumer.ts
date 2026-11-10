@@ -3,6 +3,7 @@ import {
   type BatchPointer,
   type BatchResults,
   campaignAudience,
+  campaignReserveReached,
   checkBatchRecipients,
   claimBatch,
   customFieldValues,
@@ -15,6 +16,7 @@ import {
   type PlatformLimit,
   parseFrozenSet,
   readRestoreAck,
+  readWorkersPlan,
   refsOf,
   type Services,
   systemAudit,
@@ -133,6 +135,17 @@ export interface ConsumerDeps {
 export interface UsageGate {
   limit: PlatformLimit | null;
   unsubscribesPending: boolean;
+  /** On Workers Free, the day's D1 writes are at the campaign reserve (CAMPAIGN_RESERVE_RATIO). */
+  reserveReached?: boolean;
+}
+
+/** Queues accept a delay of at most 12 hours. */
+const MAX_QUEUE_DELAY_SECONDS = 12 * 60 * 60;
+
+/** The delay until a minute after 00:00 UTC, at most the Queues maximum. */
+export function secondsUntilReset(now: number): number {
+  const seconds = Math.ceil((nextUtcMidnight(now) - now) / 1000) + 60;
+  return Math.min(MAX_QUEUE_DELAY_SECONDS, Math.max(60, seconds));
 }
 
 export type ConsumerOutcome =
@@ -260,6 +273,12 @@ export async function processPointer(deps: ConsumerDeps, body: unknown): Promise
   const start = deps.now();
   const gate = await deps.usage.gate();
   if (gate.limit && gate.limit.until > start) return ack("platform_limit");
+  // Near the D1 daily limit, the batch waits on the queue without a claim or a write.
+  // It comes back after 00:00 UTC. If it reaches the dead-letter queue, the sweep
+  // dispatches it again.
+  if (gate.reserveReached) {
+    return { action: "retry", delaySeconds: secondsUntilReset(start), result: "reserve" };
+  }
 
   try {
     return await handlePointer(deps, pointer, gate.unsubscribesPending);
@@ -562,9 +581,14 @@ export async function consumerDeps(env: Env, db: DbConnection): Promise<Consumer
     usage: {
       gate: async () => {
         const status = await meter.status();
+        // The plan setting costs a D1 read, so read it only when the count is high.
+        const reserveReached =
+          campaignReserveReached("free", status.rowsWritten, status.dailyLimit) &&
+          campaignReserveReached(await readWorkersPlan(db), status.rowsWritten, status.dailyLimit);
         return {
           limit: activeLimit(status, Date.now()),
           unsubscribesPending: status.unsubscribesPending === true,
+          reserveReached,
         };
       },
       setPlatformLimit: (since, until) => meter.setPlatformLimit(since, until),

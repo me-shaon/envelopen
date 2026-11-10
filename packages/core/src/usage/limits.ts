@@ -35,6 +35,25 @@ export function welcomeReserve(
   return rowsWritten >= reservedThreshold(dailyLimit) ? "defer" : "ok";
 }
 
+/**
+ * The share of the daily D1 writes after which the send consumer claims no new campaign
+ * batch on Workers Free. A batch that sends must also write its results. Without this
+ * margin, D1 rejects the result writes of batches that already sent, and those batches
+ * become uncertain. The rest of the day's writes stay free for unsubscribes, signups,
+ * and confirmation emails.
+ */
+export const CAMPAIGN_RESERVE_RATIO = 0.95;
+
+/** True when the send consumer must hold campaign batches until 00:00 UTC. */
+export function campaignReserveReached(
+  plan: WorkersPlan,
+  rowsWritten: number,
+  dailyLimit: number,
+): boolean {
+  if (plan === "paid") return false;
+  return rowsWritten >= Math.floor(dailyLimit * CAMPAIGN_RESERVE_RATIO);
+}
+
 export interface PlanLimit {
   id: string;
   label: string;

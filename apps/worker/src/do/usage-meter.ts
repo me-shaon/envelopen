@@ -26,8 +26,11 @@ import { D1_DAILY_WRITE_LIMIT } from "./usage";
 //   total and in a second count, so the usage view can show the automation share.
 // - `reserve` is the check before each welcome step: "defer" when the day's writes are
 //   at 70% of the daily limit or more, on Workers Free. The caller passes the plan from
-//   the owner's setting, because the Worker cannot read the account's plan. Campaigns,
-//   confirmation emails, and unsubscribes do not ask it: they stop only at the limit.
+//   the owner's setting, because the Worker cannot read the account's plan.
+// - The send consumer reads `rowsWritten` from `status`. On Free, at 95% of the limit it
+//   claims no new campaign batch until 00:00 UTC (CAMPAIGN_RESERVE_RATIO), so the
+//   batches that sent can still write their results. Confirmation emails and
+//   unsubscribes stop only at the limit.
 
 interface LedgerFlag {
   pending: boolean;

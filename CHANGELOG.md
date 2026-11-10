@@ -16,6 +16,12 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 - On the **Contacts** page, you can select contacts, or every contact that matches the filters, and add them to a list or a tag, or remove them from it. A contact who is in the list or has the tag already does not change. See [Change the lists or tags of many contacts](docs/guides/import-contacts.md#change-the-lists-or-tags-of-many-contacts).
 
+### Fixed
+
+- A campaign snapshot that failed got a new Workflow instance every minute until one finished. Now it gets at most one successor at a time, and at most 10 in total.
+- An error in the cleanup of expired idempotency keys or expired files no longer stops the other cron jobs, for example the daily backup. These two jobs wait while the D1 daily limit is reached.
+- On Workers Free, the send consumer stops taking new campaign batches when the day's D1 writes reach 95% of the limit. The batches wait on the queue until 00:00 UTC. Before, batches that sent at the limit could not record their results, and the campaign asked you to retry or skip them.
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

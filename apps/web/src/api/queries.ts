@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
-import { getLoginMode, getSession } from "@/auth/auth-client";
+import { getLoginMode, getSession, getSetupOpen } from "@/auth/auth-client";
 import { api, unwrap } from "./client";
 
 // Query definitions. Keys of workspace data start with ["ws", id], so data of one
@@ -15,6 +15,13 @@ export const loginModeQuery = queryOptions({
   queryKey: ["login-mode"],
   queryFn: getLoginMode,
   staleTime: Number.POSITIVE_INFINITY,
+});
+
+// Not cached: the screen closes when the owner is created.
+export const setupOpenQuery = queryOptions({
+  queryKey: ["setup-open"],
+  queryFn: getSetupOpen,
+  staleTime: 0,
 });
 
 export const workspacesQuery = queryOptions({

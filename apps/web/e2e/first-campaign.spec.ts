@@ -63,8 +63,9 @@ test.describe("first campaign", () => {
   test("F1: sets up, connects, verifies, imports, tests, sends, and sees the stats", async ({
     page,
   }) => {
-    // First-run setup.
-    await page.goto("/setup");
+    // First-run setup. The first visit to the Worker URL opens it.
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/setup$/);
     await page.getByLabel("Setup token").fill(SETUP_TOKEN);
     await page.getByRole("button", { name: "Check the deployment" }).click();
     await expect(page.getByText("9 of 9 pass")).toBeVisible();

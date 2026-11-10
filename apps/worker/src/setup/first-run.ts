@@ -27,6 +27,7 @@ import { readBodyLimited } from "../body";
 
 // First-run screen and setup-token recovery (KTD6, R2, R3, R74). Mounted at /api/setup.
 //
+//   GET  /api/setup/status            { open } Whether the first-run screen accepts the token.
 //   POST /api/setup/check    { token }  Binding and migration checks, plan limits, login mode.
 //   POST /api/setup/owner    { token, email, name, workspaceName, password? }
 //   POST /api/setup/recover  { token, password? }
@@ -329,6 +330,13 @@ export function createSetupRoutes(options: SetupRoutesOptions = {}): Hono<SetupA
     }
     return { body, conn, ownerId };
   }
+
+  // Lets the web app open /setup on the first visit. It shows nothing new: a wrong token
+  // already answers 401 while the screen is open and 404 once it is closed.
+  app.get("/status", async (c) => {
+    if (!setupTokenConfigured(c.env.SETUP_TOKEN)) return c.json({ open: false });
+    return c.json({ open: (await readOwnerId(createDb(c.env))) === null });
+  });
 
   app.post("/check", async (c) => {
     const result = await guard(c, false);

@@ -165,6 +165,12 @@ export interface OwnerInput {
   password?: string;
 }
 
+/** True while the first-run screen accepts the setup token: before the owner exists. */
+export async function getSetupOpen(): Promise<boolean> {
+  const result = await request<{ open: boolean }>("/api/setup/status");
+  return result.open;
+}
+
 export function setupCheck(token: string): Promise<SetupCheckResult> {
   return post("/api/setup/check", { token });
 }

@@ -96,11 +96,13 @@ async function switchWorkspace(page: Page, name: string) {
 test.describe("password mode", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("a logged-out visit redirects to login", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/login$/);
-    await page.goto("/settings");
-    await expect(page).toHaveURL(/\/login\?redirect=%2Fsettings$/);
+  test("a visit before the owner exists opens setup", async ({ page }) => {
+    for (const path of ["/", "/settings"]) {
+      await page.goto(path);
+      await expect(page, path).toHaveURL(/\/setup$/);
+    }
+    // The sign-in page stays open.
+    await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
     await expect(page.getByLabel("Password")).toBeVisible();
   });
@@ -152,6 +154,12 @@ test.describe("password mode", () => {
     expect(closed).toBe(404);
 
     await signOut(page);
+    // With the owner in place, a logged-out visit redirects to login.
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/login$/);
+    await page.goto("/settings");
+    await expect(page).toHaveURL(/\/login\?redirect=%2Fsettings$/);
+    await page.goto("/login");
     await page.getByLabel("Email").fill(OWNER.email);
     await page.getByLabel("Password").fill(OWNER.password);
     await page.getByRole("button", { name: "Sign in" }).click();

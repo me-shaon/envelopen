@@ -8,7 +8,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import type { ContactFilters } from "./api/queries";
-import { sessionQuery } from "./api/queries";
+import { sessionQuery, setupOpenQuery } from "./api/queries";
 import { AppShell } from "./components/app-shell";
 import { RouteProgress } from "./components/route-progress";
 import { Toaster } from "./components/ui/toast";
@@ -88,6 +88,10 @@ const appRoute = createRoute({
   async beforeLoad({ context, location }) {
     const session = await context.queryClient.fetchQuery(sessionQuery);
     if (!session) {
+      // A new deployment has no owner to sign in, so a visit opens setup. A failed check
+      // falls back to the sign-in page, which links to setup.
+      const setupOpen = await context.queryClient.fetchQuery(setupOpenQuery).catch(() => false);
+      if (setupOpen) throw redirect({ to: "/setup" });
       throw redirect({
         to: "/login",
         search: location.href === "/" ? {} : { redirect: location.href },

@@ -69,6 +69,28 @@ describe("first-run screen stays closed", () => {
   });
 });
 
+describe("setup status", () => {
+  async function status(env = testEnv()): Promise<unknown> {
+    const res = await call("/api/setup/status", { env, ip: freshIp() });
+    expect(res.status).toBe(200);
+    return res.json();
+  }
+
+  it("is open before the owner exists", async () => {
+    expect(await status()).toEqual({ open: true });
+  });
+
+  it("is closed once the owner exists", async () => {
+    await createOwner();
+    expect(await status()).toEqual({ open: false });
+  });
+
+  it("is closed when SETUP_TOKEN is not usable", async () => {
+    expect(await status(testEnv({ SETUP_TOKEN: undefined }))).toEqual({ open: false });
+    expect(await status(testEnv({ SETUP_TOKEN: "x".repeat(31) }))).toEqual({ open: false });
+  });
+});
+
 describe("setup token", () => {
   it("rejects a wrong, empty, or missing token", async () => {
     for (const body of [{ token: "wrong-token" }, { token: "" }, {}, { token: 42 }]) {

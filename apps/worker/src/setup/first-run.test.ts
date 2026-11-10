@@ -13,7 +13,7 @@ import {
   testEnv,
 } from "../../test/auth-helpers";
 import { hashPassword, parseHash } from "../auth/pbkdf2-hasher";
-import { attemptKeys, LOGIN_EMAIL_CEILING } from "../auth/rate-limit-do";
+import { attemptKeys, LOGIN_EMAIL_CEILING, SETUP_DEPLOYMENT_RULE } from "../auth/rate-limit-do";
 import { setupTokenMatches } from "./first-run";
 
 type Json = Record<string, unknown>;
@@ -111,6 +111,15 @@ describe("setup token", () => {
     // Another IP is not affected.
     const other = await call("/api/setup/check", { ip: freshIp(), body: { token: SETUP_TOKEN } });
     expect(other.status).toBe(200);
+  });
+
+  it("refuses every token after too many wrong ones from many IPs", async () => {
+    for (let i = 0; i < SETUP_DEPLOYMENT_RULE.limit; i++) {
+      const res = await call("/api/setup/check", { ip: freshIp(), body: { token: `wrong-${i}` } });
+      expect(res.status).toBe(401);
+    }
+    const blocked = await call("/api/setup/check", { ip: freshIp(), body: { token: SETUP_TOKEN } });
+    expect(blocked.status).toBe(429);
   });
 });
 

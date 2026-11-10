@@ -13,7 +13,14 @@ import {
 } from "../auth/better-auth";
 import { createPasskeyEnrollment } from "../auth/passkeys";
 import { PBKDF2_MAX_ITERATIONS, timingSafeEqualBytes } from "../auth/pbkdf2-hasher";
-import { type AttemptLimiter, attemptKeys, clientIp, SETUP_RULE } from "../auth/rate-limit-do";
+import {
+  type AttemptLimiter,
+  attemptKeys,
+  clientIp,
+  SETUP_DEPLOYMENT_KEY,
+  SETUP_DEPLOYMENT_RULE,
+  SETUP_RULE,
+} from "../auth/rate-limit-do";
 import { defaultLimiter, tooManyAttempts } from "../auth/routes";
 import { AUTH_TABLES } from "../auth/schema-options";
 import { readBodyLimited } from "../body";
@@ -306,11 +313,18 @@ export function createSetupRoutes(options: SetupRoutesOptions = {}): Hono<SetupA
 
     const limiter = limiterFor(c.env);
     const ipKey = attemptKeys.ip("setup", clientIp(c.req.raw));
-    const status = await limiter.check(ipKey, SETUP_RULE);
+    const [status, deployment] = await Promise.all([
+      limiter.check(ipKey, SETUP_RULE),
+      limiter.check(SETUP_DEPLOYMENT_KEY, SETUP_DEPLOYMENT_RULE),
+    ]);
     if (!status.allowed) return { response: tooManyAttempts(status) };
+    if (!deployment.allowed) return { response: tooManyAttempts(deployment) };
 
     if (!(await setupTokenMatches(expected, body.token))) {
-      await limiter.record(ipKey, SETUP_RULE);
+      await Promise.all([
+        limiter.record(ipKey, SETUP_RULE),
+        limiter.record(SETUP_DEPLOYMENT_KEY, SETUP_DEPLOYMENT_RULE),
+      ]);
       return { response: fail(c, 401, "invalid_setup_token", "The setup token is not correct.") };
     }
     return { body, conn, ownerId };

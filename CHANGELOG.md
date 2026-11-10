@@ -24,6 +24,7 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 ### Security
 
+- Wrong setup tokens now count for the whole deployment too. After 20 wrong tokens in an hour from any IPs, the first-run screen and the password reset refuse every token until the hour ends.
 - The MCP server SDK is now 2.3.1 and `agents` is now 0.29.0. The new versions limit the request body size, and they fix a memory exhaustion bug during validation.
 - Zod is now 4.6.7, with the fix for memory exhaustion on large constrained collections.
 - `body-parser` and `fast-uri`, which come in through the MCP SDK, are pinned to their fixed versions.

@@ -1,6 +1,6 @@
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { attemptKeys } from "../src/auth/rate-limit-do";
+import { attemptKeys, SETUP_DEPLOYMENT_KEY } from "../src/auth/rate-limit-do";
 import worker from "../src/index";
 
 // Helpers for the auth and first-run tests. They call the real Worker entry, so the
@@ -100,6 +100,7 @@ export async function resetAuthState(): Promise<void> {
   for (const action of ["login", "login-ceiling"]) {
     await env.AUTH_RATE_LIMITER.getByName(await attemptKeys.email(action, OWNER.email)).reset();
   }
+  await env.AUTH_RATE_LIMITER.getByName(SETUP_DEPLOYMENT_KEY).reset();
   await env.DB.batch([
     env.DB.prepare("DELETE FROM system_settings WHERE key = 'owner_user_id'"),
     env.DB.prepare("DELETE FROM auth_verification"),

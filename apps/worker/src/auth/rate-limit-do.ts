@@ -91,6 +91,15 @@ export const LOGIN_RULE: AttemptRule = { limit: 5, windowMs: 15 * 60 * 1000 };
 export const LOGIN_EMAIL_CEILING: AttemptRule = { limit: 100, windowMs: 60 * 60 * 1000 };
 /** Wrong setup tokens (first-run screen and recovery) from one IP. */
 export const SETUP_RULE: AttemptRule = { limit: 5, windowMs: 15 * 60 * 1000 };
+/**
+ * Wrong setup tokens over the whole deployment, from all IPs. The setup token also
+ * resets the owner's password (`/recover`), so a guess from many IPs must stay slow.
+ * While it is reached, the first-run screen and recovery refuse every token, also the
+ * right one, until the hour ends.
+ */
+export const SETUP_DEPLOYMENT_RULE: AttemptRule = { limit: 20, windowMs: 60 * 60 * 1000 };
+/** The counter key of SETUP_DEPLOYMENT_RULE: one per deployment. */
+export const SETUP_DEPLOYMENT_KEY = "setup:deployment";
 /** Restore starts and backup uploads from one IP on the first-run screen (U5). */
 export const RESTORE_RULE: AttemptRule = { limit: 10, windowMs: 60 * 60 * 1000 };
 /**

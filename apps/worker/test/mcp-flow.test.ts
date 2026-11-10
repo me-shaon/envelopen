@@ -70,7 +70,8 @@ async function draftCampaign(client: Client, listId: number) {
     source:
       '# Hello {{ first_name | default: "there" }}\n\n' +
       "The [new course](https://example.com/course) starts next week.\n\n" +
-      "[Unsubscribe]({{ unsubscribe_url }})",
+      "[Unsubscribe]({{ unsubscribe_url }})\n\n" +
+      "{{ brand.address }}",
     idempotencyKey: "template-1",
   });
   const campaign = await use(client, "campaigns_create", {

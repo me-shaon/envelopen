@@ -1,5 +1,5 @@
 import type { DbConnection } from "@envelopen/db";
-import { extractLinks, mergeTagNames } from "@envelopen/email-render";
+import { escapeHtml, extractLinks, mergeTagNames } from "@envelopen/email-render";
 import { batchSizeFor, getAdapter } from "@envelopen/providers";
 import { z } from "zod";
 import { readRestoreAck } from "../backup/restore-ack";
@@ -155,24 +155,39 @@ export async function runChecklist(input: ChecklistInput): Promise<Checklist> {
 
   // Anti-spam laws (for example CAN-SPAM) ask for the sender's postal address in each
   // campaign. The brand footer block shows it, and confirm stores it in the snapshot.
+  // The email must also show it: the `brand.address` tag (the brand footer block has it),
+  // or the first line of the address as text.
   const address = (await loadBrand(db, workspaceId)).kit?.postal_address.trim() ?? "";
+  const firstLine = address.split("\n")[0]?.trim() ?? "";
+  const shown =
+    tags.has("brand.address") ||
+    (firstLine !== "" && (html.includes(firstLine) || html.includes(escapeHtml(firstLine))));
   items.push(
-    address
+    !address
       ? {
-          id: "postal_address",
-          label: "Postal address",
-          status: "pass",
-          message: address.split("\n")[0] ?? address,
-          fix: null,
-        }
-      : {
           id: "postal_address",
           label: "Postal address",
           status: "fail",
           message:
             "Campaigns need your postal address, and the brand kit has none. Add it in Brand, then check the send again.",
           fix: { label: "Add the postal address in Brand", path: "/brand" },
-        },
+        }
+      : !shown
+        ? {
+            id: "postal_address",
+            label: "Postal address",
+            status: "fail",
+            message:
+              "The email does not show your postal address. Add the brand footer block or the {{ brand.address }} tag to the template.",
+            fix: templateFix,
+          }
+        : {
+            id: "postal_address",
+            label: "Postal address",
+            status: "pass",
+            message: firstLine,
+            fix: null,
+          },
   );
 
   const links = extractLinks(html);

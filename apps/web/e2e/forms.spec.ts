@@ -361,7 +361,7 @@ test.describe("signup forms", () => {
       subject: "Frequency news",
       format: "html",
       source:
-        '<html><body><p>News.</p><p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p></body></html>',
+        '<html><body><p>News.</p><p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p><p>{{ brand.address }}</p></body></html>',
     });
     const draft = await apiPost(page, "/campaigns", {
       name: "Frequency news",

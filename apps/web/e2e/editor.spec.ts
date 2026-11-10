@@ -209,7 +209,13 @@ test.describe("editor", () => {
     expect(saved.html).toContain("Start the course");
     expect(saved.html).toContain('id="marker"');
     expect(saved.html).not.toMatch(/<script|onerror|javascript:/i);
-    expect(saved.mergeTags).toEqual(["first_name", "unsubscribe_url", "preferences_url"]);
+    expect(saved.mergeTags).toEqual([
+      "first_name",
+      "brand.footer",
+      "brand.address",
+      "unsubscribe_url",
+      "preferences_url",
+    ]);
 
     // The unsaved-draft preview gets the raw HTML as written. The sandbox keeps it inert.
     await page.getByRole("button", { name: "Preview" }).click();
@@ -371,7 +377,7 @@ test.describe("editor", () => {
     await signIn(page);
     await page.goto("/templates/new");
     await page.getByLabel("Template name").fill("Builder");
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "p", "footer"]);
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "p", "brandFooter"]);
 
     // An HTML5 drag from the library onto the top edge of the paragraph. Playwright
     // drives Chromium's native drag, so dataTransfer carries the blocks as in a browser.
@@ -379,7 +385,7 @@ test.describe("editor", () => {
     await page
       .getByRole("button", { name: "Add button" })
       .dragTo(paragraph, { targetPosition: { x: 24, y: 2 } });
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "p", "footer"]);
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "p", "brandFooter"]);
     await expect(page.getByTestId("builder-announcer")).toHaveText("Button added.");
     await expect(page.getByTestId("block-settings")).toContainText("Button");
 
@@ -387,7 +393,7 @@ test.describe("editor", () => {
     await expect(page).toHaveURL(/\/templates\/\d+$/);
     builderId = templateId(page);
     const id = builderId;
-    expect(await savedOrder(page, id)).toEqual(["heading", "button", "paragraph", "footer"]);
+    expect(await savedOrder(page, id)).toEqual(["heading", "button", "paragraph", "brandFooter"]);
     const html = String((await apiGet(page, `/templates/${id}`)).html);
     const button = html.indexOf(">Read more<");
     expect(button).toBeGreaterThan(html.indexOf("Hello"));
@@ -402,28 +408,34 @@ test.describe("editor", () => {
     await signIn(page);
     const id = builderId;
     await page.goto(`/templates/${id}`);
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "p", "footer"]);
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "p", "brandFooter"]);
 
     // A ready section, inserted by click after the selected paragraph.
     await page.locator(".email-canvas .ProseMirror > p").first().click();
     await page.getByRole("button", { name: "Add text and image section" }).click();
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "p", "columns", "footer"]);
+    await expect
+      .poll(() => canvasOrder(page))
+      .toEqual(["h1", "button", "p", "columns", "brandFooter"]);
 
     const section = page.locator('.email-canvas [data-block="columns"]');
     await dragByHandle(page, section, page.locator(".email-canvas .ProseMirror > p").first());
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "columns", "p", "footer"]);
+    await expect
+      .poll(() => canvasOrder(page))
+      .toEqual(["h1", "button", "columns", "p", "brandFooter"]);
     await expectNoSeriousViolations(page);
     await screenshot(page, "builder");
 
     await saveTemplate(page);
     await page.reload();
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "button", "columns", "p", "footer"]);
+    await expect
+      .poll(() => canvasOrder(page))
+      .toEqual(["h1", "button", "columns", "p", "brandFooter"]);
     expect(await savedOrder(page, id)).toEqual([
       "heading",
       "button",
       "columns",
       "paragraph",
-      "footer",
+      "brandFooter",
     ]);
   });
 
@@ -479,21 +491,21 @@ test.describe("editor", () => {
     await signIn(page);
     await page.goto("/templates/new");
     await page.getByLabel("Template name").fill("Keyboard");
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "p", "footer"]);
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "p", "brandFooter"]);
 
     await page.locator(".email-canvas .ProseMirror > p").first().click();
     // The editor reads the new selection, so Move up turns on.
     await expect(page.getByRole("button", { name: "Move up" })).toBeEnabled();
     await page.keyboard.press("Alt+Shift+ArrowUp");
-    await expect.poll(() => canvasOrder(page)).toEqual(["p", "h1", "footer"]);
+    await expect.poll(() => canvasOrder(page)).toEqual(["p", "h1", "brandFooter"]);
     const announcer = page.getByTestId("builder-announcer");
     await expect(announcer).toHaveText("Text moved to position 1 of 3.");
     // The same block stays selected, so the next key press moves it again.
     await page.keyboard.press("Alt+Shift+ArrowDown");
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "p", "footer"]);
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "p", "brandFooter"]);
     await expect(announcer).toHaveText("Text moved to position 2 of 3.");
     await page.getByRole("button", { name: "Move down" }).click();
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "footer", "p"]);
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "brandFooter", "p"]);
     await expect(page.getByRole("button", { name: "Move down" })).toBeDisabled();
     // A move button returns the focus to the canvas, so it is not lost on the disabled button.
     await expect(page.getByRole("textbox", { name: "Email body" })).toBeFocused();
@@ -501,7 +513,7 @@ test.describe("editor", () => {
     // Every library entry is a button: focus it and press Enter to insert.
     await page.getByRole("button", { name: "Add divider" }).focus();
     await page.keyboard.press("Enter");
-    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "footer", "p", "divider"]);
+    await expect.poll(() => canvasOrder(page)).toEqual(["h1", "brandFooter", "p", "divider"]);
     await expect(announcer).toHaveText("Divider added.");
 
     // The search narrows the list.

@@ -22,7 +22,8 @@ const BRANDED_HTML =
   '<html><body><img src="{{ brand.logo_url }}" alt="{{ brand.name }}" width="120">' +
   '<p style="color:{{ brand.color_primary }}">{{ brand.name }}</p>' +
   '<p>Hello {{ first_name | default: "there" }}</p>' +
-  '<p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p></body></html>';
+  '<p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p>' +
+  "<p>{{ brand.address }}</p></body></html>";
 
 interface SentEmail {
   to: string | string[];
@@ -152,7 +153,7 @@ test.describe("brand kit", () => {
     await page.getByLabel("X", { exact: true }).fill("https://x.com/acme");
     // The preview follows the fields before the save.
     await expect(preview.getByText("Acme Studio").first()).toBeVisible();
-    await expect(preview.getByText("1 Course Street, Springfield")).toBeVisible();
+    await expect(preview.getByText("1 Course Street, Springfield").first()).toBeVisible();
     await expect(preview.getByRole("link", { name: "X", exact: true })).toBeVisible();
     await expect(preview.getByText("Acme Studio").first()).toHaveCSS("color", "rgb(17, 34, 51)");
     await page.getByRole("button", { name: "Save brand" }).click();
@@ -218,7 +219,7 @@ test.describe("brand kit", () => {
     await page.getByRole("button", { name: "Preview" }).click();
     const preview = page.frameLocator('iframe[title="Email preview"]');
     await expect(preview.getByText("Acme Studio").first()).toBeVisible();
-    await expect(preview.getByText("1 Course Street, Springfield")).toBeVisible();
+    await expect(preview.getByText("1 Course Street, Springfield").first()).toBeVisible();
     await expect(preview.getByRole("link", { name: "Read more" })).toHaveCSS(
       "background-color",
       "rgb(17, 34, 51)",

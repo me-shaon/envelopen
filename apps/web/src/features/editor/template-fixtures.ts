@@ -3,7 +3,6 @@ import {
   defaultBlock,
   type EmailDocument,
   type ParagraphNode,
-  starterDocument,
   type TextNode,
 } from "@envelopen/email-render/blocks/types";
 
@@ -27,8 +26,26 @@ function link(text: string, href: string): TextNode {
   return { type: "text", text, marks: [{ type: "link", attrs: { href } }] };
 }
 
+// The starter document of v0.1 to v0.6. New templates now start with the brand footer,
+// which shows the postal address.
+const V03_STARTER: EmailDocument = {
+  type: "doc",
+  content: [
+    {
+      type: "heading",
+      attrs: { level: 1 },
+      content: [
+        { type: "text", text: "Hello " },
+        { type: "mergeTag", attrs: { field: "first_name", fallback: "there" } },
+      ],
+    },
+    { type: "paragraph", content: [{ type: "text", text: "Write your message here." }] },
+    defaultBlock("footer"),
+  ],
+};
+
 export const TEMPLATE_FIXTURES: { name: string; doc: EmailDocument }[] = [
-  { name: "starter document", doc: starterDocument() },
+  { name: "starter document", doc: V03_STARTER },
   {
     name: "origin block set",
     doc: {

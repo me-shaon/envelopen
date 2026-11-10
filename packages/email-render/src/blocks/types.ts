@@ -316,7 +316,9 @@ export function starterDocument(): EmailDocument {
         type: "paragraph",
         content: [{ type: "text", text: "Write your message here." }],
       },
-      defaultBlock("footer"),
+      // The brand footer shows the postal address and the unsubscribe link, which the
+      // pre-send checklist asks for.
+      defaultBlock("brandFooter"),
     ],
   };
 }

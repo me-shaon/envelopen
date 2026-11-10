@@ -60,7 +60,10 @@ A confirmed campaign keeps its logo, colors, font, footer, postal address, and s
 
 ### Postal address and the send checklist
 
-The send checklist has the check **Postal address**. If the brand kit has no postal address, the check fails and you cannot confirm the campaign. Select **Add the postal address in Brand**, add the address, and check the send again. Many anti-spam laws (for example CAN-SPAM) ask for a postal address in each marketing email.
+The send checklist has the check **Postal address**. Many anti-spam laws (for example CAN-SPAM) ask for a postal address in each marketing email. The check fails, and you cannot confirm the campaign, in these cases:
+
+- The brand kit has no postal address. Select **Add the postal address in Brand**, add the address, and check the send again.
+- The email does not show the address. Add the **Brand footer** block, or type `{{ brand.address }}` in the email. The check also passes when the email holds the first line of the address as text. The **Footer** block does not show the address.
 
 ### Brand tokens
 
@@ -90,7 +93,7 @@ A token can have a fallback, for example `{{ brand.name | default: "Our team" }}
 4. Change the name, the subject, and the content.
 5. Select **Save**.
 
-Each card shows a live preview with your brand kit and the sample name "Ada". To start with an empty email, select **Blank**. Blank has a heading, a paragraph, and the footer.
+Each card shows a live preview with your brand kit and the sample name "Ada". To start with an empty email, select **Blank**. Blank has a heading, a paragraph, and the brand footer.
 
 The gallery has ten templates:
 
@@ -171,6 +174,7 @@ The block shows under **Saved blocks** in every template of the workspace. A tem
 | "The logo is larger than 1 MB." | The file is too large. | Make the file smaller, and upload it again. |
 | The upload of the logo fails. | The file is not PNG, JPEG, GIF, or WebP, or its content does not match its name. SVG always fails. | Export the logo as PNG, and upload it again. |
 | The send checklist fails on **Postal address**. | The brand kit has no postal address. | Add the **Postal address** in **Brand**, select **Save brand**, and check the send again. |
+| The send checklist fails on **Postal address**, and the brand kit has an address. | The email does not show the address. | Add the **Brand footer** block or the `{{ brand.address }}` tag to the template, save it, and check the send again. |
 | A sent campaign shows the old logo or colors. | The campaign keeps the brand of its confirm time. | Change the brand kit before you confirm the next campaign. |
 | A social icon is not in the email. | The brand kit has no link for that network. | Add the `https://` link under **Social links**, and select **Save brand**. |
 | A social link is refused. | The link does not start with `https://`. | Type the full `https://` address. |

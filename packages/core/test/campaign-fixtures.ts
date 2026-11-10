@@ -12,7 +12,8 @@ import type { EmailHasher } from "../src/services";
 export const CAMPAIGN_HTML =
   '<html><body><p>Hello {{ first_name | default: "there" }}</p>' +
   '<p><a href="https://example.com/course">See the course</a></p>' +
-  '<p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p></body></html>';
+  '<p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p>' +
+  "<p>{{ brand.address }}</p></body></html>";
 
 export interface SeedOptions {
   provider?: string;

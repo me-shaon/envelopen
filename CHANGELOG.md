@@ -16,6 +16,14 @@ The release workflow uses the section of a version as the notes of its GitHub re
 
 - On the **Contacts** page, you can select contacts, or every contact that matches the filters, and add them to a list or a tag, or remove them from it. A contact who is in the list or has the tag already does not change. See [Change the lists or tags of many contacts](docs/guides/import-contacts.md#change-the-lists-or-tags-of-many-contacts).
 
+### Breaking
+
+- The send checklist also fails on **Postal address** when the email does not show the address. A template that has only the **Footer** block, for example a Blank template from an earlier version, now blocks the confirm. Before you update, add the **Brand footer** block or the `{{ brand.address }}` tag to these templates. See [Postal address and the send checklist](docs/guides/brand-and-templates.md#postal-address-and-the-send-checklist).
+
+### Changed
+
+- **Blank** templates start with the brand footer, which shows the postal address. Before, Blank had the footer block, which does not show it.
+
 ### Fixed
 
 - A campaign snapshot that failed got a new Workflow instance every minute until one finished. Now it gets at most one successor at a time, and at most 10 in total.

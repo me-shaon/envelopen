@@ -17,7 +17,8 @@ const MOCK = `http://127.0.0.1:${CAMPAIGNS_MOCK_PORT}`;
 const TEMPLATE_HTML =
   '<html><body><p>Hello {{ first_name | default: "there" }},</p>' +
   '<p>The new course starts on Monday. <a href="https://example.com/course">See the course</a>.</p>' +
-  '<p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p></body></html>';
+  '<p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p>' +
+  "<p>{{ brand.address }}</p></body></html>";
 
 /** A viewport screenshot from the top of the page. */
 async function screenshot(page: Page, name: string) {

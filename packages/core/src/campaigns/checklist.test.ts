@@ -41,6 +41,24 @@ describe("pre-send checklist", () => {
     });
   });
 
+  it("fails when the email does not show the postal address", async () => {
+    const { result, item } = await checklist({
+      html: '<html><body><a href="{{ unsubscribe_url }}">Unsubscribe</a></body></html>',
+    });
+    expect(result.blocked).toBe(true);
+    expect(item("postal_address")).toMatchObject({
+      status: "fail",
+      fix: { path: expect.stringMatching(/^\/templates\//) },
+    });
+  });
+
+  it("passes when the email has the postal address as text", async () => {
+    const { item } = await checklist({
+      html: '<html><body><a href="{{ unsubscribe_url }}">Unsubscribe</a><p>1 Course Street, Springfield</p></body></html>',
+    });
+    expect(item("postal_address")).toMatchObject({ status: "pass" });
+  });
+
   it("fails when domain authentication is missing", async () => {
     const { result, item } = await checklist({ unverifiedDomain: true });
     expect(result.blocked).toBe(true);

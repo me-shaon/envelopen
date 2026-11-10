@@ -29,7 +29,8 @@ const BRANDED_HTML =
   '<p style="color:{{ brand.color_primary }}">{{ brand.name }}</p>' +
   '<p>Hello {{ first_name | default: "there" }}</p>' +
   '<p><a href="https://example.com/course">See the course</a></p>' +
-  '<p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p></body></html>';
+  '<p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p>' +
+  "<p>{{ brand.address }}</p></body></html>";
 
 /** A PNG header with an IHDR chunk. */
 function png(salt: number): Uint8Array {

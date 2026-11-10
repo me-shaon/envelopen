@@ -13,7 +13,7 @@ Your contacts and stats stay in your own Cloudflare account. Envelopen has an ad
 
 ## Deploy
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/me-shaon/envelopen)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/me-shaon/envelopen/tree/main)
 
 1. Select the button above, and sign in to Cloudflare.
 2. Clear the `SETUP_TOKEN` field, and type a passphrase of 32 characters or more. Save it. See [Secrets](#secrets).

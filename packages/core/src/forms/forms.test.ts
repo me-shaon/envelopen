@@ -240,6 +240,8 @@ describe("signup with double opt-in (F1)", () => {
       consent_version: 1,
       ip_hash: "iphash-1",
       user_agent: "Mozilla/5.0 Test",
+      source: "hosted",
+      source_origin: null,
     });
     const value = await db.db
       .selectFrom("contact_field_values")
@@ -256,6 +258,52 @@ describe("signup with double opt-in (F1)", () => {
     const again = await confirmSignup(db, token, T0 + HOUR + 1000);
     expect(again).toMatchObject({ kind: "confirmed", already: true });
     expect((await signupOfToken(db, token, T0 + HOUR)).kind).toBe("confirmed");
+  });
+
+  it("records the consent version, the source, and the origin of a headless signup", async () => {
+    const { db, mock, seeded, deps, publicForm } = await setup();
+    const loaded = await publicForm();
+    const checked = validateSubmission(loaded.defs, {
+      email: "site.reader@example.org",
+      fields: {},
+    });
+    if (!checked.ok) throw new Error("The submission did not validate.");
+    await submitSignup(deps(), loaded, {
+      email: checked.email,
+      values: checked.values,
+      ipHash: null,
+      userAgent: null,
+      origin: TEST_ORIGIN,
+      consentVersion: 7,
+      source: "headless",
+      sourceOrigin: "https://www.example.com",
+    });
+    const row = await db.db
+      .selectFrom("signups")
+      .selectAll()
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("email", "=", "site.reader@example.org")
+      .executeTakeFirstOrThrow();
+    expect(row).toMatchObject({
+      consent_version: 7,
+      source: "headless",
+      source_origin: "https://www.example.com",
+    });
+    const [token] = tokensIn(mock);
+    if (!token) throw new Error("No confirmation link in the email.");
+    const confirmed = await confirmSignup(db, token, T0 + HOUR);
+    expect(confirmed.kind).toBe("confirmed");
+    const evidence = await db.db
+      .selectFrom("form_consents")
+      .selectAll()
+      .where("workspace_id", "=", seeded.workspaceId)
+      .orderBy("id", "desc")
+      .executeTakeFirstOrThrow();
+    expect(evidence).toMatchObject({
+      consent_version: 7,
+      source: "headless",
+      source_origin: "https://www.example.com",
+    });
   });
 
   it("keeps a pending signup out of the campaign estimate and the snapshot (AE2)", async () => {

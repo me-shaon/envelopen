@@ -136,9 +136,9 @@ export async function confirmSignup(
 VALUES (${workspaceId}, ${contactId}, ${FORM_CONSENT_BASIS}, ${FORM_SOURCE}, 'system', ${actorId}, ${note}, ${now})`.compile(
       db.db,
     ),
-    sql`INSERT INTO form_consents (workspace_id, consent_event_id, form_id, consent_version, ip_hash, user_agent, created_at)
+    sql`INSERT INTO form_consents (workspace_id, consent_event_id, form_id, consent_version, ip_hash, user_agent, source, source_origin, created_at)
 VALUES (${workspaceId}, (SELECT max(id) FROM consent_events WHERE workspace_id = ${workspaceId} AND contact_id = ${contactId}),
-  ${form.row.id}, ${signup.consent_version}, ${signup.ip_hash}, ${signup.user_agent}, ${now})`.compile(
+  ${form.row.id}, ${signup.consent_version}, ${signup.ip_hash}, ${signup.user_agent}, ${signup.source}, ${signup.source_origin}, ${now})`.compile(
       db.db,
     ),
     ...(lists.length === 0

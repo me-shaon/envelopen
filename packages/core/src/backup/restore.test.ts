@@ -510,6 +510,15 @@ describe("restore plan", () => {
       preference: "editable",
     });
     expect(upgradeRow("contacts", { id: 1 }, 16)).toEqual({ id: 1 });
+    // 0026 adds the signup source. An older signup and consent record count as hosted.
+    expect(upgradeRow("form_consents", { id: 1 }, 25)).toEqual({
+      id: 1,
+      source: "hosted",
+      source_origin: null,
+    });
+    expect(upgradeRow("signups", { id: 1, source: "headless" }, 25)).toMatchObject({
+      source: "headless",
+    });
     expect(schemaProblem(BACKUP_SCHEMA_VERSION + 1)).toContain("newer Envelopen");
     expect(schemaProblem(15)).toContain("too old");
   });

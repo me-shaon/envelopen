@@ -216,6 +216,8 @@ const identity: Upgrade = (_table, row) => row;
  * - 0024 adds the sending windows of campaigns and batches, and `signups.deferred_origin`.
  *   An older campaign has no windows, and no older confirmation email waits.
  * - 0025 adds only the webhook nonces, which are not in a backup.
+ * - 0026 adds `source` and `source_origin` to signups and form consents. An older signup
+ *   came from the hosted page or the iframe, which the old rows do not tell apart.
  */
 export const UPGRADES: Readonly<Record<number, Upgrade>> = {
   17: identity,
@@ -238,6 +240,10 @@ export const UPGRADES: Readonly<Record<number, Upgrade>> = {
     return row;
   },
   25: identity,
+  26: (table, row) =>
+    table === "signups" || table === "form_consents"
+      ? { source: "hosted", source_origin: null, ...row }
+      : row,
 };
 
 /** Returns why a backup of `schemaVersion` cannot be restored here, or null. */

@@ -1,4 +1,4 @@
-import { type DbConnection, type Row, unscoped } from "@envelopen/db";
+import { type DbConnection, type Row, type SignupSource, unscoped } from "@envelopen/db";
 import {
   esc,
   FORM_COPY,
@@ -403,6 +403,15 @@ export interface SubmitInput {
   userAgent: string | null;
   /** The https origin of the confirmation link. */
   origin: string;
+  /**
+   * The consent version that the subscriber saw. The hosted page always shows the
+   * current one, so the default is the version of the form row.
+   */
+  consentVersion?: number;
+  /** How the subscriber signed up. The default is `hosted`. */
+  source?: SignupSource;
+  /** The checked `Origin` of a headless submission. */
+  sourceOrigin?: string | null;
 }
 
 export type SignupOutcome =
@@ -426,7 +435,7 @@ export async function submitSignup(
   const values = {
     email: input.email,
     field_values: JSON.stringify(input.values),
-    consent_version: row.consent_version,
+    consent_version: input.consentVersion ?? row.consent_version,
     ip_hash: input.ipHash,
     user_agent: input.userAgent?.slice(0, 300) ?? null,
     token_hash: tokenHash,
@@ -435,6 +444,8 @@ export async function submitSignup(
     sent_at: null,
     confirmed_at: null,
     deferred_origin: null,
+    source: input.source ?? "hosted",
+    source_origin: input.sourceOrigin ?? null,
     created_at: now,
   };
   await db.db

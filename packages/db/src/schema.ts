@@ -741,6 +741,9 @@ export interface FormsTable {
   updated_at: Defaulted<number>;
 }
 
+/** How a subscriber signed up: the hosted page, the iframe, or the JSON API (0026). */
+export type SignupSource = "hosted" | "embed" | "headless";
+
 /** A pending signup until its confirmation (0019_forms_signups.sql). */
 export interface SignupsTable {
   id: Generated<number>;
@@ -765,6 +768,10 @@ export interface SignupsTable {
   confirmed_at: Defaulted<number | null>;
   /** The link origin while the confirmation email waits for the daily cap (0024), or null. */
   deferred_origin: Defaulted<string | null>;
+  /** How the subscriber signed up (0026). */
+  source: Defaulted<SignupSource>;
+  /** The checked `Origin` of a headless submission, or null (0026). */
+  source_origin: Defaulted<string | null>;
   created_at: Generated<number>;
 }
 
@@ -777,6 +784,10 @@ export interface FormConsentsTable {
   consent_version: Immutable<number>;
   ip_hash: Immutable<string | null>;
   user_agent: Immutable<string | null>;
+  /** How the subscriber signed up (0026). */
+  source: ColumnType<SignupSource, SignupSource | undefined, never>;
+  /** The checked `Origin` of a headless submission, or null (0026). */
+  source_origin: ColumnType<string | null, string | null | undefined, never>;
   created_at: Generated<number>;
 }
 

@@ -90,6 +90,19 @@ To set the mode:
 
 To use a different mode for one run, start the workflow with **Run workflow**, and select the mode in the list.
 
+### Turn off preview builds
+
+Do these steps before you use the `pr` mode. The workflow can also open a pull request in the `sync` mode, for example when you changed the same files as the release.
+
+By default, Workers Builds makes a preview build of each push to a branch that is not your production branch (a non-production branch). The update branch `envelopen-update/vX.Y.Z` is such a branch. For a deployment from the Deploy button, this preview build fails, and the pull request shows a failed check. The failed check does not mean that the update is bad. A preview build never deploys the update.
+
+1. Open the Cloudflare dashboard, and select **Workers & Pages**.
+2. Select your Worker, and then select **Settings** > **Build** > **Branch control**.
+3. Clear **Enable Preview Builds**.
+4. Select **Save**.
+
+Workers Builds then builds only the production branch. The update deploys when you merge the pull request, as before.
+
 ## Add the update token (optional)
 
 GitHub does not let a workflow change files in `.github/workflows` with its default token (`GITHUB_TOKEN`). If a release changes a workflow file, the workflow cannot update it without a separate token. The workflow then applies all other files and opens an issue. The issue lists the workflow files and links to the release version of each file.
@@ -218,6 +231,7 @@ If you forked `me-shaon/envelopen` on GitHub instead of using the Deploy button,
 | The push fails with "refusing to allow a GitHub App to create or update workflow". | The release changes a workflow file, and the token has no **Workflows** permission. | Give the token **Workflows** write access, or remove the secret. |
 | An issue asks you to update the workflow files. | The release changes a file in `.github/workflows`, and no update token is set. | Copy each linked file into your repository, or add `ENVELOPEN_UPDATE_TOKEN`. |
 | Each update opens a pull request. | You changed files that each release changes too, for example `pnpm-lock.yaml`. | Move your changes out of those files, or merge each pull request. |
+| The pull request of an update shows a failed Workers Builds check. | Workers Builds makes a preview build of the update branch, and that build fails. | Turn off preview builds. See [Turn off preview builds](#turn-off-preview-builds). Then merge the pull request. |
 | The Workers Builds deploy fails after an update. | A new binding, secret, or manual step is missing. | Read **Manual steps** in the release notes. Read the build log in **Workers & Pages** > your Worker > **Deployments**. |
 | The job summary says that Envelopen is up to date, but a new release exists. | `ENVELOPEN_VERSION` in `apps/worker/src/version.ts` is not the release that you have. | Set `ENVELOPEN_VERSION` to the release that your files match, and run the workflow again. |
 | There is no **Envelopen updates** workflow in **Actions**. | The Deploy button does not copy `.github`. | Add the workflow file. See [Add the update workflow](#add-the-update-workflow). |
@@ -234,8 +248,9 @@ If you forked `me-shaon/envelopen` on GitHub instead of using the Deploy button,
 
 - [Deploy to Cloudflare buttons](https://developers.cloudflare.com/workers/configuration/deploy-button/)
 - [Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)
+- [Workers Builds: build branches](https://developers.cloudflare.com/workers/ci-cd/builds/build-branches/)
 - [Rollbacks](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/rollbacks/)
 - [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)
 - [Triggering a workflow from a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow)
 
-Last checked: 2026-11-03
+Last checked: 2026-11-10

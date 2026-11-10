@@ -238,7 +238,7 @@ export async function finalizeIdle(deps: SweepDeps, limit = 20) {
 export async function resumeAfterPlatformLimit(
   deps: SweepDeps,
   limit: { since: number; until: number },
-  max = 50,
+  max = 20,
 ): Promise<number[]> {
   // A pause that reached D1 (for example from a Workflow step) resumes as well.
   const paused = await unscoped(deps.db.db)
@@ -261,20 +261,29 @@ export async function resumeAfterPlatformLimit(
     .where("status", "=", "sending")
     .limit(max)
     .execute();
+  const resumed: number[] = [];
+  const wasPaused = new Set(paused.map((row) => row.id));
   for (const row of sending) {
+    // A few rounds per campaign keep one cron run within the subrequest limit. The
+    // batches that wait after them have an old dispatch time, so redispatchWaiting
+    // sends them in the next runs.
+    const dispatched = await dispatchAll(deps.db, deps.queue, row.workspace_id, row.id, deps.now, {
+      enqueuedBefore: deps.now,
+      maxRounds: 3,
+    });
+    // A campaign with no waiting batch was not stopped by the limit, so it gets no audit row.
+    if (dispatched === 0 && !wasPaused.has(row.id)) continue;
     await systemAudit(deps.db, row.workspace_id, row.id, "campaigns.paused", {
       reason: "platform_limit",
       at: limit.since,
-    });
-    await dispatchAll(deps.db, deps.queue, row.workspace_id, row.id, deps.now, {
-      enqueuedBefore: deps.now,
     });
     await systemAudit(deps.db, row.workspace_id, row.id, "campaigns.resumed", {
       reason: "platform_limit",
       resetAt: limit.until,
     });
+    resumed.push(row.id);
   }
-  return sending.map((row) => row.id);
+  return resumed;
 }
 
 /** An audit row for a change that the system made, not a person or a key. */

@@ -248,6 +248,14 @@ Envelopen shows **Check your inbox** for every valid submission. In these cases,
 
 The response time is the same in each case, because the Worker does the signup work after it sends the page.
 
+The rate limits count only confirmation emails that go out. A failed send does not count, for example when the workspace has no verified sending domain. A submission that a limit stops does not count either. A confirmation email that waits for the daily cap counts, because it goes out later.
+
+The Worker logs show the reason for each signup that gets no email, except at the IP limit. To read them, run `npx wrangler tail`. A log line has the form id, the source (`hosted`, `embed`, or `headless`), and the reason. For a rate limit, it also names the limit: `address`, `form`, or `workspace`. The line has no address, no address hash, and no IP address. For example:
+
+```
+Form 3: no confirmation email (rate_limited: address, headless)
+```
+
 Confirmation emails do not use the reserved D1 budget of welcome emails. They stop only at the D1 daily limit.
 
 ### Pending signups
@@ -274,7 +282,8 @@ The hosted page and the embeds show "This form is not available". Confirmation l
 | "The origin ... is not valid." on save. | The origin has a wildcard, a path, a query, or `http`. | Type only `https://` and the host. |
 | "Select at least one list before you turn on the form." | The form has no list. | Select a list under **Lists**. |
 | "The From address must be on a sending domain of this workspace." | The domain of **From address** is not a sending domain. | Add and verify the domain, or clear **From address**. |
-| The subscriber gets no confirmation email. | One of the cases in [When no email goes out](#when-no-email-goes-out), no verified sending domain, or a provider refusal. | Check the Worker logs with `npx wrangler tail`. Wait one hour before the next test with the same address. |
+| The subscriber gets no confirmation email. | One of the cases in [When no email goes out](#when-no-email-goes-out), no verified sending domain, or a provider refusal. | Check the Worker logs with `npx wrangler tail`. |
+| No confirmation email after a test. | One of the cases in [When no email goes out](#when-no-email-goes-out). Often it is the address limit after an earlier test with the same address. | Read the reason in the Worker logs with `npx wrangler tail`. Or test with a new address. |
 | Your own form gets 403 on each submission. | The origin of the page is not in **Websites that can embed the form**. | Add the exact origin of the page, and save the form. |
 | Your own form shows "We could not make sure that you are a person." on each submission. | The hostname of your website is not in the Turnstile widget, or the widget does not use the action `signup-headless`. | Add the hostname to the widget. Render the widget with the action from the metadata. |
 | Your own form gets 409. | The consent text changed after the page loaded the metadata. | Load the metadata again. The example does this. |

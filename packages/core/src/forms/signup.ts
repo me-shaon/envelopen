@@ -32,7 +32,13 @@ import {
 // - At the D1 daily limit, nothing is written or sent (KTD9: confirmation emails stop
 //   only at the platform limit).
 // - Rate limits: one confirmation email per address per hour (submit and resend
-//   together), a cap per form per hour, and a cap per workspace per day.
+//   together), a cap per form per hour, and a cap per workspace per day. The check
+//   counts the email before the send, so two quick submissions send one email. When
+//   the email does not go out (a failed send, or a limit stops it), the counts are taken
+//   back. A deferred email keeps its counts, because it goes out later.
+//
+// Each signup that gets no email writes one info log line with the form, the source,
+// and the reason. The line holds no address, no address hash, and no IP.
 //
 // Otherwise the signup row gets a new token (32 random bytes, stored as its SHA-256), and
 // the email goes out through the workspace's connection as system email.
@@ -51,9 +57,12 @@ export interface CountRule {
   windowMs: number;
 }
 
-/** Counts one event for a key and returns the count in the current window. */
+/** Counts events for a key in a fixed window. */
 export interface CountLimiter {
+  /** Counts one event and returns the count in the current window. */
   record(key: string, rule: CountRule): Promise<{ count: number }>;
+  /** Takes back one event that `record` counted. Nothing happens after the window ends. */
+  release(key: string, rule: CountRule): Promise<void>;
 }
 
 /** One confirmation email per address per hour, across submissions and resends. */
@@ -237,36 +246,92 @@ async function alreadySubscribed(
   return rows.length === listIds.length;
 }
 
-/** Counts the email against the three limits. False when one of them is over. */
-async function allowEmail(
+/** The limit that stopped a confirmation email. */
+export type EmailLimit = "address" | "form" | "workspace";
+
+/** The counts of one confirmation email. `release` takes them back when it did not go out. */
+interface EmailCounts {
+  release(): Promise<void>;
+}
+
+async function releaseCounts(
+  limiter: CountLimiter,
+  counted: readonly { key: string; rule: CountRule }[],
+): Promise<void> {
+  await Promise.all(
+    counted.map(({ key, rule }) =>
+      limiter.release(key, rule).catch((error: unknown) => {
+        console.error("A confirmation email count was not taken back", error);
+      }),
+    ),
+  );
+}
+
+/**
+ * Counts the email against the three limits, before the send. Each count is atomic in
+ * the limiter, so two quick submissions for one address cannot both pass. When a limit
+ * is over, the counts of this email are taken back and the result names the limit.
+ */
+async function countEmail(
   deps: SignupDeps,
   form: Row<"forms">,
   emailHash: string,
-): Promise<boolean> {
-  const address = await deps.limiter.record(
-    signupLimitKeys.address(form.workspace_id, emailHash),
-    ADDRESS_EMAIL_RULE,
-  );
-  if (address.count > ADDRESS_EMAIL_RULE.limit) return false;
-  const perForm = await deps.limiter.record(signupLimitKeys.form(form.id), FORM_EMAIL_RULE);
-  if (perForm.count > FORM_EMAIL_RULE.limit) return false;
-  const perWorkspace = await deps.limiter.record(
-    signupLimitKeys.workspace(form.workspace_id),
-    WORKSPACE_EMAIL_RULE,
-  );
-  return perWorkspace.count <= WORKSPACE_EMAIL_RULE.limit;
+): Promise<{ ok: true; counts: EmailCounts } | { ok: false; limit: EmailLimit }> {
+  const rules: { limit: EmailLimit; key: string; rule: CountRule }[] = [
+    {
+      limit: "address",
+      key: signupLimitKeys.address(form.workspace_id, emailHash),
+      rule: ADDRESS_EMAIL_RULE,
+    },
+    { limit: "form", key: signupLimitKeys.form(form.id), rule: FORM_EMAIL_RULE },
+    {
+      limit: "workspace",
+      key: signupLimitKeys.workspace(form.workspace_id),
+      rule: WORKSPACE_EMAIL_RULE,
+    },
+  ];
+  const counted: { key: string; rule: CountRule }[] = [];
+  for (const { limit, key, rule } of rules) {
+    const { count } = await deps.limiter.record(key, rule);
+    counted.push({ key, rule });
+    if (count > rule.limit) {
+      await releaseCounts(deps.limiter, counted);
+      return { ok: false, limit };
+    }
+  }
+  return { ok: true, counts: { release: () => releaseCounts(deps.limiter, counted) } };
 }
 
-/** The checks that every confirmation email passes, in order. Null when it may go out. */
+type SendCheck = { skip: SendSkip; limit?: EmailLimit } | { skip: null; counts: EmailCounts };
+
+/**
+ * The checks that every confirmation email passes, in order. When one stops the email,
+ * it writes one log line. When the email may go out, the result holds its counts.
+ */
 async function sendSkip(
   deps: SignupDeps,
   form: Row<"forms">,
   email: string,
   emailHash: string,
-): Promise<SendSkip | null> {
+  source: SignupSource,
+): Promise<SendCheck> {
+  const check = await checkSend(deps, form, email, emailHash);
+  if (check.skip) {
+    const reason = check.limit ? `${check.skip}: ${check.limit}` : check.skip;
+    console.info(`Form ${form.id}: no confirmation email (${reason}, ${source})`);
+  }
+  return check;
+}
+
+async function checkSend(
+  deps: SignupDeps,
+  form: Row<"forms">,
+  email: string,
+  emailHash: string,
+): Promise<SendCheck> {
   const { db } = deps;
   const workspaceId = form.workspace_id;
-  if (await isSuppressed(db, workspaceId, emailHash)) return "suppressed";
+  if (await isSuppressed(db, workspaceId, emailHash)) return { skip: "suppressed" };
   const contact = await db.db
     .selectFrom("contacts")
     .select(["id", "unsubscribed_at"])
@@ -276,16 +341,36 @@ async function sendSkip(
   const usage = await deps.usage();
   if (contact) {
     if (await alreadySubscribed(db, workspaceId, contact, await formLists(db, form))) {
-      return "subscribed";
+      return { skip: "subscribed" };
     }
     if (usage.unsubscribesPending) {
       const waiting = await deps.pendingUnsubscribes(workspaceId, [contact.id]);
-      if (waiting.has(contact.id)) return "unsubscribe_pending";
+      if (waiting.has(contact.id)) return { skip: "unsubscribe_pending" };
     }
   }
-  if (usage.limited) return "platform_limit";
-  if (!(await allowEmail(deps, form, emailHash))) return "rate_limited";
-  return null;
+  if (usage.limited) return { skip: "platform_limit" };
+  const counted = await countEmail(deps, form, emailHash);
+  if (!counted.ok) return { skip: "rate_limited", limit: counted.limit };
+  return { skip: null, counts: counted.counts };
+}
+
+/**
+ * Runs the steps after the checks. When they end without an email (a failed send, no
+ * result, or an error), the counts are taken back. A deferred email keeps them.
+ */
+async function withCounts<T extends SendResult | null>(
+  counts: EmailCounts,
+  steps: () => Promise<T>,
+): Promise<T> {
+  let result: T;
+  try {
+    result = await steps();
+  } catch (error) {
+    await counts.release();
+    throw error;
+  }
+  if (result === null || result === "send_failed") await counts.release();
+  return result;
 }
 
 // The email -------------------------------------------------------------------------------------
@@ -424,12 +509,26 @@ export async function submitSignup(
   form: PublicForm,
   input: SubmitInput,
 ): Promise<SignupOutcome> {
-  const { db, now } = deps;
   const row = form.row;
   const emailHash = await requireService(deps.services, "hashEmail")(input.email);
-  const skip = await sendSkip(deps, row, input.email, emailHash);
-  if (skip) return { emailed: false, skip };
+  const source = input.source ?? "hosted";
+  const check = await sendSkip(deps, row, input.email, emailHash, source);
+  if (check.skip) return { emailed: false, skip: check.skip };
+  const result = await withCounts(check.counts, () =>
+    storeAndSend(deps, form, input, emailHash, source),
+  );
+  return { emailed: true, result };
+}
 
+async function storeAndSend(
+  deps: SignupDeps,
+  form: PublicForm,
+  input: SubmitInput,
+  emailHash: string,
+  source: SignupSource,
+): Promise<SendResult> {
+  const { db, now } = deps;
+  const row = form.row;
   const token = newSignupToken();
   const tokenHash = await hashSignupToken(token);
   const values = {
@@ -444,7 +543,7 @@ export async function submitSignup(
     sent_at: null,
     confirmed_at: null,
     deferred_origin: null,
-    source: input.source ?? "hosted",
+    source,
     source_origin: input.sourceOrigin ?? null,
     created_at: now,
   };
@@ -456,7 +555,7 @@ export async function submitSignup(
   const reservation = await reserveConfirmation(db, deps.services, row.workspace_id);
   if (!reservation) {
     await deferConfirmation(db, row.workspace_id, tokenHash, input.origin);
-    return { emailed: true, result: "deferred" };
+    return "deferred";
   }
   const result = await sendConfirmation(
     deps,
@@ -474,7 +573,7 @@ export async function submitSignup(
       .where("token_hash", "=", tokenHash)
       .execute();
   }
-  return { emailed: true, result };
+  return result;
 }
 
 // The signup of a token -----------------------------------------------------------------------------
@@ -533,8 +632,21 @@ export async function resendSignup(
   if (state.kind === "confirmed") return { kind: "confirmed" };
   const { signup, form } = state;
   if (!canResend(signup)) return { kind: "exhausted" };
-  const skip = await sendSkip(deps, form.row, signup.email, signup.email_hash);
-  if (skip) return { kind: "done", emailed: false, skip };
+  const check = await sendSkip(deps, form.row, signup.email, signup.email_hash, signup.source);
+  if (check.skip) return { kind: "done", emailed: false, skip: check.skip };
+  const result = await withCounts(check.counts, () => replaceAndSend(deps, signup, form, origin));
+  if (result === null) return { kind: "invalid" };
+  return { kind: "done", emailed: true, result };
+}
+
+/** Gives the signup a new token and sends it. Null when another request changed it first. */
+async function replaceAndSend(
+  deps: SignupDeps,
+  signup: Row<"signups">,
+  form: PublicForm,
+  origin: string,
+): Promise<SendResult | null> {
+  const { db, now } = deps;
   const next = newSignupToken();
   const nextHash = await hashSignupToken(next);
   const updated = await db.db
@@ -549,11 +661,11 @@ export async function resendSignup(
     .where("id", "=", signup.id)
     .where("token_hash", "=", signup.token_hash)
     .executeTakeFirst();
-  if (Number(updated.numUpdatedRows) === 0) return { kind: "invalid" };
+  if (Number(updated.numUpdatedRows) === 0) return null;
   const reservation = await reserveConfirmation(db, deps.services, signup.workspace_id);
   if (!reservation) {
     await deferConfirmation(db, signup.workspace_id, nextHash, origin);
-    return { kind: "done", emailed: true, result: "deferred" };
+    return "deferred";
   }
   const result = await sendConfirmation(
     deps,
@@ -571,7 +683,7 @@ export async function resendSignup(
       .where("token_hash", "=", nextHash)
       .execute();
   }
-  return { kind: "done", emailed: true, result };
+  return result;
 }
 
 // The outbox of confirmation emails at the daily cap (U19) ------------------------------------

@@ -1,5 +1,5 @@
 import type { DbConnection } from "@envelopen/db";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { createDraft, seedCampaignWorkspace } from "../../test/campaign-fixtures";
 import { TEST_ORIGIN, testDb, testServices } from "../../test/fixtures";
 import { createProviderMock, type ProviderMock } from "../../test/provider-mock";
@@ -46,6 +46,12 @@ function memoryLimiter(): CountLimiter & { clock: number } {
       }
       window.count++;
       return { count: window.count };
+    },
+    async release(key: string, rule: { windowMs: number }) {
+      const window = windows.get(key);
+      if (window && limiter.clock - window.start < rule.windowMs && window.count > 0) {
+        window.count--;
+      }
     },
   };
   return limiter;
@@ -136,6 +142,32 @@ async function signupCount(db: DbConnection, workspaceId: number, email: string)
     .execute();
   return rows.length;
 }
+
+/** Spies on the info log, where a signup without an email writes its reason. */
+function skipLogs(): MockInstance<typeof console.info> {
+  return vi.spyOn(console, "info").mockImplementation(() => {});
+}
+
+/** Checks that the log has exactly `line` and holds no address and no address hash. */
+async function expectSkipLog(
+  spy: MockInstance<typeof console.info>,
+  line: string,
+  email: string,
+  hashEmail: (email: string) => Promise<string>,
+) {
+  const lines = spy.mock.calls.map((args) => args.map(String).join(" "));
+  expect(lines).toEqual([line]);
+  const hash = await hashEmail(email);
+  for (const text of lines) {
+    expect(text).not.toContain("@");
+    expect(text).not.toContain(hash);
+    expect(text).not.toContain("iphash");
+  }
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 async function failure(promise: Promise<unknown>) {
   try {
@@ -359,22 +391,36 @@ describe("what gets no email", () => {
         campaign_id: null,
       })
       .execute();
+    const logs = skipLogs();
     const outcome = await submit(deps(), await publicForm(), "Blocked@example.org");
     expect(outcome).toEqual({ emailed: false, skip: "suppressed" });
+    await expectSkipLog(
+      logs,
+      `Form ${(await publicForm()).row.id}: no confirmation email (suppressed, hosted)`,
+      "blocked@example.org",
+      services.hashEmail,
+    );
     expect(mock.calls).toHaveLength(0);
     expect(await signupCount(db, seeded.workspaceId, "blocked@example.org")).toBe(0);
   });
 
   it("sends nothing to an address that is subscribed to every list of the form", async () => {
-    const { mock, deps, publicForm } = await setup();
+    const { mock, services, form, deps, publicForm } = await setup();
+    const logs = skipLogs();
     // The seeded contacts are student1 and student2, subscribed to the list.
     const outcome = await submit(deps(), await publicForm(), "student1@example.org");
     expect(outcome).toEqual({ emailed: false, skip: "subscribed" });
+    await expectSkipLog(
+      logs,
+      `Form ${form.id}: no confirmation email (subscribed, hosted)`,
+      "student1@example.org",
+      services.hashEmail,
+    );
     expect(mock.calls).toHaveLength(0);
   });
 
   it("sends nothing to a contact with an unsubscribe in the ledger (KTD1)", async () => {
-    const { db, mock, seeded, flags, deps, publicForm } = await setup();
+    const { db, mock, services, seeded, form, flags, deps, publicForm } = await setup();
     const contact = await db.db
       .selectFrom("contacts")
       .select("id")
@@ -389,30 +435,55 @@ describe("what gets no email", () => {
       .execute();
     flags.unsubscribesPending = true;
     flags.pending.add(contact.id);
+    const logs = skipLogs();
     const outcome = await submit(deps(), await publicForm(), "student2@example.org");
     expect(outcome).toEqual({ emailed: false, skip: "unsubscribe_pending" });
+    await expectSkipLog(
+      logs,
+      `Form ${form.id}: no confirmation email (unsubscribe_pending, hosted)`,
+      "student2@example.org",
+      services.hashEmail,
+    );
     expect(mock.calls).toHaveLength(0);
   });
 
   it("writes and sends nothing at the D1 platform limit", async () => {
-    const { db, mock, seeded, flags, deps, publicForm } = await setup();
+    const { db, mock, services, seeded, form, flags, deps, publicForm } = await setup();
     flags.limited = true;
+    const logs = skipLogs();
     const outcome = await submit(deps(), await publicForm(), "late@example.org");
     expect(outcome).toEqual({ emailed: false, skip: "platform_limit" });
+    await expectSkipLog(
+      logs,
+      `Form ${form.id}: no confirmation email (platform_limit, hosted)`,
+      "late@example.org",
+      services.hashEmail,
+    );
     expect(mock.calls).toHaveLength(0);
     expect(await signupCount(db, seeded.workspaceId, "late@example.org")).toBe(0);
   });
 
   it("sends one email per address per hour, and the first link keeps working", async () => {
-    const { db, mock, limiter, deps, publicForm } = await setup();
+    const { db, mock, services, limiter, deps, publicForm } = await setup();
     const form = await publicForm();
-    expect(await submit(deps(), form, "twice@example.org")).toMatchObject({ emailed: true });
+    expect(await submit(deps(), form, "twice@example.org")).toEqual({
+      emailed: true,
+      result: "sent",
+    });
     limiter.clock = T0 + 10 * 60 * 1000;
+    const logs = skipLogs();
     expect(await submit(deps(), form, "twice@example.org")).toEqual({
       emailed: false,
       skip: "rate_limited",
     });
     expect(mock.calls).toHaveLength(1);
+    await expectSkipLog(
+      logs,
+      `Form ${form.row.id}: no confirmation email (rate_limited: address, hosted)`,
+      "twice@example.org",
+      services.hashEmail,
+    );
+    logs.mockClear();
     const [token] = tokensIn(mock);
     expect((await signupOfToken(db, token ?? "", limiter.clock)).kind).toBe("ready");
     // After the hour, a new submission sends a new link and replaces the old one.
@@ -421,6 +492,130 @@ describe("what gets no email", () => {
     const [old, fresh] = tokensIn(mock);
     expect((await signupOfToken(db, old ?? "", limiter.clock)).kind).toBe("invalid");
     expect((await signupOfToken(db, fresh ?? "", limiter.clock)).kind).toBe("ready");
+  });
+});
+
+describe("the rate limits count only emails that go out", () => {
+  async function verifiedDomains(db: DbConnection, workspaceId: number, verified: boolean) {
+    await db.db
+      .updateTable("sending_domains")
+      .set({ verified_at: verified ? T0 : null })
+      .where("workspace_id", "=", workspaceId)
+      .execute();
+  }
+
+  it("does not count a failed send, so the same address gets an email after the fix", async () => {
+    const { db, mock, seeded, limiter, deps, publicForm } = await setup();
+    const form = await publicForm();
+    // No verified sending domain: the confirmation email fails.
+    await verifiedDomains(db, seeded.workspaceId, false);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await submit(deps(), form, "tester@example.org")).toEqual({
+      emailed: true,
+      result: "send_failed",
+    });
+    expect(mock.calls).toHaveLength(0);
+    // The owner adds a domain, and the same address submits again within the hour.
+    await verifiedDomains(db, seeded.workspaceId, true);
+    limiter.clock = T0 + 2 * 60 * 1000;
+    expect(await submit(deps(), form, "tester@example.org")).toEqual({
+      emailed: true,
+      result: "sent",
+    });
+    expect(mock.delivered).toEqual(["tester@example.org"]);
+    // That email counts: a third submission in the hour sends nothing.
+    limiter.clock = T0 + 4 * 60 * 1000;
+    expect(await submit(deps(), form, "tester@example.org")).toEqual({
+      emailed: false,
+      skip: "rate_limited",
+    });
+  });
+
+  it("does not count a failed resend", async () => {
+    const { db, mock, seeded, limiter, deps, publicForm } = await setup();
+    await submit(deps(), await publicForm(), "retry@example.org");
+    const [token] = tokensIn(mock);
+    await verifiedDomains(db, seeded.workspaceId, false);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    limiter.clock = T0 + 2 * HOUR;
+    const failed = await resendSignup(deps(), token ?? "", TEST_ORIGIN);
+    expect(failed).toEqual({ kind: "done", emailed: true, result: "send_failed" });
+    await verifiedDomains(db, seeded.workspaceId, true);
+    // The failed resend did not use up the address, so a new submission sends a link.
+    limiter.clock = T0 + 2 * HOUR + 60 * 1000;
+    expect(await submit(deps(), await publicForm(), "retry@example.org")).toEqual({
+      emailed: true,
+      result: "sent",
+    });
+    expect(mock.calls).toHaveLength(2);
+  });
+
+  it("sends one email for two quick submissions of one address", async () => {
+    const { mock, deps, publicForm } = await setup();
+    const form = await publicForm();
+    skipLogs();
+    const outcomes = await Promise.all([
+      submit(deps(), form, "double@example.org"),
+      submit(deps(), form, "double@example.org"),
+    ]);
+    expect(outcomes).toContainEqual({ emailed: true, result: "sent" });
+    expect(outcomes).toContainEqual({ emailed: false, skip: "rate_limited" });
+    expect(mock.calls).toHaveLength(1);
+  });
+
+  it("counts a deferred confirmation, because it goes out later", async () => {
+    const { db, mock, services, seeded, limiter, deps, publicForm } = await setup();
+    await db.db
+      .updateTable("provider_connections")
+      .set({ daily_cap: 1 })
+      .where("workspace_id", "=", seeded.workspaceId)
+      .where("id", "=", seeded.connectionId)
+      .execute();
+    services.dailyClock.now = T0;
+    await services.dailyCounter.reserve(seeded.connectionId, 1, 1);
+    const form = await publicForm();
+    expect(await submit(deps(), form, "later@example.org")).toEqual({
+      emailed: true,
+      result: "deferred",
+    });
+    limiter.clock = T0 + 5 * 60 * 1000;
+    const logs = skipLogs();
+    expect(await submit(deps(), form, "later@example.org")).toEqual({
+      emailed: false,
+      skip: "rate_limited",
+    });
+    await expectSkipLog(
+      logs,
+      `Form ${form.row.id}: no confirmation email (rate_limited: address, hosted)`,
+      "later@example.org",
+      services.hashEmail,
+    );
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it("names the form limit and takes back the address count it stopped", async () => {
+    const { mock, services, limiter, deps, publicForm } = await setup();
+    const form = await publicForm();
+    const formKey = `form-email:form:${form.row.id}`;
+    for (let i = 0; i < 200; i++) await limiter.record(formKey, { limit: 200, windowMs: HOUR });
+    const logs = skipLogs();
+    expect(await submit(deps(), form, "busy@example.org")).toEqual({
+      emailed: false,
+      skip: "rate_limited",
+    });
+    await expectSkipLog(
+      logs,
+      `Form ${form.row.id}: no confirmation email (rate_limited: form, hosted)`,
+      "busy@example.org",
+      services.hashEmail,
+    );
+    // The form limit resets. The address was not used up by the stopped email.
+    limiter.clock = T0 + HOUR;
+    expect(await submit(deps(), form, "busy@example.org")).toEqual({
+      emailed: true,
+      result: "sent",
+    });
+    expect(mock.calls).toHaveLength(1);
   });
 });
 
@@ -456,15 +651,22 @@ describe("expired links and resends (KTD7)", () => {
   });
 
   it("a resend within the hour of the first email sends nothing", async () => {
-    const { mock, limiter, deps, publicForm } = await setup();
+    const { mock, services, form, limiter, deps, publicForm } = await setup();
     await submit(deps(), await publicForm(), "eager@example.org");
     const [token] = tokensIn(mock);
     limiter.clock = T0 + 5 * 60 * 1000;
+    const logs = skipLogs();
     expect(await resendSignup(deps(), token ?? "", TEST_ORIGIN)).toEqual({
       kind: "done",
       emailed: false,
       skip: "rate_limited",
     });
+    await expectSkipLog(
+      logs,
+      `Form ${form.id}: no confirmation email (rate_limited: address, hosted)`,
+      "eager@example.org",
+      services.hashEmail,
+    );
     expect(mock.calls).toHaveLength(1);
   });
 });

@@ -216,7 +216,7 @@ describe("welcome series runs (F2, KTD8)", () => {
       db,
       services,
       now: T0,
-      limiter: { record: async () => ({ count: 1 }) },
+      limiter: { record: async () => ({ count: 1 }), release: async () => {} },
       usage: async () => ({ limited: false, unsubscribesPending: false }),
       pendingUnsubscribes: async () => new Set(),
     };

@@ -72,7 +72,10 @@ export function formDeps(env: Env, request: Request): FormDeps {
       keys
         ? verifyTurnstile(fetcher, keys.secret, verify)
         : Promise.resolve({ ok: false, reason: "not-configured" }),
-    limiter: { record: (key, rule) => limiter.record(key, rule) },
+    limiter: {
+      record: (key, rule) => limiter.record(key, rule),
+      release: (key, rule) => env.AUTH_RATE_LIMITER.getByName(key).release(rule),
+    },
     usage: async () => {
       const status = await usageMeter(env).status();
       return {

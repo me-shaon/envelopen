@@ -2,7 +2,7 @@ import { formsCreate, formsUpdate, readSourceUrl, runOperation } from "@envelope
 import { seedCampaignWorkspace } from "@envelopen/core/testing/campaign-fixtures";
 import { createProviderMock } from "@envelopen/core/testing/provider-mock";
 import { FORM_COPY } from "@envelopen/email-render/form-page";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { campaignDb, T0, testKeys } from "../../test/campaign-helpers";
 import { call, mount, ORIGIN } from "../../test/tracking-helpers";
 import type { FormDeps } from "./deps";
@@ -88,6 +88,12 @@ async function setup(
         }
         window.count++;
         return { count: window.count };
+      },
+      async release(key, rule) {
+        const window = windows.get(key);
+        if (window && clock.now - window.start < rule.windowMs && window.count > 0) {
+          window.count--;
+        }
       },
     },
     usage: async () => ({ limited: false, unsubscribesPending: false }),
@@ -683,6 +689,53 @@ describe("a headless submission", () => {
     const sentTo = emails.flatMap((email) => email.to);
     expect(sentTo.filter((to) => to === "known@example.org")).toHaveLength(1);
     expect(sentTo).not.toContain("late@example.org");
+  });
+
+  it("gives the same answer for a sent, a failed, a limited, and a skipped email", async () => {
+    const { f, publicId, emails, db, workspaceId, hashEmail } = await setup();
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await db.db
+      .insertInto("suppressions")
+      .values({
+        workspace_id: workspaceId,
+        email_hash: await hashEmail("gone@example.org"),
+        reason: "erased",
+        source: "test",
+        campaign_id: null,
+      })
+      .execute();
+    const setDomain = (verified: boolean) =>
+      db.db
+        .updateTable("sending_domains")
+        .set({ verified_at: verified ? T0 : null })
+        .where("workspace_id", "=", workspaceId)
+        .execute();
+    const html = (email: string) =>
+      call(f, ...post(`/f/${publicId}`, { email, "cf-turnstile-response": "pass-signup" }));
+    const json = (email: string) => call(f, ...postJson(`/f/${publicId}`, signupBody(email)));
+
+    for (const send of [html, json]) {
+      const answers: { status: number; body: string }[] = [];
+      const answer = async (response: Response) =>
+        answers.push({ status: response.status, body: stable(await response.text()) });
+      const tag = send === html ? "page" : "api";
+      await setDomain(false);
+      await answer(await send(`failed-${tag}@example.org`));
+      await setDomain(true);
+      await answer(await send(`sent-${tag}@example.org`));
+      await answer(await send(`sent-${tag}@example.org`));
+      await answer(await send("gone@example.org"));
+      expect(new Set(answers.map((entry) => JSON.stringify(entry))).size).toBe(1);
+    }
+    expect(emails.flatMap((email) => email.to)).toEqual([
+      "sent-page@example.org",
+      "sent-api@example.org",
+    ]);
+    const lines = logs.mock.calls.map((args) => args.map(String).join(" "));
+    expect(lines).toHaveLength(4);
+    for (const line of lines) expect(line).not.toContain("@");
+    vi.restoreAllMocks();
   });
 
   it("records the hosted page and the iframe as their own sources", async () => {

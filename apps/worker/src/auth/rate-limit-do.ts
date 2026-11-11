@@ -64,6 +64,16 @@ export class AuthRateLimiter extends DurableObject<Env> {
     return this.status(window, rule, now);
   }
 
+  /**
+   * Takes back one attempt that `record` counted, for example a confirmation email that
+   * did not go out. Nothing happens when the window has ended or the count is 0.
+   */
+  async release(rule: AttemptRule, now = Date.now()): Promise<void> {
+    const existing = await this.current(rule.windowMs, now);
+    if (!existing || existing.count <= 0) return;
+    await this.ctx.storage.put(STORAGE_KEY, { start: existing.start, count: existing.count - 1 });
+  }
+
   /** Clears the counter, for example after a successful login for an email. */
   async reset(): Promise<void> {
     await this.ctx.storage.deleteAll();
